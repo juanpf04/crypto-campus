@@ -22,8 +22,21 @@ contract CounterTest is Test {
     require(counter.x() == x, "Value after calling inc x times should be x");
   }
 
+  function testFuzz_IncBy(uint8 x) public {
+    vm.assume(x > 0);
+    counter.incBy(x);
+    require(counter.x() == x, "Value after calling incBy with x should be x");
+  }
+
   function test_IncByZero() public {
     vm.expectRevert();
     counter.incBy(0);
+  }
+
+  function test_IncEmitsIncrementEvent() public {
+    vm.expectEmit();
+    emit Counter.Increment(1);
+
+    counter.inc();
   }
 }
