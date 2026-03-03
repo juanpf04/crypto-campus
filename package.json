@@ -4,7 +4,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "pnpm --filter nextjs run start",
+    "dev": "pnpm --filter nextjs run dev",
+    "build": "pnpm --filter nextjs run build",
+    "compile": "pnpm --filter hardhat run compile",
+    "test": "pnpm --filter hardhat run test",
+    "lint": "pnpm --filter nextjs run lint"
   },
   "keywords": [],
   "author": "",
