@@ -67,21 +67,9 @@ pnpm test
 
 ### Desplegar en red local
 
-Hardhat v3 usa redes **EDR simuladas** (in-process); no necesitas levantar un nodo aparte. El proyecto tiene dos redes locales configuradas:
-
-- `hardhatMainnet` — simula una L1 (Ethereum mainnet)
-- `hardhatOp` — simula una L2 (OP Stack)
+Hardhat v3 usa redes **EDR simuladas** (in-process); no necesitas levantar un nodo aparte.
 
 ```bash
 cd packages/hardhat
 pnpm hardhat ignition deploy ignition/modules/Counter.ts --network hardhatMainnet
 ```
-
-### Variables de entorno
-
-Para desarrollo local **no se necesitan variables de entorno**. Si en el futuro se configuran redes externas (Sepolia, etc.), copia `.env.example` a `.env` y rellena los valores:
-
-```bash
-cp packages/hardhat/.env.example packages/hardhat/.env
-```
-
