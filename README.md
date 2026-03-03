@@ -17,7 +17,7 @@ npm install -g pnpm@latest-10
 ## Instalación
 
 ```bash
-git clone https://github.com/<tu-usuario>/CryptoCampus.git
+git clone https://github.com/juanpf04/CryptoCampus.git
 cd CryptoCampus
 pnpm install
 ```
@@ -56,15 +56,13 @@ Todos los comandos se ejecutan desde `packages/hardhat`.
 ### Compilar contratos
 
 ```bash
-cd packages/hardhat
-pnpm hardhat compile
+pnpm compile
 ```
 
 ### Ejecutar tests
 
 ```bash
-cd packages/hardhat
-pnpm hardhat test
+pnpm test
 ```
 
 ### Desplegar en red local
