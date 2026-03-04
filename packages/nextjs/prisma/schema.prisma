@@ -1,0 +1,26 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  address   String   @unique
+  role      String   @default("USER")
+  name      String?
+  nonce     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ContractEvent {
+  id              String   @id @default(cuid())
+  transactionHash String   @unique
+  eventName       String
+  args            Json
+  blockNumber     Int
+  createdAt       DateTime @default(now())
+}

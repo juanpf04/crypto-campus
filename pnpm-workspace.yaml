@@ -1,10 +1,15 @@
 packages:
-  - "packages/*"
-
-onlyBuiltDependencies:
-  - "@tailwindcss/oxide"
-  - esbuild
+  - packages/*
 
 ignoredBuiltDependencies:
+  - bufferutil
+  - keccak
   - sharp
   - unrs-resolver
+  - utf-8-validate
+
+onlyBuiltDependencies:
+  - '@prisma/engines'
+  - '@tailwindcss/oxide'
+  - esbuild
+  - prisma
