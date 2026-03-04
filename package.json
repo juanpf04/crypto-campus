@@ -4,10 +4,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:next": "pnpm --filter nextjs run dev",
     "start": "pnpm --filter nextjs run start",
-    "dev": "pnpm --filter nextjs run dev",
     "build": "pnpm --filter nextjs run build",
     "compile": "pnpm --filter hardhat run compile",
+    "deploy": "pnpm --filter hardhat run deploy",
     "test": "pnpm --filter hardhat run test",
     "lint": "pnpm --filter nextjs run lint"
   },
