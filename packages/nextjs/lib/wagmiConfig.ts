@@ -1,9 +1,10 @@
-import { getDefaultConfig } from "@rainbow-me/rainbowkit";
+import { createConfig, http } from "wagmi";
 import { hardhat } from "wagmi/chains";
 
-export const config = getDefaultConfig({
-  appName: "CryptoCampus Counter",
-  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "YOUR_PROJECT_ID",
+export const config = createConfig({
   chains: [hardhat],
+  transports: {
+    [hardhat.id]: http(),
+  },
   ssr: true,
 });

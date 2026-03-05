@@ -7,13 +7,15 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  address   String   @unique
-  role      String   @default("USER")
-  name      String?
-  nonce     String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(cuid())
+  email         String   @unique
+  password      String
+  name          String
+  role          String   @default("STUDENT")
+  address       String   @unique
+  encryptedKey  String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model ContractEvent {

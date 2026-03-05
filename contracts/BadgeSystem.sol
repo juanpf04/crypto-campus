@@ -1,0 +1,514 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
+import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
+import "./CampusAccessControl.sol";
+
+/**
+ * @title BadgeSystem
+ * @dev Sistema de insignias academicas soulbound (no transferibles).
+ *      Profesores crean tipos de insignia, tareas y recompensas.
+ *      Estudiantes ganan insignias y las canjean por recompensas.
+ */
+contract BadgeSystem is ERC1155, ERC1155Supply {
+
+    CampusAccessControl public immutable accessControl;
+
+    // --- Structs ---
+    struct BadgeType {
+        string name;
+        string description;
+        address creator;
+        bool exists;
+    }
+
+    struct Task {
+        string name;
+        string description;
+        uint256 badgeTypeId;
+        uint256 rewardAmount;
+        address professor;
+        bool active;
+    }
+
+    struct Reward {
+        string name;
+        string description;
+        uint256 badgeTypeId;   // tipo de insignia requerido
+        uint256 badgeCost;     // cuantas insignias cuesta
+        uint256 supply;        // supply restante (0 = ilimitado)
+        uint256 totalSupply;   // supply original (0 = ilimitado)
+        address professor;
+        bool active;
+    }
+
+    struct Redemption {
+        address student;
+        uint256 rewardId;
+        uint256 timestamp;
+    }
+
+    enum UseRequestStatus { None, Pending, Approved, Rejected, Cancelled }
+
+    struct UseRequest {
+        address student;
+        uint256 rewardId;
+        UseRequestStatus status;
+    }
+
+    // --- State ---
+    uint256 public constant REWARD_TOKEN_OFFSET = 1_000_000;
+
+    uint256 public nextBadgeTypeId = 1;
+    mapping(uint256 => BadgeType) private _badgeTypes;
+
+    uint256 public nextTaskId = 1;
+    mapping(uint256 => Task) private _tasks;
+
+    uint256 public nextRewardId = 1;
+    mapping(uint256 => Reward) private _rewards;
+
+    // Prevenir doble otorgamiento: student => taskId => awarded
+    mapping(address => mapping(uint256 => bool)) public taskAwarded;
+
+    // Registro de canjes
+    uint256 public nextRedemptionId = 1;
+    mapping(uint256 => Redemption) private _redemptions;
+    mapping(address => uint256[]) private _studentRedemptions;
+
+    // Solicitudes de uso de recompensa
+    uint256 public nextUseRequestId = 1;
+    mapping(uint256 => UseRequest) private _useRequests;
+    mapping(address => uint256[]) private _studentUseRequests;
+
+    // --- Custom Errors ---
+    error NotProfessor();
+    error NotStudent();
+    error BadgeTypeNotFound(uint256 badgeTypeId);
+    error TaskNotFound(uint256 taskId);
+    error RewardNotFound(uint256 rewardId);
+    error NotBadgeTypeOwner(uint256 badgeTypeId, address caller);
+    error NotTaskOwner(uint256 taskId, address caller);
+    error NotRewardOwner(uint256 rewardId, address caller);
+    error AlreadyAwarded(address student, uint256 taskId);
+    error TaskNotActive(uint256 taskId);
+    error InsufficientBadges(uint256 available, uint256 required);
+    error RewardOutOfSupply(uint256 rewardId);
+    error RewardInactive(uint256 rewardId);
+    error SoulboundTransferBlocked();
+    error ZeroCost();
+    error ZeroRewardAmount();
+    error UseRequestNotFound(uint256 requestId);
+    error InvalidUseRequestState(uint256 requestId, UseRequestStatus current);
+    error NotRequestOwner(uint256 requestId);
+    error InsufficientRewardTokens(uint256 rewardId);
+
+    // --- Events ---
+    event BadgeTypeCreated(uint256 indexed badgeTypeId, string name, address indexed professor);
+    event TaskCreated(uint256 indexed taskId, string name, uint256 indexed badgeTypeId, address indexed professor);
+    event TaskDeactivated(uint256 indexed taskId);
+    event BadgeAwarded(uint256 indexed taskId, address indexed student, uint256 indexed badgeTypeId, uint256 amount);
+    event RewardCreated(uint256 indexed rewardId, string name, uint256 badgeCost, uint256 supply, address indexed professor);
+    event RewardDeactivated(uint256 indexed rewardId);
+    event RewardRedeemed(
+        uint256 indexed rewardId,
+        address indexed student,
+        uint256 indexed badgeTypeId,
+        uint256 badgesBurned,
+        uint256 redemptionId
+    );
+    event RewardTokenMinted(uint256 indexed rewardId, address indexed student, uint256 tokenId);
+    event UseRequestCreated(uint256 indexed requestId, address indexed student, uint256 indexed rewardId);
+    event UseRequestCancelled(uint256 indexed requestId);
+    event UseRequestApproved(uint256 indexed requestId, address indexed student, uint256 indexed rewardId);
+    event UseRequestRejected(uint256 indexed requestId);
+
+    constructor(address _accessControl, string memory uri_) ERC1155(uri_) {
+        accessControl = CampusAccessControl(_accessControl);
+    }
+
+    // --- Modifiers ---
+    modifier onlyProfessor() {
+        if (!accessControl.hasRole(accessControl.PROFESSOR_ROLE(), msg.sender))
+            revert NotProfessor();
+        _;
+    }
+
+    modifier onlyStudent() {
+        if (!accessControl.hasRole(accessControl.STUDENT_ROLE(), msg.sender))
+            revert NotStudent();
+        _;
+    }
+
+    // =========================================================================
+    // BADGE TYPE MANAGEMENT (Professor)
+    // =========================================================================
+
+    /**
+     * @dev Crea un nuevo tipo de insignia.
+     */
+    function createBadgeType(
+        string calldata name,
+        string calldata description
+    ) external onlyProfessor returns (uint256 badgeTypeId) {
+        badgeTypeId = nextBadgeTypeId;
+        unchecked { ++nextBadgeTypeId; }
+
+        _badgeTypes[badgeTypeId] = BadgeType({
+            name: name,
+            description: description,
+            creator: msg.sender,
+            exists: true
+        });
+
+        emit BadgeTypeCreated(badgeTypeId, name, msg.sender);
+    }
+
+    // =========================================================================
+    // TASK MANAGEMENT (Professor)
+    // =========================================================================
+
+    /**
+     * @dev Crea una tarea vinculada a un tipo de insignia.
+     *      Solo el creador del badgeType puede crear tareas para el.
+     */
+    function createTask(
+        string calldata name,
+        string calldata description,
+        uint256 badgeTypeId,
+        uint256 rewardAmount
+    ) external onlyProfessor returns (uint256 taskId) {
+        if (!_badgeTypes[badgeTypeId].exists) revert BadgeTypeNotFound(badgeTypeId);
+        if (_badgeTypes[badgeTypeId].creator != msg.sender)
+            revert NotBadgeTypeOwner(badgeTypeId, msg.sender);
+        if (rewardAmount == 0) revert ZeroRewardAmount();
+
+        taskId = nextTaskId;
+        unchecked { ++nextTaskId; }
+
+        _tasks[taskId] = Task({
+            name: name,
+            description: description,
+            badgeTypeId: badgeTypeId,
+            rewardAmount: rewardAmount,
+            professor: msg.sender,
+            active: true
+        });
+
+        emit TaskCreated(taskId, name, badgeTypeId, msg.sender);
+    }
+
+    /**
+     * @dev Desactiva una tarea (solo su creador).
+     */
+    function deactivateTask(uint256 taskId) external onlyProfessor {
+        Task storage task = _tasks[taskId];
+        if (task.professor == address(0)) revert TaskNotFound(taskId);
+        if (task.professor != msg.sender) revert NotTaskOwner(taskId, msg.sender);
+
+        task.active = false;
+        emit TaskDeactivated(taskId);
+    }
+
+    // =========================================================================
+    // BADGE AWARDING (Professor)
+    // =========================================================================
+
+    /**
+     * @dev Otorga insignias a un estudiante por completar una tarea.
+     */
+    function awardBadge(uint256 taskId, address student) external onlyProfessor {
+        Task storage task = _tasks[taskId];
+        if (task.professor == address(0)) revert TaskNotFound(taskId);
+        if (task.professor != msg.sender) revert NotTaskOwner(taskId, msg.sender);
+        if (!task.active) revert TaskNotActive(taskId);
+        if (!accessControl.hasRole(accessControl.STUDENT_ROLE(), student))
+            revert NotStudent();
+        if (taskAwarded[student][taskId]) revert AlreadyAwarded(student, taskId);
+
+        taskAwarded[student][taskId] = true;
+
+        // Mintear insignias al estudiante
+        _mint(student, task.badgeTypeId, task.rewardAmount, "");
+
+        emit BadgeAwarded(taskId, student, task.badgeTypeId, task.rewardAmount);
+    }
+
+    // =========================================================================
+    // REWARD MANAGEMENT (Professor)
+    // =========================================================================
+
+    /**
+     * @dev Crea una recompensa canjeable con insignias.
+     *      supply=0 significa ilimitado.
+     */
+    function createReward(
+        string calldata name,
+        string calldata description,
+        uint256 badgeTypeId,
+        uint256 badgeCost,
+        uint256 supply
+    ) external onlyProfessor returns (uint256 rewardId) {
+        if (!_badgeTypes[badgeTypeId].exists) revert BadgeTypeNotFound(badgeTypeId);
+        if (badgeCost == 0) revert ZeroCost();
+
+        rewardId = nextRewardId;
+        unchecked { ++nextRewardId; }
+
+        _rewards[rewardId] = Reward({
+            name: name,
+            description: description,
+            badgeTypeId: badgeTypeId,
+            badgeCost: badgeCost,
+            supply: supply,
+            totalSupply: supply,
+            professor: msg.sender,
+            active: true
+        });
+
+        emit RewardCreated(rewardId, name, badgeCost, supply, msg.sender);
+    }
+
+    /**
+     * @dev Desactiva una recompensa (solo su creador).
+     */
+    function deactivateReward(uint256 rewardId) external onlyProfessor {
+        Reward storage reward = _rewards[rewardId];
+        if (reward.professor == address(0)) revert RewardNotFound(rewardId);
+        if (reward.professor != msg.sender) revert NotRewardOwner(rewardId, msg.sender);
+
+        reward.active = false;
+        emit RewardDeactivated(rewardId);
+    }
+
+    // =========================================================================
+    // REDEMPTION (Student)
+    // =========================================================================
+
+    /**
+     * @dev Canjea una recompensa quemando las insignias requeridas.
+     */
+    function redeemReward(uint256 rewardId) external onlyStudent {
+        Reward storage reward = _rewards[rewardId];
+        if (reward.professor == address(0)) revert RewardNotFound(rewardId);
+        if (!reward.active) revert RewardInactive(rewardId);
+
+        // Verificar supply (0 = ilimitado)
+        if (reward.totalSupply != 0 && reward.supply == 0)
+            revert RewardOutOfSupply(rewardId);
+
+        // Verificar que el estudiante tiene suficientes insignias
+        uint256 studentBalance = balanceOf(msg.sender, reward.badgeTypeId);
+        if (studentBalance < reward.badgeCost)
+            revert InsufficientBadges(studentBalance, reward.badgeCost);
+
+        // --- Effects ---
+        if (reward.totalSupply != 0) {
+            unchecked { reward.supply -= 1; }
+        }
+
+        uint256 redemptionId = nextRedemptionId;
+        unchecked { ++nextRedemptionId; }
+
+        _redemptions[redemptionId] = Redemption({
+            student: msg.sender,
+            rewardId: rewardId,
+            timestamp: block.timestamp
+        });
+        _studentRedemptions[msg.sender].push(redemptionId);
+
+        // --- Interactions ---
+        // Quemar insignias del estudiante
+        _burn(msg.sender, reward.badgeTypeId, reward.badgeCost);
+
+        // Mintear token de recompensa al estudiante como voucher
+        uint256 rewardTokenId = REWARD_TOKEN_OFFSET + rewardId;
+        _mint(msg.sender, rewardTokenId, 1, "");
+
+        emit RewardRedeemed(rewardId, msg.sender, reward.badgeTypeId, reward.badgeCost, redemptionId);
+        emit RewardTokenMinted(rewardId, msg.sender, rewardTokenId);
+    }
+
+    // =========================================================================
+    // REWARD USE FLOW (Student requests, Professor approves/rejects)
+    // =========================================================================
+
+    /**
+     * @dev El estudiante solicita usar su token de recompensa.
+     */
+    function requestUseReward(uint256 rewardId) external onlyStudent returns (uint256 requestId) {
+        if (_rewards[rewardId].professor == address(0)) revert RewardNotFound(rewardId);
+
+        uint256 rewardTokenId = REWARD_TOKEN_OFFSET + rewardId;
+        if (balanceOf(msg.sender, rewardTokenId) == 0) revert InsufficientRewardTokens(rewardId);
+
+        requestId = nextUseRequestId;
+        unchecked { ++nextUseRequestId; }
+
+        _useRequests[requestId] = UseRequest({
+            student: msg.sender,
+            rewardId: rewardId,
+            status: UseRequestStatus.Pending
+        });
+        _studentUseRequests[msg.sender].push(requestId);
+
+        emit UseRequestCreated(requestId, msg.sender, rewardId);
+    }
+
+    /**
+     * @dev El estudiante retira su solicitud de uso (solo si está Pending).
+     */
+    function cancelUseRequest(uint256 requestId) external onlyStudent {
+        UseRequest storage req = _useRequests[requestId];
+        if (req.student == address(0)) revert UseRequestNotFound(requestId);
+        if (req.student != msg.sender) revert NotRequestOwner(requestId);
+        if (req.status != UseRequestStatus.Pending)
+            revert InvalidUseRequestState(requestId, req.status);
+
+        req.status = UseRequestStatus.Cancelled;
+        emit UseRequestCancelled(requestId);
+    }
+
+    /**
+     * @dev El profesor aprueba el uso: quema el token de recompensa del estudiante.
+     *      Solo puede aprobarlo el profesor que creó la recompensa.
+     */
+    function approveUseRequest(uint256 requestId) external onlyProfessor {
+        UseRequest storage req = _useRequests[requestId];
+        if (req.student == address(0)) revert UseRequestNotFound(requestId);
+        if (req.status != UseRequestStatus.Pending)
+            revert InvalidUseRequestState(requestId, req.status);
+
+        Reward storage reward = _rewards[req.rewardId];
+        if (reward.professor != msg.sender) revert NotRewardOwner(req.rewardId, msg.sender);
+
+        address student = req.student;
+        uint256 rewardId = req.rewardId;
+
+        req.status = UseRequestStatus.Approved;
+
+        uint256 rewardTokenId = REWARD_TOKEN_OFFSET + rewardId;
+        _burn(student, rewardTokenId, 1);
+
+        emit UseRequestApproved(requestId, student, rewardId);
+    }
+
+    /**
+     * @dev El profesor rechaza la solicitud de uso. El token queda con el estudiante.
+     *      Solo puede rechazarlo el profesor que creó la recompensa.
+     */
+    function rejectUseRequest(uint256 requestId) external onlyProfessor {
+        UseRequest storage req = _useRequests[requestId];
+        if (req.student == address(0)) revert UseRequestNotFound(requestId);
+        if (req.status != UseRequestStatus.Pending)
+            revert InvalidUseRequestState(requestId, req.status);
+
+        Reward storage reward = _rewards[req.rewardId];
+        if (reward.professor != msg.sender) revert NotRewardOwner(req.rewardId, msg.sender);
+
+        req.status = UseRequestStatus.Rejected;
+        emit UseRequestRejected(requestId);
+    }
+
+    // =========================================================================
+    // VIEW FUNCTIONS
+    // =========================================================================
+
+    function getBadgeType(uint256 badgeTypeId) external view returns (BadgeType memory) {
+        return _badgeTypes[badgeTypeId];
+    }
+
+    function getTask(uint256 taskId) external view returns (Task memory) {
+        return _tasks[taskId];
+    }
+
+    function getReward(uint256 rewardId) external view returns (Reward memory) {
+        return _rewards[rewardId];
+    }
+
+    function getBadgeBalance(address student, uint256 badgeTypeId) external view returns (uint256) {
+        return balanceOf(student, badgeTypeId);
+    }
+
+    function getStudentRedemptions(address student) external view returns (uint256[] memory) {
+        return _studentRedemptions[student];
+    }
+
+    function getRedemption(uint256 redemptionId) external view returns (Redemption memory) {
+        return _redemptions[redemptionId];
+    }
+
+    function getUseRequest(uint256 requestId) external view returns (UseRequest memory) {
+        return _useRequests[requestId];
+    }
+
+    function getStudentUseRequests(address student) external view returns (uint256[] memory) {
+        return _studentUseRequests[student];
+    }
+
+    function getRewardTokenId(uint256 rewardId) external pure returns (uint256) {
+        return REWARD_TOKEN_OFFSET + rewardId;
+    }
+
+    // =========================================================================
+    // SOULBOUND ENFORCEMENT
+    // =========================================================================
+
+    /**
+     * @dev Solo permite mint (from=0) y burn (to=0). Bloquea transferencias.
+     */
+    function _beforeTokenTransfer(
+        address operator,
+        address from,
+        address to,
+        uint256[] memory ids,
+        uint256[] memory amounts,
+        bytes memory data
+    ) internal override(ERC1155, ERC1155Supply) {
+        if (from != address(0) && to != address(0)) {
+            revert SoulboundTransferBlocked();
+        }
+        super._beforeTokenTransfer(operator, from, to, ids, amounts, data);
+    }
+
+    /**
+     * @dev Override: bloquea todas las transferencias.
+     */
+    function safeTransferFrom(
+        address,
+        address,
+        uint256,
+        uint256,
+        bytes memory
+    ) public pure override {
+        revert SoulboundTransferBlocked();
+    }
+
+    /**
+     * @dev Override: bloquea todas las transferencias batch.
+     */
+    function safeBatchTransferFrom(
+        address,
+        address,
+        uint256[] memory,
+        uint256[] memory,
+        bytes memory
+    ) public pure override {
+        revert SoulboundTransferBlocked();
+    }
+
+    /**
+     * @dev Override: bloquea approval (no tiene sentido sin transferencias).
+     */
+    function setApprovalForAll(address, bool) public pure override {
+        revert SoulboundTransferBlocked();
+    }
+
+    /**
+     * @dev Override: isApprovedForAll siempre false.
+     */
+    function isApprovedForAll(address, address) public pure override returns (bool) {
+        return false;
+    }
+}
