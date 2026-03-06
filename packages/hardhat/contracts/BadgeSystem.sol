@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
@@ -457,19 +457,18 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
 
     /**
      * @dev Solo permite mint (from=0) y burn (to=0). Bloquea transferencias.
+     *      OZ v5: _update reemplaza a _beforeTokenTransfer (firma sin operator ni data).
      */
-    function _beforeTokenTransfer(
-        address operator,
+    function _update(
         address from,
         address to,
         uint256[] memory ids,
-        uint256[] memory amounts,
-        bytes memory data
+        uint256[] memory values
     ) internal override(ERC1155, ERC1155Supply) {
         if (from != address(0) && to != address(0)) {
             revert SoulboundTransferBlocked();
         }
-        super._beforeTokenTransfer(operator, from, to, ids, amounts, data);
+        super._update(from, to, ids, values);
     }
 
     /**

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
 import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./CampusAccessControl.sol";
 import "./LibraryToken.sol";
 
@@ -380,14 +380,13 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
     /**
      * @dev Restriccion de transferencias: solo se permiten operaciones donde
      *      el contrato es parte (prestamos/devoluciones) o mint/burn.
+     *      OZ v5: _update reemplaza a _beforeTokenTransfer (firma sin operator ni data).
      */
-    function _beforeTokenTransfer(
-        address operator,
+    function _update(
         address from,
         address to,
         uint256[] memory ids,
-        uint256[] memory amounts,
-        bytes memory data
+        uint256[] memory values
     ) internal override(ERC1155, ERC1155Supply) {
         // Permitir mint (from == 0) y burn (to == 0)
         if (from != address(0) && to != address(0)) {
@@ -396,14 +395,15 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
                 revert TransferRestricted();
             }
         }
-        super._beforeTokenTransfer(operator, from, to, ids, amounts, data);
+        super._update(from, to, ids, values);
     }
 
     /**
      * @dev Resolucion de conflicto de supportsInterface.
+     *      OZ v5: ERC1155Receiver fue eliminado, se usa ERC1155Holder directamente.
      */
     function supportsInterface(bytes4 interfaceId)
-        public view override(ERC1155, ERC1155Receiver) returns (bool)
+        public view override(ERC1155, ERC1155Holder) returns (bool)
     {
         return super.supportsInterface(interfaceId);
     }

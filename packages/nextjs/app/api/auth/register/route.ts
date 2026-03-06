@@ -4,7 +4,14 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { parseEther } from "viem";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
-import { adminWalletClient } from "@/lib/admin";
+import { adminWalletClient, publicClient } from "@/lib/admin";
+import {
+  CONTRACT_ADDRESSES,
+  CAMPUS_ACCESS_CONTROL_ABI,
+  LIBRARY_TOKEN_ABI,
+  SHOP_TOKEN_ABI,
+  ROLES,
+} from "@/lib/contracts";
 
 export async function POST(req: NextRequest) {
   // ─── 1. Leer el body del request ───
@@ -71,7 +78,38 @@ export async function POST(req: NextRequest) {
     value: parseEther("1000"), // 1000 ETH de gas para operar
   });
 
-  // ─── 8. Guardar el usuario en la base de datos ───
+  // ─── 8. Registrar en el contrato CampusAccessControl ───
+  // Sin este paso los contratos no reconocerían al usuario (isStudent devolvería false).
+  // El admin llama a registerUser(address, name, STUDENT_ROLE) en nombre del estudiante.
+  const registerHash = await adminWalletClient.writeContract({
+    address: CONTRACT_ADDRESSES.campusAccessControl,
+    abi: CAMPUS_ACCESS_CONTROL_ABI,
+    functionName: "registerUser",
+    args: [account.address, name, ROLES.STUDENT],
+  });
+  // Esperamos confirmación de la tx antes de continuar
+  await publicClient.waitForTransactionReceipt({ hash: registerHash });
+
+  // ─── 9. Mintear tokens iniciales al estudiante ───
+  // LibraryToken: 10 tokens = 10 slots de préstamo simultáneos
+  // ShopToken: 100 tokens = saldo inicial para la tienda
+  const mintLibHash = await adminWalletClient.writeContract({
+    address: CONTRACT_ADDRESSES.libraryToken,
+    abi: LIBRARY_TOKEN_ABI,
+    functionName: "mint",
+    args: [account.address, BigInt(10)],
+  });
+  await publicClient.waitForTransactionReceipt({ hash: mintLibHash });
+
+  const mintShopHash = await adminWalletClient.writeContract({
+    address: CONTRACT_ADDRESSES.shopToken,
+    abi: SHOP_TOKEN_ABI,
+    functionName: "mint",
+    args: [account.address, BigInt(100)],
+  });
+  await publicClient.waitForTransactionReceipt({ hash: mintShopHash });
+
+  // ─── 10. Guardar el usuario en la base de datos ───
   // Guardamos todo en PostgreSQL vía Prisma:
   // - email y nombre para identificación
   // - password hasheado (irreversible)

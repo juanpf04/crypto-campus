@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.28;
 
 import "./CampusAccessControl.sol";
 
@@ -62,7 +62,7 @@ contract PrintingService {
 
     /**
      * @dev Ejecuta una impresion. Decrementa creditos y emite evento.
-     *      Llamada por el backend Flask (admin) en nombre del estudiante.
+     *      Llamada por el backend Next.js (admin) en nombre del estudiante.
      *      El tx.hash sirve como referencia para vincular con la BBDD.
      */
     function print(address student, uint256 pages) external onlyAdmin {
