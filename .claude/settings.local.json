@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm exec prisma migrate dev --name full-schema)",
+      "Bash(pnpm exec prisma generate)"
+    ]
+  }
+}

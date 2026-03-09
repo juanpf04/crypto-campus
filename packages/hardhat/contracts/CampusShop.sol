@@ -18,8 +18,9 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard {
     ShopToken public immutable shopToken;
 
     // --- Structs ---
+    // El nombre, descripcion e imagen del producto se guardan en Prisma vinculados por productId.
+    // En la blockchain solo guardamos precio y stock (necesarios para la logica de compra).
     struct Product {
-        string name;
         uint256 price;
         uint256 stock;
         bool active;
@@ -67,7 +68,7 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard {
     error ProductAlreadyInState(uint256 productId, bool active);
 
     // --- Events ---
-    event ProductAdded(uint256 indexed productId, string name, uint256 price, uint256 stock);
+    event ProductAdded(uint256 indexed productId, uint256 price, uint256 stock);
     event ProductUpdated(uint256 indexed productId, uint256 newPrice, uint256 newStock);
     event ProductDeactivated(uint256 indexed productId);
     event ProductReactivated(uint256 indexed productId);
@@ -106,7 +107,6 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard {
      * @dev Anade un nuevo producto al catalogo.
      */
     function addProduct(
-        string calldata name,
         uint256 price,
         uint256 stock
     ) external onlyAdmin returns (uint256 productId) {
@@ -116,14 +116,13 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard {
         unchecked { ++nextProductId; }
 
         _products[productId] = Product({
-            name: name,
             price: price,
             stock: stock,
             active: true,
             exists: true
         });
 
-        emit ProductAdded(productId, name, price, stock);
+        emit ProductAdded(productId, price, stock);
     }
 
     /**
@@ -307,14 +306,13 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard {
     // =========================================================================
 
     function getProduct(uint256 productId) external view returns (
-        string memory name,
         uint256 price,
         uint256 stock,
         bool active,
         bool exists_
     ) {
         Product storage p = _products[productId];
-        return (p.name, p.price, p.stock, p.active, p.exists);
+        return (p.price, p.stock, p.active, p.exists);
     }
 
     function getOrder(uint256 orderId) external view returns (Order memory) {

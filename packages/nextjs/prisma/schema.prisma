@@ -6,23 +6,308 @@ datasource db {
   provider = "postgresql"
 }
 
-model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  password      String
-  name          String
-  role          String   @default("STUDENT")
-  address       String   @unique
-  encryptedKey  String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+// ─────────────────────────────────────────────────────────────
+// USUARIOS
+// ─────────────────────────────────────────────────────────────
+
+enum Role {
+  STUDENT
+  PROFESSOR
+  LIBRARIAN
+  ADMIN
 }
 
-model ContractEvent {
-  id              String   @id @default(cuid())
-  transactionHash String   @unique
-  eventName       String
-  args            Json
-  blockNumber     Int
-  createdAt       DateTime @default(now())
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  password     String
+  name         String
+  role         Role     @default(STUDENT)
+  address      String   @unique   // wallet generada invisiblemente
+  encryptedKey String             // clave privada cifrada con AES-256-GCM
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relaciones
+  enrollments       Enrollment[]
+  printLogs         PrintLog[]
+  loans             Loan[]
+  orders            Order[]
+  badgeAwards       BadgeAward[]
+  awardedBadgesTo   BadgeAward[]     @relation("AwardedBy")
+  badgeTypesCreated BadgeType[]      @relation("BadgeTypeCreator")
+  tasksCreated      Task[]           @relation("TaskCreator")
+  rewardsCreated    Reward[]         @relation("RewardCreator")
+  rewardRedemptions RewardRedemption[]
+  subjectOfferings  SubjectOffering[] @relation("OfferingProfessor")
+}
+
+// ─────────────────────────────────────────────────────────────
+// ASIGNATURAS Y MATRÍCULAS
+// ─────────────────────────────────────────────────────────────
+
+model Subject {
+  id        String @id @default(cuid())
+  name      String // "Fundamentos de Aplicaciones en la Red"
+  code      String @unique // "FAL"
+
+  offerings SubjectOffering[]
+}
+
+// Una "oferta" es una asignatura impartida por un profesor a un grupo concreto
+model SubjectOffering {
+  id           String   @id @default(cuid())
+  subjectId    String
+  professorId  String
+  group        String   // "2ºE", "2ºA"
+  academicYear String   // "2024-2025"
+
+  subject     Subject   @relation(fields: [subjectId], references: [id])
+  professor   User      @relation("OfferingProfessor", fields: [professorId], references: [id])
+  enrollments Enrollment[]
+  badgeTypes  BadgeType[]
+
+  @@unique([subjectId, professorId, group, academicYear])
+}
+
+// Alumno matriculado en una asignatura+grupo
+model Enrollment {
+  id                String   @id @default(cuid())
+  userId            String
+  subjectOfferingId String
+  enrolledAt        DateTime @default(now())
+
+  user            User            @relation(fields: [userId], references: [id])
+  subjectOffering SubjectOffering @relation(fields: [subjectOfferingId], references: [id])
+
+  @@unique([userId, subjectOfferingId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// INSIGNIAS (BADGES)
+// ─────────────────────────────────────────────────────────────
+
+// Tipo de insignia. tokenId = ID en BadgeSystem (ERC-1155).
+// Vinculado a una SubjectOffering para restringir el acceso por grupo.
+model BadgeType {
+  id                String   @id @default(cuid())
+  tokenId           Int      @unique  // ID en el contrato BadgeSystem
+  name              String
+  description       String
+  subjectOfferingId String
+  creatorId         String
+  txHash            String
+  createdAt         DateTime @default(now())
+
+  subjectOffering SubjectOffering @relation(fields: [subjectOfferingId], references: [id])
+  creator         User            @relation("BadgeTypeCreator", fields: [creatorId], references: [id])
+  tasks           Task[]
+  rewards         Reward[]
+  awards          BadgeAward[]
+}
+
+// Tarea creada por un profesor. taskId = ID en BadgeSystem.
+model Task {
+  id           String   @id @default(cuid())
+  taskId       Int      @unique  // ID en el contrato BadgeSystem
+  name         String
+  description  String
+  badgeTypeId  String
+  rewardAmount Int
+  active       Boolean  @default(true)
+  creatorId    String
+  txHash       String
+  createdAt    DateTime @default(now())
+
+  badgeType BadgeType @relation(fields: [badgeTypeId], references: [id])
+  creator   User      @relation("TaskCreator", fields: [creatorId], references: [id])
+  awards    BadgeAward[]
+}
+
+// Log de insignias entregadas. Un registro por cada awardBadge ejecutado.
+model BadgeAward {
+  id          String   @id @default(cuid())
+  userId      String
+  taskId      String
+  badgeTypeId String
+  awardedById String
+  txHash      String
+  awardedAt   DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id])
+  task      Task      @relation(fields: [taskId], references: [id])
+  badgeType BadgeType @relation(fields: [badgeTypeId], references: [id])
+  awardedBy User      @relation("AwardedBy", fields: [awardedById], references: [id])
+
+  @@unique([userId, taskId]) // un alumno solo puede ganar cada tarea una vez
+}
+
+// Recompensa canjeable con insignias. rewardId = ID en BadgeSystem.
+model Reward {
+  id          String   @id @default(cuid())
+  rewardId    Int      @unique  // ID en el contrato BadgeSystem
+  name        String
+  description String
+  badgeTypeId String
+  badgeCost   Int
+  supply      Int      // 0 = ilimitado
+  active      Boolean  @default(true)
+  creatorId   String
+  txHash      String
+  createdAt   DateTime @default(now())
+
+  badgeType   BadgeType          @relation(fields: [badgeTypeId], references: [id])
+  creator     User               @relation("RewardCreator", fields: [creatorId], references: [id])
+  redemptions RewardRedemption[]
+}
+
+// Log de canjes de recompensas.
+model RewardRedemption {
+  id         String   @id @default(cuid())
+  userId     String
+  rewardId   String
+  txHash     String
+  redeemedAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  reward Reward @relation(fields: [rewardId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────
+// BIBLIOTECA
+// ─────────────────────────────────────────────────────────────
+
+enum LibraryItemType {
+  BOOK
+  BOARD_GAME
+  VIDEO_GAME
+  OTHER
+}
+
+enum LoanStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  RETURNED
+  OVERDUE
+}
+
+// Cualquier elemento prestable de la biblioteca.
+// tokenId = ID del ERC-1155 en LibraryManager.
+// metadata (Json) guarda datos específicos por tipo:
+//   BOOK:       { isbn, publisher, year, pages }
+//   BOARD_GAME: { players, duration, ageRating }
+//   VIDEO_GAME: { platform, genre }
+model LibraryItem {
+  id                String          @id @default(cuid())
+  tokenId           Int             @unique  // ID en LibraryManager
+  type              LibraryItemType @default(BOOK)
+  title             String
+  creator           String?         // autor, diseñador, desarrollador...
+  description       String?
+  coverUrl          String?
+  category          String?
+  physicalLocation  String?         // "2ª planta, Estantería 4B"
+  physicalCondition String          @default("Bueno")
+  totalCopies       Int
+  metadata          Json?           // datos específicos del tipo
+  active            Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+
+  loans Loan[]
+}
+
+// Préstamo. loanId = ID en LibraryManager.
+model Loan {
+  id            String     @id @default(cuid())
+  loanId        Int        @unique  // ID en el contrato LibraryManager
+  libraryItemId String
+  userId        String
+  status        LoanStatus @default(REQUESTED)
+  requestTxHash  String?
+  approveTxHash  String?
+  returnTxHash   String?
+  requestDate    DateTime   @default(now())
+  approvalDate   DateTime?
+  dueDate        DateTime?
+  returnDate     DateTime?
+  overdue        Boolean    @default(false)
+
+  libraryItem LibraryItem @relation(fields: [libraryItemId], references: [id])
+  user        User        @relation(fields: [userId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────
+// IMPRESIÓN
+// ─────────────────────────────────────────────────────────────
+
+model Printer {
+  id        String  @id         // "IMP-BIB-01"
+  name      String
+  location  String              // "Biblioteca, planta 2"
+  floor     String?
+  active    Boolean @default(true)
+
+  printLogs PrintLog[]
+}
+
+// Log de cada trabajo de impresión ejecutado.
+model PrintLog {
+  id           String   @id @default(cuid())
+  userId       String
+  filename     String               // solo el nombre, no el archivo
+  pages        Int
+  printerId    String
+  txHash       String               // prueba blockchain del pago de créditos
+  creditsUsed  Int
+  creditsAfter Int
+  createdAt    DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  printer Printer @relation(fields: [printerId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────
+// TIENDA
+// ─────────────────────────────────────────────────────────────
+
+enum OrderStatus {
+  PAID
+  DELIVERED
+  RETURNED
+}
+
+// Producto de la tienda. productId = ID en CampusShop.
+model Product {
+  id          String   @id @default(cuid())
+  productId   Int      @unique  // ID en el contrato CampusShop
+  name        String
+  description String?
+  price       Int               // en ShopTokens
+  stock       Int
+  imageUrl    String?
+  category    String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  orders Order[]
+}
+
+// Pedido. orderId = ID en CampusShop.
+model Order {
+  id           String      @id @default(cuid())
+  orderId      Int         @unique  // ID en el contrato CampusShop
+  userId       String
+  productId    String
+  quantity     Int         @default(1)
+  pricePaid    Int
+  status       OrderStatus @default(PAID)
+  txHash       String
+  purchaseDate DateTime    @default(now())
+  deliveryDate DateTime?
+  returnDate   DateTime?
+
+  user    User    @relation(fields: [userId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
 }

@@ -16,16 +16,14 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
     CampusAccessControl public immutable accessControl;
 
     // --- Structs ---
+    // Los metadatos (nombre, descripcion) se guardan en Prisma vinculados por ID.
+    // En la blockchain solo guardamos lo estrictamente necesario para la logica.
     struct BadgeType {
-        string name;
-        string description;
         address creator;
         bool exists;
     }
 
     struct Task {
-        string name;
-        string description;
         uint256 badgeTypeId;
         uint256 rewardAmount;
         address professor;
@@ -33,8 +31,6 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
     }
 
     struct Reward {
-        string name;
-        string description;
         uint256 badgeTypeId;   // tipo de insignia requerido
         uint256 badgeCost;     // cuantas insignias cuesta
         uint256 supply;        // supply restante (0 = ilimitado)
@@ -105,11 +101,11 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
     error InsufficientRewardTokens(uint256 rewardId);
 
     // --- Events ---
-    event BadgeTypeCreated(uint256 indexed badgeTypeId, string name, address indexed professor);
-    event TaskCreated(uint256 indexed taskId, string name, uint256 indexed badgeTypeId, address indexed professor);
+    event BadgeTypeCreated(uint256 indexed badgeTypeId, address indexed professor);
+    event TaskCreated(uint256 indexed taskId, uint256 indexed badgeTypeId, address indexed professor);
     event TaskDeactivated(uint256 indexed taskId);
     event BadgeAwarded(uint256 indexed taskId, address indexed student, uint256 indexed badgeTypeId, uint256 amount);
-    event RewardCreated(uint256 indexed rewardId, string name, uint256 badgeCost, uint256 supply, address indexed professor);
+    event RewardCreated(uint256 indexed rewardId, uint256 badgeCost, uint256 supply, address indexed professor);
     event RewardDeactivated(uint256 indexed rewardId);
     event RewardRedeemed(
         uint256 indexed rewardId,
@@ -148,21 +144,16 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
     /**
      * @dev Crea un nuevo tipo de insignia.
      */
-    function createBadgeType(
-        string calldata name,
-        string calldata description
-    ) external onlyProfessor returns (uint256 badgeTypeId) {
+    function createBadgeType() external onlyProfessor returns (uint256 badgeTypeId) {
         badgeTypeId = nextBadgeTypeId;
         unchecked { ++nextBadgeTypeId; }
 
         _badgeTypes[badgeTypeId] = BadgeType({
-            name: name,
-            description: description,
             creator: msg.sender,
             exists: true
         });
 
-        emit BadgeTypeCreated(badgeTypeId, name, msg.sender);
+        emit BadgeTypeCreated(badgeTypeId, msg.sender);
     }
 
     // =========================================================================
@@ -174,8 +165,6 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
      *      Solo el creador del badgeType puede crear tareas para el.
      */
     function createTask(
-        string calldata name,
-        string calldata description,
         uint256 badgeTypeId,
         uint256 rewardAmount
     ) external onlyProfessor returns (uint256 taskId) {
@@ -188,15 +177,13 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
         unchecked { ++nextTaskId; }
 
         _tasks[taskId] = Task({
-            name: name,
-            description: description,
             badgeTypeId: badgeTypeId,
             rewardAmount: rewardAmount,
             professor: msg.sender,
             active: true
         });
 
-        emit TaskCreated(taskId, name, badgeTypeId, msg.sender);
+        emit TaskCreated(taskId, badgeTypeId, msg.sender);
     }
 
     /**
@@ -244,8 +231,6 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
      *      supply=0 significa ilimitado.
      */
     function createReward(
-        string calldata name,
-        string calldata description,
         uint256 badgeTypeId,
         uint256 badgeCost,
         uint256 supply
@@ -257,8 +242,6 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
         unchecked { ++nextRewardId; }
 
         _rewards[rewardId] = Reward({
-            name: name,
-            description: description,
             badgeTypeId: badgeTypeId,
             badgeCost: badgeCost,
             supply: supply,
@@ -267,7 +250,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
             active: true
         });
 
-        emit RewardCreated(rewardId, name, badgeCost, supply, msg.sender);
+        emit RewardCreated(rewardId, badgeCost, supply, msg.sender);
     }
 
     /**

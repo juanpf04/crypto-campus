@@ -23,10 +23,9 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
     uint256 public constant DEPOSIT_PER_LOAN = 1;
 
     // --- Book metadata ---
+    // Titulo, autor, isbn y demas metadatos se guardan en Prisma vinculados por tokenId.
+    // En la blockchain solo guardamos lo necesario para la logica de prestamos.
     struct Book {
-        string title;
-        string author;
-        string isbn;
         uint256 totalCopies;
         bool exists;
     }
@@ -75,7 +74,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
     error ZeroCopies();
 
     // --- Events ---
-    event BookAdded(uint256 indexed bookId, string title, string author, uint256 copies);
+    event BookAdded(uint256 indexed bookId, uint256 copies);
     event BookCopiesAdded(uint256 indexed bookId, uint256 additionalCopies);
     event BookRemoved(uint256 indexed bookId);
     event LoanRequested(uint256 indexed loanId, address indexed student, uint256 indexed bookId);
@@ -115,9 +114,6 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
      * @dev Anade un nuevo libro al catalogo. Mintea N copias ERC-1155 al contrato.
      */
     function addBook(
-        string calldata title,
-        string calldata author,
-        string calldata isbn,
         uint256 copies
     ) external onlyLibrarian returns (uint256 bookId) {
         if (copies == 0) revert ZeroCopies();
@@ -126,9 +122,6 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
         unchecked { ++nextBookId; }
 
         _books[bookId] = Book({
-            title: title,
-            author: author,
-            isbn: isbn,
             totalCopies: copies,
             exists: true
         });
@@ -136,7 +129,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
         // Mintear copias al propio contrato (custodio)
         _mint(address(this), bookId, copies, "");
 
-        emit BookAdded(bookId, title, author, copies);
+        emit BookAdded(bookId, copies);
     }
 
     /**
@@ -342,18 +335,12 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
     // =========================================================================
 
     function getBookInfo(uint256 bookId) external view returns (
-        string memory title,
-        string memory author,
-        string memory isbn,
         uint256 totalCopies,
         uint256 availableCopies,
         bool exists_
     ) {
         Book storage book = _books[bookId];
         return (
-            book.title,
-            book.author,
-            book.isbn,
             book.totalCopies,
             balanceOf(address(this), bookId),
             book.exists
