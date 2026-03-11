@@ -42,6 +42,16 @@ pragma solidity ^0.8.28;
 //   4. Override
 //   5. Custom modifiers
 //
+// Natspec:
+///  @title - breve descripción del contrato
+///  @author - autor del contrato
+///  @notice - descripción para usuarios finales
+///  @dev - detalles técnicos para desarrolladores
+///  @param nombre - descripción de cada parámetro de función
+///  @return nombre- descripción de cada valor de retorno
+///  @inheritdoc - referencia a documentación heredada
+///  @custom:loquequieras - etiquetas personalizadas 
+//
 // ============================================================================
 
 import "@openzeppelin/contracts/access/Ownable.sol";
