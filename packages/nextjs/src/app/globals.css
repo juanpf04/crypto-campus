@@ -1,26 +1,169 @@
 @import "tailwindcss";
 
+/* ============================================================
+   PALETAS DE COLORES — CryptoCampus
+   ============================================================
+   Descomenta UNA sola paleta y comenta las demás.
+   Todos los componentes usan estas variables, así que cambiar
+   la paleta activa cambia toda la app de golpe.
+   ============================================================ */
+
+/* --- PALETA 1: Académica profesional (ACTIVA) ---
+   Confianza, legibilidad, look institucional.
+   Ideal para presentar ante tribunal / entorno UCM. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --primary: #0B63A6;
+  --primary-hover: #083E66;
+  --secondary: #4A90D9;
+  --secondary-hover: #3A7BC8;
+  --accent: #F2C94C;
+  --accent-hover: #E0B83A;
+
+  --success: #2EAD6F;
+  --success-hover: #249A5E;
+  --warning: #F2C94C;
+  --warning-hover: #E0B83A;
+  --danger: #E05555;
+  --danger-hover: #C84444;
+
+  --bg: #F5F7FA;
+  --card: #FFFFFF;
+  --border: #E2E8F0;
+  --border-hover: #CBD5E1;
+
+  --text: #0B2233;
+  --text-muted: #64748B;
+  --text-on-primary: #FFFFFF;
+  --text-on-danger: #FFFFFF;
 }
 
+/* --- PALETA 2: Moderna universitaria ---
+   Vibrante, púrpura/azul, más llamativa.
+:root {
+  --primary: #6B2DD5;
+  --primary-hover: #5A22B8;
+  --secondary: #00A3FF;
+  --secondary-hover: #008FE0;
+  --accent: #FF8A3D;
+  --accent-hover: #E67730;
+
+  --success: #00C48C;
+  --success-hover: #00A677;
+  --warning: #FF8A3D;
+  --warning-hover: #E67730;
+  --danger: #D64545;
+  --danger-hover: #C03636;
+
+  --bg: #F2F3F5;
+  --card: #FFFFFF;
+  --border: #E2E5EA;
+  --border-hover: #C8CDD5;
+
+  --text: #112033;
+  --text-muted: #6B7280;
+  --text-on-primary: #FFFFFF;
+  --text-on-danger: #FFFFFF;
+}
+*/
+
+/* --- PALETA 3: Minimal serio ---
+   Sobrio, elegante, mucho espacio en blanco.
+:root {
+  --primary: #11806A;
+  --primary-hover: #0E6B58;
+  --secondary: #C9A04D;
+  --secondary-hover: #B08D3F;
+  --accent: #C9A04D;
+  --accent-hover: #B08D3F;
+
+  --success: #11806A;
+  --success-hover: #0E6B58;
+  --warning: #C9A04D;
+  --warning-hover: #B08D3F;
+  --danger: #C84A4A;
+  --danger-hover: #B33E3E;
+
+  --bg: #FAFAFB;
+  --card: #FFFFFF;
+  --border: #E5E7EB;
+  --border-hover: #D1D5DB;
+
+  --text: #121212;
+  --text-muted: #9AA3AF;
+  --text-on-primary: #FFFFFF;
+  --text-on-danger: #FFFFFF;
+}
+*/
+
+/* --- PALETA 4: Cripto-tech (modo oscuro) ---
+   Estética web3, fondo oscuro, acentos neón.
+:root {
+  --primary: #0A6FFF;
+  --primary-hover: #085CD6;
+  --secondary: #00E0FF;
+  --secondary-hover: #00C4E0;
+  --accent: #D4AF37;
+  --accent-hover: #BF9D2E;
+
+  --success: #2ECC71;
+  --success-hover: #27AE60;
+  --warning: #D4AF37;
+  --warning-hover: #BF9D2E;
+  --danger: #FF4D4F;
+  --danger-hover: #E04345;
+
+  --bg: #0B0F13;
+  --card: #121624;
+  --border: #1E2538;
+  --border-hover: #2A3347;
+
+  --text: #E6F0F6;
+  --text-muted: #8899AA;
+  --text-on-primary: #FFFFFF;
+  --text-on-danger: #FFFFFF;
+}
+*/
+
+/* ============================================================
+   TEMA TAILWIND — mapea variables CSS a clases de Tailwind v4
+   ============================================================
+   Con esto puedes usar clases como:
+     bg-primary, text-muted, border-default, etc.
+   ============================================================ */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-secondary: var(--secondary);
+  --color-secondary-hover: var(--secondary-hover);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+
+  --color-success: var(--success);
+  --color-success-hover: var(--success-hover);
+  --color-warning: var(--warning);
+  --color-warning-hover: var(--warning-hover);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-border-default: var(--border);
+  --color-border-hover: var(--border-hover);
+
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-on-primary: var(--text-on-primary);
+  --color-text-on-danger: var(--text-on-danger);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* ============================================================
+   ESTILOS BASE
+   ============================================================ */
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg);
+  color: var(--text);
   font-family: Arial, Helvetica, sans-serif;
 }

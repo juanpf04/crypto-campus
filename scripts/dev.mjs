@@ -68,13 +68,13 @@ if (existsSync(deploymentsDir)) {
   rmSync(deploymentsDir, { recursive: true, force: true });
 }
 
-// 3. Desplegar el contrato
-log("Desplegando contrato Counter...");
+// 3. Desplegar los contratos del campus
+log("Desplegando contratos CampusModule...");
 const deployOutput = await new Promise((resolve, reject) => {
   let output = "";
   const deploy = spawn(
     "npx",
-    ["hardhat", "ignition", "deploy", "ignition/modules/Counter.ts", "--network", "localhost"],
+    ["hardhat", "ignition", "deploy", "ignition/modules/CampusModule.ts", "--network", "localhost"],
     {
       cwd: HARDHAT_DIR,
       stdio: ["ignore", "pipe", "pipe"],
@@ -97,50 +97,33 @@ const deployOutput = await new Promise((resolve, reject) => {
   });
 });
 
-// 4. Extraer la dirección del contrato
-// Buscar en el directorio de deployments
-let contractAddress = null;
+// 4. Extraer las direcciones de los contratos
+// Buscar en el directorio de deployments generado por Ignition
+let contractAddresses = {};
 
-// Intentar leer del archivo deployed_addresses.json generado por Ignition
 const deploymentsDirs = resolve(HARDHAT_DIR, "ignition/deployments");
 if (existsSync(deploymentsDirs)) {
   const chains = readdirSync(deploymentsDirs);
   for (const chain of chains) {
     const addressFile = resolve(deploymentsDirs, chain, "deployed_addresses.json");
     if (existsSync(addressFile)) {
-      const addresses = JSON.parse(readFileSync(addressFile, "utf-8"));
-      // Buscar la dirección del Counter
-      for (const [key, addr] of Object.entries(addresses)) {
-        if (key.includes("Counter")) {
-          contractAddress = addr;
-          break;
-        }
-      }
+      contractAddresses = JSON.parse(readFileSync(addressFile, "utf-8"));
     }
   }
 }
 
-// Fallback: extraer del output
-if (!contractAddress) {
-  const match = deployOutput.match(/0x[a-fA-F0-9]{40}/);
-  if (match) contractAddress = match[0];
-}
-
-if (!contractAddress) {
-  console.error(red("No se pudo obtener la dirección del contrato."));
+if (Object.keys(contractAddresses).length === 0) {
+  console.error(red("No se pudieron obtener las direcciones de los contratos."));
   console.log(deployOutput);
   hardhatNode.kill();
   process.exit(1);
 }
 
-log(green(`Contrato desplegado en: ${contractAddress}`));
-
-// 5. Escribir la dirección en .env.local
-const envContent = `# Generado automáticamente por scripts/dev.mjs
-NEXT_PUBLIC_COUNTER_ADDRESS=${contractAddress}
-`;
-writeFileSync(ENV_FILE, envContent);
-log(`Dirección guardada en .env.local`);
+log(green(`Contratos desplegados:`));
+for (const [key, addr] of Object.entries(contractAddresses)) {
+  const name = key.split("#")[1] || key;
+  console.log(`  ${cyan(name)}: ${addr}`);
+}
 
 // 6. Arrancar Next.js
 log("Arrancando Next.js...");

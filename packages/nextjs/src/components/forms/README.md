@@ -1,2 +1,3 @@
-Formularios del dominio: LoginForm, RegisterForm, AddBookForm, AddProductForm, PrintRequestForm.
-Reciben callbacks onSubmit y delegan la lógica a src/actions/.
+Formularios de dominio. Todos usan el hook useForm de src/hooks/.
+Reciben onSubmit + initialValues (para reutilizar en crear/editar).
+La lógica de negocio se delega a src/actions/.
