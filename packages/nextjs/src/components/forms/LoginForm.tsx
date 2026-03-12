@@ -1,7 +1,7 @@
 "use client";
 
 import { useForm } from "@/hooks/useForm";
-import { Button, Input } from "@/components/ui";
+import { Button, Input, PasswordInput } from "@/components/ui";
 
 export interface LoginFormData {
   email: string;
@@ -28,15 +28,15 @@ export function LoginForm({ onSubmit }: LoginFormProps) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <Input
         label="Email"
-        type="email"
+        type="text"
+        autoComplete="email"
         placeholder="tu@ucm.es"
         value={fields.email}
         onChange={setField("email")}
         error={errors.email}
       />
-      <Input
+      <PasswordInput
         label="Contraseña"
-        type="password"
         placeholder="••••••••"
         value={fields.password}
         onChange={setField("password")}

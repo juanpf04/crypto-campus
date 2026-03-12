@@ -1,7 +1,7 @@
 "use client";
 
 import { useForm } from "@/hooks/useForm";
-import { Button, Input, Select } from "@/components/ui";
+import { Button, Input, PasswordInput, Select } from "@/components/ui";
 
 export interface UserFormData {
   name: string;
@@ -53,16 +53,16 @@ export function UserForm({ onSubmit, initialValues, isEdit }: UserFormProps) {
       />
       <Input
         label="Email"
-        type="email"
+        type="text"
+        autoComplete="email"
         placeholder="usuario@ucm.es"
         value={fields.email}
         onChange={setField("email")}
         error={errors.email}
         disabled={isEdit}
       />
-      <Input
+      <PasswordInput
         label={isEdit ? "Nueva contraseña (dejar vacío para no cambiar)" : "Contraseña"}
-        type="password"
         placeholder="Mínimo 8 caracteres"
         value={fields.password}
         onChange={setField("password")}

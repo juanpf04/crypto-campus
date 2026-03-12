@@ -125,7 +125,35 @@ for (const [key, addr] of Object.entries(contractAddresses)) {
   console.log(`  ${cyan(name)}: ${addr}`);
 }
 
-// 6. Arrancar Next.js
+// 6. Resincronizar usuarios de Prisma con la blockchain
+log("Resincronizando usuarios existentes con la blockchain...");
+await new Promise((resolve, reject) => {
+  const resync = spawn("node", ["scripts/resync-users.mjs"], {
+    cwd: NEXTJS_DIR,
+    stdio: ["ignore", "pipe", "pipe"],
+    shell: true,
+  });
+
+  resync.stdout.on("data", (data) => {
+    const msg = data.toString().trim();
+    if (msg) console.log(msg);
+  });
+
+  resync.stderr.on("data", (data) => {
+    const msg = data.toString().trim();
+    if (msg) console.log(`${yellow("[resync]")} ${msg}`);
+  });
+
+  resync.on("close", (code) => {
+    if (code === 0) resolve();
+    else {
+      log(yellow("Resync terminó con errores (no crítico, continuando...)"));
+      resolve(); // No bloqueamos el arranque
+    }
+  });
+});
+
+// 7. Arrancar Next.js
 log("Arrancando Next.js...");
 const nextDev = spawn("npx", ["next", "dev"], {
   cwd: NEXTJS_DIR,

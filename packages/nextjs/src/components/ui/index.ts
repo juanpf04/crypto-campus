@@ -6,6 +6,7 @@ export { Card, CardHeader, CardTitle, CardBody, CardFooter } from "./Card";
 export { EmptyState } from "./EmptyState";
 export { Input } from "./Input";
 export { Modal } from "./Modal";
+export { PasswordInput } from "./PasswordInput";
 export { Select } from "./Select";
 export { Spinner } from "./Spinner";
 export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "./Table";
