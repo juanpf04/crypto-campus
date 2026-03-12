@@ -13,4 +13,6 @@ export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from ".
 export { Tabs } from "./Tabs";
 export { Textarea } from "./Textarea";
 export { Toggle } from "./Toggle";
+export { Toast } from "./Toast";
+export { ToastContainer } from "./ToastContainer";
 export { Tooltip } from "./Tooltip";

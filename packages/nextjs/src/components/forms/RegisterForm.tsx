@@ -96,7 +96,6 @@ export function RegisterForm({ onSubmit }: RegisterFormProps) {
         onChange={setField("confirmPassword")}
         error={errors.confirmPassword}
       />
-      {submitError && <p className="text-sm text-danger">{submitError}</p>}
       <Button type="submit" loading={loading}>
         Crear cuenta
       </Button>

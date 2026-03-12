@@ -3,9 +3,11 @@
 import { useRouter } from "next/navigation";
 import { LoginForm, type LoginFormData } from "@/components/forms";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui";
+import { useToast } from "@/hooks/useToast";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { addToast } = useToast();
 
   async function handleLogin(data: LoginFormData) {
     const res = await fetch("/api/auth/login", {
@@ -17,9 +19,11 @@ export default function LoginPage() {
     const json = await res.json();
 
     if (!res.ok) {
-      throw new Error(json.error ?? "Error al iniciar sesión");
+      addToast(json.error ?? "Error al iniciar sesión", "danger");
+      return;
     }
 
+    addToast("Sesión iniciada correctamente", "success");
     router.push("/dashboard");
   }
 

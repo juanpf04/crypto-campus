@@ -42,7 +42,6 @@ export function LoginForm({ onSubmit }: LoginFormProps) {
         onChange={setField("password")}
         error={errors.password}
       />
-      {submitError && <p className="text-sm text-danger">{submitError}</p>}
       <Button type="submit" loading={loading}>
         Iniciar sesión
       </Button>

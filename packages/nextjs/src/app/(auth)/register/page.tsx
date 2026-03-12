@@ -3,9 +3,11 @@
 import { useRouter } from "next/navigation";
 import { RegisterForm, type RegisterFormData } from "@/components/forms";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui";
+import { useToast } from "@/hooks/useToast";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { addToast } = useToast();
 
   async function handleRegister(data: RegisterFormData) {
     const res = await fetch("/api/auth/register", {
@@ -21,9 +23,11 @@ export default function RegisterPage() {
     const json = await res.json();
 
     if (!res.ok) {
-      throw new Error(json.error ?? "Error al registrar la cuenta");
+      addToast(json.error ?? "Error al registrar la cuenta", "danger");
+      return;
     }
 
+    addToast("Cuenta creada correctamente", "success");
     router.push("/login");
   }
 
