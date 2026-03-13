@@ -16,3 +16,5 @@ export { Toggle } from "./Toggle";
 export { Toast } from "./Toast";
 export { ToastContainer } from "./ToastContainer";
 export { Tooltip } from "./Tooltip";
+export { NavBrand } from "./NavBrand";
+export { NavItem } from "./NavItem";

@@ -4,3 +4,5 @@ export { AddressDisplay } from "./AddressDisplay";
 export { ConfirmModal } from "./ConfirmModal";
 export { TokenBalance } from "./TokenBalance";
 export { PasswordRequirements } from "./PasswordRequirements";
+export { NavGroup } from "./NavGroup";
+export { UserMenu } from "./UserMenu";
