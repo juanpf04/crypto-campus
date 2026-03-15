@@ -37,6 +37,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getIronSession } from "iron-session";
 import { SessionData, sessionOptions } from "@/lib/session";
 
+/** Carpetas de rol en /dashboard/ que requieren coincidencia con session.role */
+const ROLE_FOLDERS = ["student", "professor", "librarian", "admin"] as const;
+
 export default async function proxy(req: NextRequest) {
   // Crear una respuesta "pass-through" (dejar pasar) como base
   const res = NextResponse.next();
@@ -56,6 +59,21 @@ export default async function proxy(req: NextRequest) {
   // Regla 2: Si ya está logueado, no mostrar login/register
   if ((pathname === "/login" || pathname === "/register") && isAuthenticated) {
     return NextResponse.redirect(new URL("/dashboard", req.url));
+  }
+
+  // Regla 3: Protección por rol — impide acceder a carpetas de otros roles.
+  // Ejemplo: si eres STUDENT y escribes /dashboard/admin/users en la URL,
+  // el middleware te redirige de vuelta a /dashboard (que te manda a tu dashboard).
+  // Solo comprueba las 4 carpetas de rol conocidas (student, professor, librarian, admin).
+  if (isAuthenticated && session.role) {
+    const userFolder = session.role.toLowerCase(); // "student", "professor", etc.
+
+    for (const folder of ROLE_FOLDERS) {
+      // Si la ruta empieza por /dashboard/{otro_rol} y no es TU rol → fuera
+      if (folder !== userFolder && pathname.startsWith(`/dashboard/${folder}`)) {
+        return NextResponse.redirect(new URL("/dashboard", req.url));
+      }
+    }
   }
 
   // Sin reglas aplicables → dejar pasar la request

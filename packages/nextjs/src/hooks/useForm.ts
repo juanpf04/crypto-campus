@@ -108,8 +108,9 @@ export function useForm<T extends object>({
   const setField = useCallback(
     (name: keyof T) =>
       (e: Event & { currentTarget: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement }) => {
+        const value = e.currentTarget.value;
         touched.current.add(name);
-        setFields((prev) => ({ ...prev, [name]: e.currentTarget.value }));
+        setFields((prev) => ({ ...prev, [name]: value }));
         setSubmitError(null);
       },
     [],

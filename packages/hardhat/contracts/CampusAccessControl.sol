@@ -42,7 +42,8 @@ contract CampusAccessControl is AccessControl {
         if (
             role != LIBRARIAN_ROLE &&
             role != PROFESSOR_ROLE &&
-            role != STUDENT_ROLE
+            role != STUDENT_ROLE &&
+            role != DEFAULT_ADMIN_ROLE
         ) revert InvalidRole(role);
         _;
     }

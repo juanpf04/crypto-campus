@@ -153,7 +153,32 @@ await new Promise((resolve, reject) => {
   });
 });
 
-// 7. Arrancar Next.js
+// 7. Seed del admin por defecto (idempotente — si ya existe, no hace nada)
+log("Ejecutando seed del admin...");
+await new Promise((resolve) => {
+  const seed = spawn("node", ["scripts/seed-admin.mjs"], {
+    cwd: NEXTJS_DIR,
+    stdio: ["ignore", "pipe", "pipe"],
+    shell: true,
+  });
+
+  seed.stdout.on("data", (data) => {
+    const msg = data.toString().trim();
+    if (msg) console.log(msg);
+  });
+
+  seed.stderr.on("data", (data) => {
+    const msg = data.toString().trim();
+    if (msg) console.log(`${yellow("[seed]")} ${msg}`);
+  });
+
+  seed.on("close", (code) => {
+    if (code !== 0) log(yellow("Seed terminó con errores (no crítico, continuando...)"));
+    resolve();
+  });
+});
+
+// 8. Arrancar Next.js
 log("Arrancando Next.js...");
 const nextDev = spawn("npx", ["next", "dev"], {
   cwd: NEXTJS_DIR,
