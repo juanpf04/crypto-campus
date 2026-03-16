@@ -17,7 +17,7 @@ export function StatCard({ title, value, subtitle, icon, trend, className }: Sta
   return (
     <Card className={cn("flex items-start gap-4", className)}>
       {icon && (
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
           {icon}
         </div>
       )}

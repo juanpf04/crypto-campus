@@ -2,6 +2,8 @@
 
 import { useForm } from "@/hooks/useForm";
 import { Button, Input, PasswordInput, Select } from "@/components/ui";
+import { PasswordRequirements } from "@/components/shared";
+import { validateEmail, validatePassword } from "@/lib/validators";
 
 export interface UserFormData {
   name: string;
@@ -16,7 +18,9 @@ interface UserFormProps {
   isEdit?: boolean;
 }
 
+/** Opciones de rol disponibles para el admin al crear/editar un usuario */
 const roleOptions = [
+  { value: "STUDENT", label: "Estudiante" },
   { value: "PROFESSOR", label: "Profesor" },
   { value: "LIBRARIAN", label: "Bibliotecario" },
   { value: "ADMIN", label: "Administrador" },
@@ -28,15 +32,31 @@ export function UserForm({ onSubmit, initialValues, isEdit }: UserFormProps) {
       name: initialValues?.name ?? "",
       email: initialValues?.email ?? "",
       password: "",
-      role: initialValues?.role ?? "PROFESSOR",
+      role: initialValues?.role ?? "STUDENT",
     },
+    // Validación en tiempo real mientras el usuario escribe
+    validateOnChange: true,
     validate: (v) => {
       const e: Partial<Record<keyof UserFormData, string>> = {};
+
       if (!v.name) e.name = "El nombre es obligatorio";
-      if (!v.email) e.email = "El email es obligatorio";
-      if (!isEdit && !v.password) e.password = "La contraseña es obligatoria";
-      if (!isEdit && v.password && v.password.length < 8) e.password = "Mínimo 8 caracteres";
+
+      // Mismas validaciones de email que el registro público
+      const emailError = validateEmail(v.email);
+      if (emailError) e.email = emailError;
+
+      // En modo edición la contraseña es opcional (vacía = no cambiar)
+      if (!isEdit) {
+        const passwordError = validatePassword(v.password);
+        if (passwordError) e.password = passwordError;
+      } else if (v.password) {
+        // Si está editando y escribe algo, validar igualmente
+        const passwordError = validatePassword(v.password);
+        if (passwordError) e.password = passwordError;
+      }
+
       if (!v.role) e.role = "Selecciona un rol";
+
       return e;
     },
     onSubmit,
@@ -52,7 +72,7 @@ export function UserForm({ onSubmit, initialValues, isEdit }: UserFormProps) {
         error={errors.name}
       />
       <Input
-        label="Email"
+        label="Email UCM"
         type="text"
         autoComplete="email"
         placeholder="usuario@ucm.es"
@@ -61,13 +81,19 @@ export function UserForm({ onSubmit, initialValues, isEdit }: UserFormProps) {
         error={errors.email}
         disabled={isEdit}
       />
-      <PasswordInput
-        label={isEdit ? "Nueva contraseña (dejar vacío para no cambiar)" : "Contraseña"}
-        placeholder="Mínimo 8 caracteres"
-        value={fields.password}
-        onChange={setField("password")}
-        error={errors.password}
-      />
+
+      {/* Contraseña con indicador visual de requisitos */}
+      <div className="flex flex-col gap-2">
+        <PasswordInput
+          label={isEdit ? "Nueva contraseña (dejar vacío para no cambiar)" : "Contraseña"}
+          placeholder="Mínimo 8 caracteres"
+          value={fields.password}
+          onChange={setField("password")}
+          error={errors.password}
+        />
+        {fields.password && <PasswordRequirements password={fields.password} />}
+      </div>
+
       <Select
         label="Rol"
         options={roleOptions}
@@ -75,7 +101,9 @@ export function UserForm({ onSubmit, initialValues, isEdit }: UserFormProps) {
         onChange={setField("role")}
         error={errors.role}
       />
+
       {submitError && <p className="text-sm text-danger">{submitError}</p>}
+
       <Button type="submit" loading={loading}>
         {isEdit ? "Guardar cambios" : "Crear usuario"}
       </Button>

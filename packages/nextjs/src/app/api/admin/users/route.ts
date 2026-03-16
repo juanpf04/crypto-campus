@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
   // Fondear wallet con ETH (para gas)
   const fundHash = await adminWalletClient.sendTransaction({
     to: account.address,
-    value: parseEther("1000"),
+    value: parseEther("10"),
   });
   await publicClient.waitForTransactionReceipt({ hash: fundHash });
 
