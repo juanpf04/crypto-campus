@@ -31,7 +31,7 @@
  * - LibraryToken: Token ERC-20 para el sistema de biblioteca.
  * - ShopToken: Token ERC-20 para la tienda del campus.
  * - BadgeSystem: Sistema de badges/insignias NFT para logros académicos.
- * - PrintingService: Servicio de impresión que consume tokens.
+ * - Printer: Servicio de impresión que consume créditos.
  * - LibraryManager: Gestión de préstamos de libros.
  * - CampusShop: Tienda donde se intercambian tokens por productos/servicios.
  */
@@ -40,7 +40,7 @@ import CampusAccessControlArtifact from "../../../hardhat/artifacts/contracts/Ca
 import LibraryTokenArtifact from "../../../hardhat/artifacts/contracts/LibraryToken.sol/LibraryToken.json";
 import ShopTokenArtifact from "../../../hardhat/artifacts/contracts/ShopToken.sol/ShopToken.json";
 import BadgeSystemArtifact from "../../../hardhat/artifacts/contracts/BadgeSystem.sol/BadgeSystem.json";
-import PrintingServiceArtifact from "../../../hardhat/artifacts/contracts/PrintingService.sol/PrintingService.json";
+import PrinterArtifact from "../../../hardhat/artifacts/contracts/Printer.sol/Printer.json";
 import LibraryManagerArtifact from "../../../hardhat/artifacts/contracts/LibraryManager.sol/LibraryManager.json";
 import CampusShopArtifact from "../../../hardhat/artifacts/contracts/CampusShop.sol/CampusShop.json";
 
@@ -55,7 +55,7 @@ export const CONTRACT_ADDRESSES = {
   libraryToken:        "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
   shopToken:           "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
   badgeSystem:         "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
-  printingService:     "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
+  printer:             "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
   libraryManager:      "0x0165878A594ca255338adfa4d48449f69242Eb8F",
   campusShop:          "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
 } as const;
@@ -65,7 +65,7 @@ export const CAMPUS_ACCESS_CONTROL_ABI = CampusAccessControlArtifact.abi;
 export const LIBRARY_TOKEN_ABI         = LibraryTokenArtifact.abi;
 export const SHOP_TOKEN_ABI            = ShopTokenArtifact.abi;
 export const BADGE_SYSTEM_ABI          = BadgeSystemArtifact.abi;
-export const PRINTING_SERVICE_ABI      = PrintingServiceArtifact.abi;
+export const PRINTER_ABI               = PrinterArtifact.abi;
 export const LIBRARY_MANAGER_ABI       = LibraryManagerArtifact.abi;
 export const CAMPUS_SHOP_ABI           = CampusShopArtifact.abi;
 

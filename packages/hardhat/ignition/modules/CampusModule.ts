@@ -10,7 +10,7 @@ import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
  *   2. LibraryToken         — necesita CampusAccessControl
  *   3. ShopToken            — necesita CampusAccessControl
  *   4. BadgeSystem          — necesita CampusAccessControl
- *   5. PrintingService      — necesita CampusAccessControl
+ *   5. Printer              — necesita CampusAccessControl
  *   6. LibraryManager       — necesita CampusAccessControl + LibraryToken
  *   7. CampusShop           — necesita CampusAccessControl + ShopToken
  *
@@ -36,8 +36,8 @@ export default buildModule("CampusModule", (m) => {
   // 4. BadgeSystem
   const badgeSystem = m.contract("BadgeSystem", [accessControl, badgeUri]);
 
-  // 5. PrintingService
-  const printingService = m.contract("PrintingService", [accessControl]);
+  // 5. Printer
+  const printer = m.contract("Printer", [accessControl]);
 
   // 6. LibraryManager
   const libraryManager = m.contract("LibraryManager", [
@@ -69,7 +69,7 @@ export default buildModule("CampusModule", (m) => {
     libraryToken,
     shopToken,
     badgeSystem,
-    printingService,
+    printer,
     libraryManager,
     campusShop,
   };
