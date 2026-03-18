@@ -21,3 +21,5 @@ export { NavBrand } from "./NavBrand";
 export { NavItem } from "./NavItem";
 export { Pagination } from "./Pagination";
 export { SearchInput } from "./SearchInput";
+export { FileDropZone } from "./FileDropZone";
+export { FilePreview } from "./FilePreview";

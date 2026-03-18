@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
   // En Hardhat local el ETH es gratis e ilimitado.
   await adminWalletClient.sendTransaction({
     to: account.address,
-    value: parseEther("1000"), // 1000 ETH de gas para operar
+    value: parseEther("10"), // 10 ETH de gas para operar
   });
 
   // ─── 8. Registrar en el contrato CampusAccessControl ───

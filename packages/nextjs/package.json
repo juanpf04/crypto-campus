@@ -16,9 +16,11 @@
     "clsx": "^2.1.1",
     "iron-session": "^8.0.4",
     "next": "16.1.6",
+    "pdf-lib": "^1.17.1",
     "pg": "^8.19.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-dropzone": "^15.0.0",
     "tailwind-merge": "^3.5.0",
     "viem": "^2.46.3",
     "wagmi": "^2.19.5"

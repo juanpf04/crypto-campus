@@ -256,13 +256,26 @@ model Printer {
 model PrintLog {
   id           String   @id @default(cuid())
   userId       String
-  filename     String               // solo el nombre, no el archivo
-  pages        Int
+  filename     String               // nombre original del archivo subido
+  pages        Int                  // total de caras impresas (= créditos consumidos)
+  copies       Int      @default(1)
   printerId    String
   txHash       String               // prueba blockchain del pago de créditos
   creditsUsed  Int
   creditsAfter Int
   createdAt    DateTime @default(now())
+
+  // Campos del simulador de impresión
+  color         Boolean  @default(false)  // false = B/N, true = color
+  duplex        Boolean  @default(false)  // impresión a doble cara
+  orientation   String   @default("portrait")  // "portrait" | "landscape"
+  paperSize     String   @default("A4")        // "A4" | "letter" | "A3"
+  pageRangeFrom Int?                     // null = imprimir todas
+  pageRangeTo   Int?                     // null = imprimir todas
+  pagesPerSheet Int      @default(1)     // 1, 2 o 4 páginas por hoja
+  filePages     Int      @default(1)     // páginas detectadas en el archivo original
+  fileSize      Int      @default(0)     // tamaño del archivo en bytes
+  filePath      String?                  // ruta temporal del archivo (se limpia)
 
   user    User    @relation(fields: [userId], references: [id])
   printer Printer @relation(fields: [printerId], references: [id])

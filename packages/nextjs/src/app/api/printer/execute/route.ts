@@ -2,7 +2,9 @@
  * POST /api/printer/execute
  * Ejecuta un trabajo de impresión para el usuario logueado.
  * Acceso: Usuarios autenticados (validado en la Server Action).
- * Body: { printerId, filename, pages, copies? }
+ * Body: { printerId, filename, pages, copies?, color?, duplex?, orientation?,
+ *         paperSize?, pageRangeFrom?, pageRangeTo?, pagesPerSheet?,
+ *         filePages?, fileSize?, filePath? }
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -11,7 +13,12 @@ import { executeMyPrintJob } from "@/actions/printing";
 export async function POST(req: NextRequest) {
 	try {
 		const body = await req.json();
-		const { printerId, filename, pages, copies } = body;
+		const {
+			printerId, filename, pages, copies,
+			color, duplex, orientation, paperSize,
+			pageRangeFrom, pageRangeTo, pagesPerSheet,
+			filePages, fileSize, filePath,
+		} = body;
 
 		// Validar campos requeridos (la autorización la valida executeMyPrintJob)
 		if (!printerId || !filename || !pages) {
@@ -26,6 +33,16 @@ export async function POST(req: NextRequest) {
 			filename,
 			pages,
 			copies,
+			color,
+			duplex,
+			orientation,
+			paperSize,
+			pageRangeFrom,
+			pageRangeTo,
+			pagesPerSheet,
+			filePages,
+			fileSize,
+			filePath,
 		});
 
 		return NextResponse.json(result, { status: 201 });

@@ -3,30 +3,20 @@
 /**
  * Vista de impresión del estudiante.
  *
- * Tres secciones verticales:
- * 1. Banner de créditos disponibles (lectura del contrato).
- * 2. Formulario para ejecutar un trabajo de impresión.
- * 3. Historial de impresiones propias con paginación.
+ * Layout:
+ * - Fila superior (50/50): Banner de créditos | Card clicable de historial
+ * - Sección principal: Simulador de impresión completo dentro de una Card
  */
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useToast } from "@/hooks/useToast";
 import { icons } from "@/lib/icons";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { CreditsBanner } from "@/components/shared/CreditsBanner";
-import { PrintJobForm, type PrintJobFormData } from "@/components/forms/PrintJobForm";
+import { PrintJobForm, type PrintJobResult } from "@/components/forms/PrintJobForm";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { Pagination } from "@/components/ui/Pagination";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@/components/ui/Table";
 
 interface Printer {
   id: string;
@@ -34,76 +24,64 @@ interface Printer {
   location: string;
 }
 
-interface PrintLog {
-  id: string;
-  filename: string;
-  pages: number;
-  creditsUsed: number;
-  creditsAfter: number;
-  txHash: string;
-  createdAt: string;
-  printer: { id: string; name: string; location: string };
-}
-
-const PAGE_SIZE = 10;
-
 export default function StudentPrintingPage() {
   const { addToast } = useToast();
 
-  // -- Estado --
   const [credits, setCredits] = useState<number | null>(null);
   const [printers, setPrinters] = useState<Printer[]>([]);
-  const [logs, setLogs] = useState<PrintLog[]>([]);
-  const [totalLogs, setTotalLogs] = useState(0);
-  const [offset, setOffset] = useState(0);
+  const [totalPrints, setTotalPrints] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // -- Carga inicial: créditos + impresoras + logs --
+  // Carga inicial: créditos + impresoras + contar logs del usuario
   useEffect(() => {
     Promise.all([
       fetch("/api/printer/credits").then((r) => r.json()),
       fetch("/api/printer").then((r) => r.json()),
-      fetch(`/api/printer/logs?limit=${PAGE_SIZE}&offset=0`).then((r) => r.json()),
+      fetch("/api/printer/logs?limit=1&offset=0").then((r) => r.json()),
     ])
       .then(([creditsData, printersData, logsData]) => {
         setCredits(creditsData.availableCredits ?? 0);
         setPrinters(printersData ?? []);
-        setLogs(logsData ?? []);
-        // Estimamos el total: si devuelve exactamente PAGE_SIZE, probablemente hay más
-        setTotalLogs(logsData.length === PAGE_SIZE ? PAGE_SIZE + 1 : logsData.length);
+        // Para obtener el total real necesitaríamos un endpoint de count,
+        // por ahora usamos la longitud como indicador mínimo
+        setTotalPrints(Array.isArray(logsData) ? logsData.length : 0);
       })
       .catch(() => addToast("Error al cargar datos de impresión", "danger"))
       .finally(() => setLoading(false));
   }, []);
 
-  // -- Recarga de logs al cambiar de página --
+  // Obtener total real de impresiones (haciendo fetch de todas con offset alto)
   useEffect(() => {
     if (loading) return;
-    fetch(`/api/printer/logs?limit=${PAGE_SIZE}&offset=${offset}`)
+    // Petición para estimar el total: pedimos un límite alto
+    fetch("/api/printer/logs?limit=100&offset=0")
       .then((r) => r.json())
       .then((data) => {
-        setLogs(data ?? []);
-        // Si hay menos de PAGE_SIZE, estamos en la última página
-        if (data.length < PAGE_SIZE) {
-          setTotalLogs(offset + data.length);
-        } else {
-          // Podría haber más → mantenemos el total estimado
-          setTotalLogs(Math.max(totalLogs, offset + PAGE_SIZE + 1));
-        }
+        if (Array.isArray(data)) setTotalPrints(data.length);
       })
-      .catch(() => addToast("Error al cargar historial", "danger"));
-  }, [offset]);
+      .catch(() => {});
+  }, [loading]);
 
-  // -- Ejecutar trabajo de impresión --
-  async function handlePrint(data: PrintJobFormData) {
+  // Ejecutar trabajo de impresión
+  async function handlePrint(data: PrintJobResult) {
     const res = await fetch("/api/printer/execute", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         printerId: data.printerId,
         filename: data.filename,
-        pages: Number(data.pages),
-        copies: Number(data.copies),
+        pages: data.pages,
+        copies: data.copies,
+        color: data.color,
+        duplex: data.duplex,
+        orientation: data.orientation,
+        paperSize: data.paperSize,
+        pageRangeFrom: data.pageRangeFrom,
+        pageRangeTo: data.pageRangeTo,
+        pagesPerSheet: data.pagesPerSheet,
+        filePages: data.filePages,
+        fileSize: data.fileSize,
+        filePath: data.filePath,
       }),
     });
 
@@ -116,12 +94,9 @@ export default function StudentPrintingPage() {
 
     addToast("Impresión ejecutada correctamente", "success");
 
-    // Refrescar créditos y logs
+    // Actualizar créditos y contador
     setCredits(body.printLog?.creditsAfter ?? credits);
-    setOffset(0);
-    const logsRes = await fetch(`/api/printer/logs?limit=${PAGE_SIZE}&offset=0`);
-    const logsData = await logsRes.json();
-    setLogs(logsData ?? []);
+    setTotalPrints((prev) => prev + 1);
   }
 
   if (loading) {
@@ -134,78 +109,69 @@ export default function StudentPrintingPage() {
 
   return (
     <div className="space-y-10">
-      {/* ── 1. Créditos disponibles ── */}
-      <section>
+      {/* ── 1. Fila superior: Créditos (50%) + Historial (50%) ── */}
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {/* Créditos */}
         <CreditsBanner
           icon={icons.print}
           value={credits ?? "—"}
           label="Créditos de impresión disponibles"
-          hint="1 crédito = 1 página impresa"
+          hint="1 crédito = 1 cara impresa"
         />
+
+        {/* Card clicable de historial */}
+        <Link href="/dashboard/student/printing/history" className="group">
+          <Card className="flex items-center gap-4 h-full relative hover:border-primary/50 transition-colors">
+            {/* Icono */}
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+              {icons.history}
+            </div>
+
+            {/* Contenido */}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-text-muted">Mis impresiones</p>
+              <p className="text-3xl font-bold text-text">{totalPrints}</p>
+              <p className="text-xs text-text-muted mt-0.5">Ver historial completo</p>
+            </div>
+
+            {/* Flecha ↗ indicando que es clicable */}
+            <div className="absolute top-4 right-4 grid h-8 w-8 place-items-center rounded-md bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-4 w-4"
+              >
+                <line x1="7" y1="17" x2="17" y2="7" />
+                <polyline points="7 7 17 7 17 17" />
+              </svg>
+            </div>
+          </Card>
+        </Link>
       </section>
 
-      {/* ── 2. Formulario de impresión ── */}
+      {/* ── 2. Simulador de impresión ── */}
       <section className="space-y-4">
         <SectionTitle icon={icons.print}>Nueva impresión</SectionTitle>
         <Card>
           <CardHeader>
-            <CardTitle>Ejecutar trabajo de impresión</CardTitle>
+            <CardTitle>Simulador de impresión</CardTitle>
             <p className="text-sm text-text-muted">
-              Selecciona la impresora y los detalles del documento a imprimir.
+              Selecciona un archivo, configura las opciones y envía a imprimir.
             </p>
           </CardHeader>
           <CardBody>
-            <PrintJobForm printers={printers} onSubmit={handlePrint} />
+            <PrintJobForm
+              printers={printers}
+              availableCredits={credits ?? 0}
+              onSubmit={handlePrint}
+            />
           </CardBody>
         </Card>
-      </section>
-
-      {/* ── 3. Historial de impresiones ── */}
-      <section className="space-y-4">
-        <SectionTitle icon={icons.orders}>Historial de impresiones</SectionTitle>
-
-        {logs.length === 0 ? (
-          <EmptyState
-            title="Sin impresiones"
-            description="Aún no has realizado ninguna impresión."
-          />
-        ) : (
-          <>
-            <Card className="overflow-hidden p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Archivo</TableHead>
-                    <TableHead>Impresora</TableHead>
-                    <TableHead>Páginas</TableHead>
-                    <TableHead>Créditos</TableHead>
-                    <TableHead>Fecha</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {logs.map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell className="font-medium">{log.filename}</TableCell>
-                      <TableCell className="text-text-muted">{log.printer.name}</TableCell>
-                      <TableCell>{log.pages}</TableCell>
-                      <TableCell className="text-text-muted">{log.creditsUsed}</TableCell>
-                      <TableCell className="text-text-muted text-sm">
-                        {new Date(log.createdAt).toLocaleDateString("es-ES")}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Card>
-
-            <Pagination
-              offset={offset}
-              limit={PAGE_SIZE}
-              total={totalLogs}
-              onChange={setOffset}
-            />
-          </>
-        )}
       </section>
     </div>
   );

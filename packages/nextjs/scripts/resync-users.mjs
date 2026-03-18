@@ -155,7 +155,7 @@ async function main() {
         // 2. Fondear wallet con ETH
         const fundHash = await adminWalletClient.sendTransaction({
           to: account.address,
-          value: parseEther("1000"),
+          value: parseEther("10"),
         });
         await publicClient.waitForTransactionReceipt({ hash: fundHash });
 

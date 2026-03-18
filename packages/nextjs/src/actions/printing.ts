@@ -48,6 +48,17 @@ export interface ExecutePrintInput {
 	filename: string;
 	pages: number;
 	copies?: number;
+	// Campos del simulador de impresión
+	color?: boolean;
+	duplex?: boolean;
+	orientation?: "portrait" | "landscape";
+	paperSize?: "A4" | "A5" | "A3";
+	pageRangeFrom?: number | null;
+	pageRangeTo?: number | null;
+	pagesPerSheet?: number;
+	filePages?: number;
+	fileSize?: number;
+	filePath?: string | null;
 }
 
 export interface ExecutePrintAsAdminInput extends ExecutePrintInput {
@@ -392,7 +403,7 @@ export async function getMyPrinterCredits() {
 		return {
 			userAddress: user.address,
 			availableCredits: Number(credits),
-			isStudent: credits >= 0n,
+			isStudent: credits >= BigInt(0),
 		};
 	} catch (error) {
 		throw new Error(`Error al obtener créditos personales: ${error instanceof Error ? error.message : "desconocido"}`);
@@ -416,7 +427,7 @@ export async function getStudentPrinterCredits(userId: string) {
 			userId,
 			userAddress: address,
 			availableCredits: Number(credits),
-			isStudent: credits >= 0n,
+			isStudent: credits >= BigInt(0),
 		};
 	} catch (error) {
 		throw new Error(`Error al obtener créditos del estudiante: ${error instanceof Error ? error.message : "desconocido"}`);
@@ -509,16 +520,27 @@ async function executePrinterJob(
 		// Leer créditos actualizados post-transacción
 		const creditsAfter = await readCredits(userAddress);
 
-		// Registrar el evento en BD con información de créditos y transacción
+		// Registrar el evento en BD con información de créditos, transacción y opciones de impresión
 		const printLog = await prisma.printLog.create({
 			data: {
 				userId,
 				printerId,
 				filename,
 				pages: pagesToPrint,
+				copies,
 				txHash,
 				creditsUsed: pagesToPrint,
 				creditsAfter: Number(creditsAfter),
+				color: input.color ?? false,
+				duplex: input.duplex ?? false,
+				orientation: input.orientation ?? "portrait",
+				paperSize: input.paperSize ?? "A4",
+				pageRangeFrom: input.pageRangeFrom ?? null,
+				pageRangeTo: input.pageRangeTo ?? null,
+				pagesPerSheet: input.pagesPerSheet ?? 1,
+				filePages: input.filePages ?? pagesToPrint,
+				fileSize: input.fileSize ?? 0,
+				filePath: input.filePath ?? null,
 			},
 			include: {
 				printer: {
