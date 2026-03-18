@@ -10,6 +10,7 @@
  * - Tienda: tokens SHOP
  */
 
+import { useEffect, useState } from "react";
 import { useAuthUser } from "@/hooks/useAuthUser";
 import { icons } from "@/lib/icons";
 import { StatCard } from "@/components/shared/StatCard";
@@ -20,6 +21,26 @@ import { Spinner } from "@/components/ui/Spinner";
 
 export default function StudentDashboard() {
   const { user, loading } = useAuthUser();
+
+  // Datos reales de impresión
+  const [printCredits, setPrintCredits] = useState<number | string>("—");
+  const [printCount, setPrintCount] = useState<number | string>("—");
+
+  useEffect(() => {
+    if (!user) return;
+
+    // Créditos disponibles
+    fetch("/api/printer/credits")
+      .then((r) => r.json())
+      .then((data) => setPrintCredits(data.availableCredits ?? "—"))
+      .catch(() => {});
+
+    // Total de impresiones realizadas (pedimos con limit alto para contar)
+    fetch("/api/printer/logs?limit=100&offset=0")
+      .then((r) => r.json())
+      .then((data) => setPrintCount(Array.isArray(data) ? data.length : "—"))
+      .catch(() => {});
+  }, [user]);
 
   if (loading || !user) {
     return (
@@ -41,10 +62,16 @@ export default function StudentDashboard() {
         <SectionTitle icon={icons.print}>Impresión</SectionTitle>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <StatCard
-            title="Impresiones disponibles"
-            value="—"
-            subtitle="Restantes este periodo"
+            title="Créditos disponibles"
+            value={printCredits}
+            subtitle="1 crédito = 1 página"
             icon={icons.print}
+          />
+          <StatCard
+            title="Impresiones realizadas"
+            value={printCount}
+            subtitle="Total acumulado"
+            icon={icons.orders}
           />
         </div>
       </section>

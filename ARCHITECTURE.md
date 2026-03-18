@@ -141,8 +141,11 @@ packages/hardhat/
 - **Funciones**: `createBadgeType()`, `createTask(badgeTypeId, rewardAmount)`, `createReward(badgeTypeId, badgeCost, supply)`, `awardBadge(taskId, student)`
 
 #### Printer
-- **Responsabilidad**: Solicitud y aprobación de trabajos de impresión
-- **Funciones**: `requestPrint(printerId, cost)`, `approvePrint(jobId)`, `rejectPrint(jobId)`
+- **Responsabilidad**: Gestión de créditos de impresión de estudiantes (1 crédito = 1 página)
+- **Constantes**: `INITIAL_CREDITS = 200` — créditos por defecto para cada estudiante
+- **Funciones**: `setCredits(student, credits)`, `print(student, pages)`, `getCredits(student)`
+- **Eventos**: `CreditsSet(student, credits)`, `PrintJobExecuted(student, pages, remainingCredits)`
+- **Nota**: Solo el admin puede llamar a `setCredits` y `print`. `getCredits` devuelve -1 si la dirección no es estudiante
 
 ### Direcciones desplegadas (chain-31337 — Hardhat local)
 
@@ -371,7 +374,8 @@ src/actions/
 ├── badges.ts      # createBadgeType, createTask, createReward, awardBadge, redeemReward
 ├── library.ts     # addItem, requestLoan, approveLoan, returnLoan, getLoans
 ├── shop.ts        # addProduct, updateProduct, purchaseProduct, getOrders
-└── printing.ts    # requestPrint, approvePrint, rejectPrint, getLogs
+└── printing.ts    # getPrinterConfig, createPrinter, updatePrinter, getMyPrinterCredits,
+│                  # setStudentPrinterCredits, executeMyPrintJob, executePrintJobAsAdmin
 ```
 
 **Patrón de una Server Action con blockchain:**

@@ -19,3 +19,5 @@ export { ToastContainer } from "./ToastContainer";
 export { Tooltip } from "./Tooltip";
 export { NavBrand } from "./NavBrand";
 export { NavItem } from "./NavItem";
+export { Pagination } from "./Pagination";
+export { SearchInput } from "./SearchInput";

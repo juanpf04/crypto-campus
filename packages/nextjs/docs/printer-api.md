@@ -24,8 +24,13 @@ Registra una nueva impresora física.
 - **Body**: `{ id, name, location, floor? }`
 - **Response**: `201` - Impresora creada
 
+#### `GET /api/printer/admin`
+Lista todas las impresoras registradas (activas e inactivas).
+- **Acceso**: Solo administradores
+- **Response**: Array de impresoras (incluye campo `active: boolean`)
+
 #### `PUT /api/printer/[id]`
-Actualiza detalles de una impresora.
+Actualiza detalles de una impresora (incluido soft delete con `active: false`).
 - **Acceso**: Solo administradores
 - **Body**: `{ name?, location?, floor?, active? }` (campos opcionales)
 - **Response**: Impresora actualizada
@@ -33,15 +38,15 @@ Actualiza detalles de una impresora.
 ### Logs de Impresión
 
 #### `GET /api/printer/logs`
-Obtiene los trabajos de impresión del usuario logueado.
+Obtiene el historial de impresiones del usuario logueado.
 - **Acceso**: Usuarios autenticados
-- **Query**: `?limit=20` (opcional, máx 100)
-- **Response**: Array de logs
+- **Query**: `?limit=20&offset=0` (opcionales, límite máx 100)
+- **Response**: Array de logs con detalles de impresora
 
 #### `GET /api/printer/logs/admin`
-Obtiene todos los trabajos de impresión del sistema.
+Obtiene el historial global de impresiones del sistema.
 - **Acceso**: Solo administradores
-- **Query**: `?limit=50` (opcional, máx 200)
+- **Query**: `?limit=50&offset=0&userId=xxx` (opcionales, límite máx 200)
 - **Response**: Array de logs con detalles de usuario e impresora
 
 ### Créditos

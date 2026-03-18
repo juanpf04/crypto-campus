@@ -63,12 +63,25 @@ async function getSession() {
 }
 
 /**
- * Valida que un valor sea un entero positivo.
+ * Valida que un valor sea un entero positivo (> 0).
+ * Usado para páginas, copias y otros campos que no pueden ser cero.
  * @throws Error si no es entero positivo.
  */
 function ensurePositiveInt(value: number, fieldName: string): number {
 	if (!Number.isInteger(value) || value <= 0) {
 		throw new Error(`${fieldName} debe ser un entero positivo`);
+	}
+	return value;
+}
+
+/**
+ * Valida que un valor sea un entero no negativo (>= 0).
+ * Usado para créditos, donde 0 es un valor válido (quitar todos los créditos).
+ * @throws Error si no es entero no negativo.
+ */
+function ensureNonNegativeInt(value: number, fieldName: string): number {
+	if (!Number.isInteger(value) || value < 0) {
+		throw new Error(`${fieldName} debe ser un entero no negativo`);
 	}
 	return value;
 }
@@ -123,7 +136,7 @@ async function readCredits(address: string): Promise<bigint> {
 			abi: PRINTER_ABI,
 			functionName: "getCredits",
 			args: [address],
-		}) as Promise<bigint>;
+		}) as bigint;
 	} catch (error) {
 		throw new Error(`Error al leer créditos: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
@@ -175,11 +188,15 @@ export async function listActivePrinters() {
 
 /**
  * Lista los trabajos de impresión ejecutados por el usuario logueado.
- * @param limit Máximo número de registros a devolver (limitado a 100).
+ * Soporta paginación con limit + offset.
+ *
+ * @param limit Máximo número de registros a devolver (1–100, default 20).
+ * @param offset Número de registros a saltar desde el inicio (default 0).
  * @returns Array de logs de impresión ordenados por fecha descendente.
  */
-export async function listMyPrinterLogs(limit = 20) {
+export async function listMyPrinterLogs(limit = 20, offset = 0) {
 	const safeLimit = Math.min(Math.max(limit, 1), 100);
+	const safeOffset = Math.max(offset, 0);
 
 	const session = await getSession();
 	ensureRole(session, ["STUDENT", "PROFESSOR", "LIBRARIAN", "ADMIN"]);
@@ -194,6 +211,7 @@ export async function listMyPrinterLogs(limit = 20) {
 			},
 			orderBy: { createdAt: "desc" },
 			take: safeLimit,
+			skip: safeOffset,
 		});
 	} catch (error) {
 		throw new Error(`Error al obtener logs de impresión: ${error instanceof Error ? error.message : "desconocido"}`);
@@ -202,17 +220,26 @@ export async function listMyPrinterLogs(limit = 20) {
 
 /**
  * Lista todos los trabajos de impresión del sistema (solo para admins).
- * @param limit Máximo número de registros a devolver (limitado a 200).
+ * Soporta paginación con limit + offset y filtro opcional por usuario.
+ *
+ * @param limit Máximo número de registros a devolver (1–200, default 50).
+ * @param offset Número de registros a saltar desde el inicio (default 0).
+ * @param userId ID de usuario opcional para filtrar logs de un usuario concreto.
  * @returns Array de logs con detalles de usuario e impresora.
  */
-export async function listPrinterLogsForAdmin(limit = 50) {
+export async function listPrinterLogsForAdmin(limit = 50, offset = 0, userId?: string) {
 	const safeLimit = Math.min(Math.max(limit, 1), 200);
+	const safeOffset = Math.max(offset, 0);
 
 	const session = await getSession();
 	ensureRole(session, ["ADMIN"]);
 
 	try {
+		// Si se pasa userId, filtrar solo los logs de ese usuario
+		const where = userId ? { userId } : {};
+
 		return await prisma.printLog.findMany({
+			where,
 			include: {
 				user: {
 					select: { id: true, name: true, email: true, role: true, address: true },
@@ -223,9 +250,29 @@ export async function listPrinterLogsForAdmin(limit = 50) {
 			},
 			orderBy: { createdAt: "desc" },
 			take: safeLimit,
+			skip: safeOffset,
 		});
 	} catch (error) {
 		throw new Error(`Error al obtener logs globales de impresión: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
+}
+
+/**
+ * Lista todas las impresoras registradas en la BD (activas e inactivas).
+ * Solo accesible por administradores, para gestión completa de impresoras.
+ *
+ * @returns Array de impresoras ordenadas por ubicación y nombre.
+ */
+export async function listAllPrinters() {
+	const session = await getSession();
+	ensureRole(session, ["ADMIN"]);
+
+	try {
+		return await prisma.printer.findMany({
+			orderBy: [{ location: "asc" }, { name: "asc" }],
+		});
+	} catch (error) {
+		throw new Error(`Error al listar impresoras: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
 
@@ -389,7 +436,7 @@ export async function setStudentPrinterCredits(userId: string, credits: number) 
 	ensureRole(session, ["ADMIN"]);
 
 	try {
-		const normalizedCredits = ensurePositiveInt(credits, "Los créditos");
+		const normalizedCredits = ensureNonNegativeInt(credits, "Los créditos");
 		const address = await getUserAddressById(userId);
 
 		const hash = await adminWalletClient.writeContract({

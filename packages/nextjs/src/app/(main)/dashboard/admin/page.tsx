@@ -11,6 +11,7 @@
  * - Impresión: créditos totales asignados, páginas impresas
  */
 
+import { useEffect, useState } from "react";
 import { useAuthUser } from "@/hooks/useAuthUser";
 import { icons } from "@/lib/icons";
 import { StatCard } from "@/components/shared/StatCard";
@@ -21,6 +22,26 @@ import { Spinner } from "@/components/ui/Spinner";
 
 export default function AdminDashboard() {
   const { user, loading } = useAuthUser();
+
+  // Datos reales de impresión
+  const [activePrinters, setActivePrinters] = useState<number | string>("—");
+  const [totalPrintLogs, setTotalPrintLogs] = useState<number | string>("—");
+
+  useEffect(() => {
+    if (!user) return;
+
+    // Impresoras activas
+    fetch("/api/printer")
+      .then((r) => r.json())
+      .then((data) => setActivePrinters(Array.isArray(data) ? data.length : "—"))
+      .catch(() => {});
+
+    // Total impresiones del sistema
+    fetch("/api/printer/logs/admin?limit=200&offset=0")
+      .then((r) => r.json())
+      .then((data) => setTotalPrintLogs(Array.isArray(data) ? data.length : "—"))
+      .catch(() => {});
+  }, [user]);
 
   if (loading || !user) {
     return (
@@ -136,16 +157,16 @@ export default function AdminDashboard() {
         <SectionTitle icon={icons.print}>Impresión</SectionTitle>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <StatCard
-            title="Créditos asignados"
-            value="—"
-            subtitle="Total repartidos"
+            title="Impresoras activas"
+            value={activePrinters}
+            subtitle="Disponibles para imprimir"
             icon={icons.print}
           />
           <StatCard
-            title="Páginas impresas"
-            value="—"
-            subtitle="Total consumidas"
-            icon={icons.print}
+            title="Impresiones realizadas"
+            value={totalPrintLogs}
+            subtitle="Total en la plataforma"
+            icon={icons.orders}
           />
         </div>
       </section>
