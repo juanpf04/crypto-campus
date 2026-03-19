@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
@@ -44,6 +45,7 @@ interface PrintLog {
 const PAGE_SIZE = 10;
 
 export default function StudentPrintHistoryPage() {
+  const router = useRouter();
   const { addToast } = useToast();
 
   const [logs, setLogs] = useState<PrintLog[]>([]);
@@ -114,7 +116,11 @@ export default function StudentPrintHistoryPage() {
               </TableHeader>
               <TableBody>
                 {logs.map((log) => (
-                  <TableRow key={log.id}>
+                  <TableRow
+                    key={log.id}
+                    className="cursor-pointer hover:bg-primary/5 transition-colors"
+                    onClick={() => router.push(`/dashboard/student/printing/history/${log.id}`)}
+                  >
                     <TableCell className="text-text-muted text-sm whitespace-nowrap">
                       {new Date(log.createdAt).toLocaleDateString("es-ES", {
                         day: "2-digit",

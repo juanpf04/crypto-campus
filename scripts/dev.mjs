@@ -178,7 +178,29 @@ await new Promise((resolve) => {
   });
 });
 
-// 8. Arrancar Next.js
+// 8. Limpiar archivos de impresión expirados (>24h)
+log("Limpiando archivos de impresión expirados...");
+await new Promise((resolve) => {
+  const cleanup = spawn("node", ["scripts/cleanup-uploads.mjs"], {
+    cwd: NEXTJS_DIR,
+    stdio: ["ignore", "pipe", "pipe"],
+    shell: true,
+  });
+
+  cleanup.stdout.on("data", (data) => {
+    const msg = data.toString().trim();
+    if (msg) console.log(msg);
+  });
+
+  cleanup.stderr.on("data", (data) => {
+    const msg = data.toString().trim();
+    if (msg) console.log(`${yellow("[cleanup]")} ${msg}`);
+  });
+
+  cleanup.on("close", () => resolve());
+});
+
+// 9. Arrancar Next.js
 log("Arrancando Next.js...");
 const nextDev = spawn("npx", ["next", "dev"], {
   cwd: NEXTJS_DIR,

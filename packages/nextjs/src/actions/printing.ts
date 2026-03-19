@@ -230,6 +230,46 @@ export async function listMyPrinterLogs(limit = 20, offset = 0) {
 }
 
 /**
+ * Obtiene el detalle de un trabajo de impresión individual.
+ * El usuario solo puede ver sus propios logs. Los admins pueden ver cualquiera.
+ *
+ * @param logId ID del PrintLog.
+ * @returns Detalle completo del log con datos de impresora y (si admin) usuario.
+ */
+export async function getPrintLogDetail(logId: string) {
+	const session = await getSession();
+	ensureRole(session, ["STUDENT", "PROFESSOR", "LIBRARIAN", "ADMIN"]);
+
+	try {
+		const log = await prisma.printLog.findUnique({
+			where: { id: logId },
+			include: {
+				user: {
+					select: { id: true, name: true, email: true, role: true },
+				},
+				printer: {
+					select: { id: true, name: true, location: true, floor: true },
+				},
+			},
+		});
+
+		if (!log) throw new Error("Log no encontrado");
+
+		// Los no-admin solo pueden ver sus propios logs
+		if (session.role !== "ADMIN" && log.userId !== session.userId) {
+			throw new Error("No autorizado");
+		}
+
+		return log;
+	} catch (error) {
+		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Log no encontrado")) {
+			throw error;
+		}
+		throw new Error(`Error al obtener detalle del log: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
+}
+
+/**
  * Lista todos los trabajos de impresión del sistema (solo para admins).
  * Soporta paginación con limit + offset y filtro opcional por usuario.
  *

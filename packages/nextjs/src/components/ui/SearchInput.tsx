@@ -31,7 +31,7 @@ export function SearchInput({
   className,
 }: SearchInputProps) {
   const [value, setValue] = useState("");
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Limpiar timeout al desmontar
   useEffect(() => {

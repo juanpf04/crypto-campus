@@ -140,7 +140,7 @@ export default function PrintersListPage() {
                         </Button>
                       </Link>
                       <Button
-                        variant={printer.active ? "ghost" : "secondary"}
+                        variant={printer.active ? "danger" : "primary"}
                         size="sm"
                         loading={togglingId === printer.id}
                         onClick={() => toggleActive(printer)}

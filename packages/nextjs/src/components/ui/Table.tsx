@@ -29,9 +29,16 @@ export function TableBody({ children, className }: TableRootProps) {
   return <tbody className={cn("", className)}>{children}</tbody>;
 }
 
-export function TableRow({ children, className }: TableRootProps) {
+interface TableRowProps extends TableRootProps {
+  onClick?: () => void;
+}
+
+export function TableRow({ children, className, onClick }: TableRowProps) {
   return (
-    <tr className={cn("border-b border-border-default last:border-b-0 hover:bg-bg/50 transition-colors", className)}>
+    <tr
+      className={cn("border-b border-border-default last:border-b-0 hover:bg-bg/50 transition-colors", className)}
+      onClick={onClick}
+    >
       {children}
     </tr>
   );

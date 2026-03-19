@@ -41,7 +41,7 @@
  * 5. RESET: Vuelve todo al estado inicial (valores, errores, touched).
  */
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 
 /** Mapa parcial de campo → mensaje de error. Solo incluye campos con error. */
 type ValidationErrors<T> = Partial<Record<keyof T, string>>;
@@ -107,7 +107,7 @@ export function useForm<T extends object>({
    */
   const setField = useCallback(
     (name: keyof T) =>
-      (e: Event & { currentTarget: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement }) => {
+      (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const value = e.currentTarget.value;
         touched.current.add(name);
         setFields((prev) => ({ ...prev, [name]: value }));
