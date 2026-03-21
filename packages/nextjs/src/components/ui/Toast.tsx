@@ -11,21 +11,25 @@ interface ToastProps {
   onClose: () => void;
 }
 
-const variantStyles: Record<ToastVariant, { container: string; bar: string }> = {
+const variantStyles: Record<ToastVariant, { accent: string; dot: string; bar: string }> = {
   success: {
-    container: "border-success/40 bg-success/10 text-success",
+    accent: "text-success",
+    dot: "bg-success",
     bar: "bg-success",
   },
   danger: {
-    container: "border-danger/40 bg-danger/10 text-danger",
+    accent: "text-danger",
+    dot: "bg-danger",
     bar: "bg-danger",
   },
   warning: {
-    container: "border-warning/40 bg-warning/10 text-warning",
+    accent: "text-warning",
+    dot: "bg-warning",
     bar: "bg-warning",
   },
   info: {
-    container: "border-primary/40 bg-primary/10 text-primary",
+    accent: "text-primary",
+    dot: "bg-primary",
     bar: "bg-primary",
   },
 };
@@ -51,19 +55,26 @@ export function Toast({ message, variant, duration, onClose }: ToastProps) {
     <div
       role="status"
       className={cn(
-        "pointer-events-auto relative w-80 overflow-hidden rounded-lg border shadow-lg backdrop-blur-sm transition-all duration-250",
-        styles.container,
+        "pointer-events-auto relative w-[22rem] overflow-hidden rounded-lg border border-border-default bg-card text-text shadow-xl transition-all duration-250",
         alive
           ? "animate-[slideIn_250ms_ease-out_forwards]"
           : "animate-[slideOut_250ms_ease-in_forwards]",
       )}
     >
       {/* Contenido */}
-      <div className="flex items-center gap-2 px-4 py-3">
-        <p className="flex-1 text-sm font-medium">{message}</p>
+      <div className="flex items-center gap-3 px-4 py-3">
+        <span
+          className={cn("h-2.5 w-2.5 shrink-0 rounded-full", styles.dot)}
+          aria-hidden="true"
+        />
+        <p className="flex-1 text-sm font-semibold leading-5 text-text">{message}</p>
         <button
+          type="button"
           onClick={handleClose}
-          className="shrink-0 rounded-md p-0.5 opacity-70 hover:opacity-100 transition-opacity cursor-pointer"
+          className={cn(
+            "shrink-0 rounded-md p-1 transition-colors cursor-pointer hover:bg-black/5",
+            styles.accent,
+          )}
           aria-label="Cerrar notificación"
         >
           &#x2715;
