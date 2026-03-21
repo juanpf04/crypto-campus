@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useAuthUser } from "@/hooks/useAuthUser";
 import { icons } from "@/lib/icons";
 import { StatCard } from "@/components/shared/StatCard";
@@ -61,18 +62,56 @@ export default function StudentDashboard() {
       <section className="space-y-4">
         <SectionTitle icon={icons.print}>Impresión</SectionTitle>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard
-            title="Créditos disponibles"
-            value={printCredits}
-            subtitle="1 crédito = 1 página"
-            icon={icons.print}
-          />
-          <StatCard
-            title="Impresiones realizadas"
-            value={printCount}
-            subtitle="Total acumulado"
-            icon={icons.orders}
-          />
+          <Link href="/dashboard/student/printing" className="group relative block">
+            <StatCard
+              title="Créditos disponibles"
+              value={printCredits}
+              subtitle="1 crédito = 1 página"
+              icon={icons.print}
+              className="h-full transition-colors group-hover:border-primary/50"
+            />
+            <div className="pointer-events-none absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-white">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-4 w-4"
+                aria-hidden="true"
+              >
+                <line x1="7" y1="17" x2="17" y2="7" />
+                <polyline points="7 7 17 7 17 17" />
+              </svg>
+            </div>
+          </Link>
+          <Link href="/dashboard/student/printing/history" className="group relative block">
+            <StatCard
+              title="Impresiones realizadas"
+              value={printCount}
+              subtitle="Total acumulado"
+              icon={icons.orders}
+              className="h-full transition-colors group-hover:border-primary/50"
+            />
+            <div className="pointer-events-none absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-white">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-4 w-4"
+                aria-hidden="true"
+              >
+                <line x1="7" y1="17" x2="17" y2="7" />
+                <polyline points="7 7 17 7 17 17" />
+              </svg>
+            </div>
+          </Link>
         </div>
       </section>
 

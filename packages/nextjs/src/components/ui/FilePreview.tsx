@@ -11,9 +11,10 @@
  * Reutilizable para cualquier módulo con subida de archivos.
  */
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useDropzone, type Accept } from "react-dropzone";
 import { cn } from "@/lib/utils";
+import { Modal } from "@/components/ui/Modal";
 
 interface FilePreviewProps {
   /** Archivo a previsualizar */
@@ -44,6 +45,7 @@ function getFileCategory(type: string): "pdf" | "image" | "other" {
 
 export function FilePreview({ file, pageCount, onChangeFile, accept, className }: FilePreviewProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
   const category = getFileCategory(file.type);
 
   // Dropzone solo para el botón de cambiar archivo
@@ -64,6 +66,10 @@ export function FilePreview({ file, pageCount, onChangeFile, accept, className }
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
+  useEffect(() => {
+    setIsExpanded(false);
+  }, [file]);
+
   return (
     <div
       {...getRootProps()}
@@ -79,7 +85,7 @@ export function FilePreview({ file, pageCount, onChangeFile, accept, className }
         {category === "pdf" && previewUrl && (
           <iframe
             src={`${previewUrl}#toolbar=0&navpanes=0`}
-            className="h-full w-full pointer-events-none"
+            className="h-full w-full"
             title="Vista previa del PDF"
           />
         )}
@@ -126,16 +132,76 @@ export function FilePreview({ file, pageCount, onChangeFile, accept, className }
           )}
         </div>
 
-        {onChangeFile && (
-          <button
-            type="button"
-            onClick={open}
-            className="shrink-0 text-xs font-medium text-primary hover:text-primary-hover transition-colors cursor-pointer"
-          >
-            Cambiar archivo
-          </button>
-        )}
+        <div className="flex items-center gap-3 shrink-0">
+          {onChangeFile && (
+            <button
+              type="button"
+              onClick={open}
+              className="text-xs font-medium text-primary hover:text-primary-hover transition-colors cursor-pointer"
+            >
+              Cambiar archivo
+            </button>
+          )}
+
+          {(category === "pdf" || category === "image") && (
+            <button
+              type="button"
+              onClick={() => setIsExpanded(true)}
+              className="grid h-8 w-8 place-items-center rounded-md bg-primary/10 text-primary hover:bg-primary hover:text-white transition-colors cursor-pointer"
+              aria-label="Ampliar vista previa"
+              title="Ampliar vista previa"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-4.5 w-4.5"
+                aria-hidden="true"
+              >
+                <polyline points="15 3 21 3 21 9" />
+                <polyline points="9 21 3 21 3 15" />
+                <line x1="21" y1="3" x2="14" y2="10" />
+                <line x1="3" y1="21" x2="10" y2="14" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
+
+      <Modal
+        open={isExpanded}
+        onClose={() => setIsExpanded(false)}
+        title={`Vista previa: ${file.name}`}
+        className="max-w-6xl"
+      >
+        <div className="h-[75vh]">
+          {category === "pdf" && previewUrl && (
+            <iframe
+              src={previewUrl}
+              className="h-full w-full rounded-lg border border-border-default bg-white"
+              title="Vista previa del PDF"
+            />
+          )}
+
+          {category === "image" && previewUrl && (
+            <img
+              src={previewUrl}
+              alt={file.name}
+              className="h-full w-full rounded-lg border border-border-default bg-black/5 object-contain"
+            />
+          )}
+
+          {category === "other" && (
+            <div className="flex h-full items-center justify-center rounded-lg border border-border-default bg-black/5 text-sm text-text-muted">
+              Vista previa no disponible para este formato.
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

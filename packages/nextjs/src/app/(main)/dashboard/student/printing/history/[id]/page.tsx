@@ -75,15 +75,45 @@ export default function StudentPrintDetailPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/printer/logs/${id}`)
-      .then((r) => {
-        if (!r.ok) throw new Error("No encontrado");
+    if (!id) {
+      setLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setLoading(true);
+
+    fetch(`/api/printer/logs/${id}`, { signal: controller.signal })
+      .then(async (r) => {
+        if (!r.ok) {
+          let message = "No se pudo cargar el detalle de la impresión";
+          try {
+            const body = await r.json();
+            if (body?.error) message = body.error;
+          } catch {
+            // Ignorar errores de parseo y usar mensaje por defecto
+          }
+          throw new Error(message);
+        }
         return r.json();
       })
-      .then(setLog)
-      .catch(() => addToast("No se pudo cargar el detalle de la impresión", "danger"))
+      .then((data) => {
+        setLog(data);
+      })
+      .catch((error) => {
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
+
+        const message = error instanceof Error ? error.message : "No se pudo cargar el detalle de la impresión";
+        addToast(message, "danger");
+      })
       .finally(() => setLoading(false));
-  }, [id]);
+
+    return () => {
+      controller.abort();
+    };
+  }, [id, addToast]);
 
   if (loading) {
     return (

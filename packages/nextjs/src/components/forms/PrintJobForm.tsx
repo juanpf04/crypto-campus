@@ -14,7 +14,7 @@
  * 6. Al enviar, se sube el archivo al servidor y se ejecuta la transacción blockchain.
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { PDFDocument } from "pdf-lib";
 import { useToast } from "@/hooks/useToast";
 import { Button, Select } from "@/components/ui";
@@ -124,6 +124,18 @@ export function PrintJobForm({
 
   // Envío
   const [submitting, setSubmitting] = useState(false);
+  const hasPrinters = printers.length > 0;
+
+  // Seleccionar automáticamente la primera impresora disponible
+  useEffect(() => {
+    if (!hasPrinters) {
+      setPrinterId("");
+      return;
+    }
+    if (!printerId) {
+      setPrinterId(printers[0].id);
+    }
+  }, [hasPrinters, printerId, printers]);
 
   // Opciones del dropdown de impresoras
   const printerOptions = printers.map((p) => ({
@@ -312,11 +324,17 @@ export function PrintJobForm({
       {/* ── 2. Impresora ── */}
       <Select
         label="Impresora"
-        placeholder="Selecciona una impresora"
+        placeholder={hasPrinters ? "Selecciona una impresora" : "No hay impresoras activas"}
         options={printerOptions}
         value={printerId}
+        disabled={!hasPrinters}
         onChange={(e) => setPrinterId(e.currentTarget.value)}
       />
+      {!hasPrinters && (
+        <p className="-mt-3 text-sm text-text-muted">
+          No hay impresoras activas disponibles. Contacta con un administrador para registrar una.
+        </p>
+      )}
 
       {/* ── 3. Configuración básica ── */}
       <div className="grid grid-cols-2 gap-4">
@@ -451,7 +469,7 @@ export function PrintJobForm({
       <Button
         type="submit"
         loading={submitting}
-        disabled={!file || !printerId || effectivePages <= 0 || submitting}
+        disabled={!file || !hasPrinters || !printerId || effectivePages <= 0 || submitting}
         className="w-full"
         size="lg"
       >

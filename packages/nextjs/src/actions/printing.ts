@@ -559,35 +559,68 @@ async function executePrinterJob(
 
 		// Leer créditos actualizados post-transacción
 		const creditsAfter = await readCredits(userAddress);
+		const normalizedCreditsAfter = Number(creditsAfter);
+
+		const fullPrintLogData = {
+			userId,
+			printerId,
+			filename,
+			pages: pagesToPrint,
+			copies,
+			txHash,
+			creditsUsed: pagesToPrint,
+			creditsAfter: normalizedCreditsAfter,
+			color: input.color ?? false,
+			duplex: input.duplex ?? false,
+			orientation: input.orientation ?? "portrait",
+			paperSize: input.paperSize ?? "A4",
+			pageRangeFrom: input.pageRangeFrom ?? null,
+			pageRangeTo: input.pageRangeTo ?? null,
+			pagesPerSheet: input.pagesPerSheet ?? 1,
+			filePages: input.filePages ?? pagesToPrint,
+			fileSize: input.fileSize ?? 0,
+			filePath: input.filePath ?? null,
+		};
+
+		const minimalPrintLogData = {
+			userId,
+			printerId,
+			filename,
+			pages: pagesToPrint,
+			txHash,
+			creditsUsed: pagesToPrint,
+			creditsAfter: normalizedCreditsAfter,
+		};
 
 		// Registrar el evento en BD con información de créditos, transacción y opciones de impresión
-		const printLog = await prisma.printLog.create({
-			data: {
-				userId,
-				printerId,
-				filename,
-				pages: pagesToPrint,
-				copies,
-				txHash,
-				creditsUsed: pagesToPrint,
-				creditsAfter: Number(creditsAfter),
-				color: input.color ?? false,
-				duplex: input.duplex ?? false,
-				orientation: input.orientation ?? "portrait",
-				paperSize: input.paperSize ?? "A4",
-				pageRangeFrom: input.pageRangeFrom ?? null,
-				pageRangeTo: input.pageRangeTo ?? null,
-				pagesPerSheet: input.pagesPerSheet ?? 1,
-				filePages: input.filePages ?? pagesToPrint,
-				fileSize: input.fileSize ?? 0,
-				filePath: input.filePath ?? null,
-			},
-			include: {
-				printer: {
-					select: { id: true, name: true, location: true, floor: true },
+		let printLog;
+		try {
+			printLog = await prisma.printLog.create({
+				data: fullPrintLogData,
+				include: {
+					printer: {
+						select: { id: true, name: true, location: true, floor: true },
+					},
 				},
-			},
-		});
+			});
+		} catch (error) {
+			const message = error instanceof Error ? error.message : "";
+			const hasUnknownArgument = message.includes("Unknown argument") || message.includes("Invalid `") && message.includes(".printLog.create(");
+
+			if (!hasUnknownArgument) {
+				throw error;
+			}
+
+			// Compatibilidad con clientes Prisma desalineados que aún no incluyen campos nuevos de PrintLog.
+			printLog = await prisma.printLog.create({
+				data: minimalPrintLogData,
+				include: {
+					printer: {
+						select: { id: true, name: true, location: true, floor: true },
+					},
+				},
+			});
+		}
 
 		return {
 			txHash,
