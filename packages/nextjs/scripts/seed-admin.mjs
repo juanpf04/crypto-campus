@@ -43,10 +43,7 @@ function log(msg) {
 
 // ── Cargar .env manualmente ──
 function loadEnv() {
-  const envPaths = [
-    resolve(__dirname, "../.env.local"),
-    resolve(__dirname, "../.env"),
-  ];
+  const envPaths = [resolve(__dirname, "../.env")];
   const vars = {};
   for (const p of envPaths) {
     try {

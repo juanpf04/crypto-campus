@@ -7,6 +7,7 @@ TFG — Sistema de tokens en la FDI UCM
 - [Node.js](https://nodejs.org/) v18 o superior
 - [pnpm](https://pnpm.io/) v10+
 - [Git](https://git-scm.com/)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (para PostgreSQL local en `localhost:5435`)
 - [MetaMask](https://metamask.io/) (extensión de navegador, para interactuar con la DApp)
 
 Si no tienes pnpm instalado:
@@ -24,6 +25,23 @@ pnpm install
 ```
 
 Esto instalará las dependencias de todos los paquetes del monorepo (`packages/hardhat`, `packages/nextjs`, etc.) gracias a [pnpm workspaces](https://pnpm.io/workspaces).
+
+## Quick start (flujo recomendado)
+
+1. Inicia **Docker Desktop** (puede quedarse minimizado).
+2. Arranca todo el entorno:
+
+```bash
+pnpm dev
+```
+
+3. Abre la DApp en `http://localhost:3000`.
+
+Si quieres resetear Prisma en local:
+
+```bash
+pnpm run db:reset
+```
 
 ## Estructura del proyecto
 
@@ -111,13 +129,14 @@ pnpm start
 
 ### Variables de entorno
 
-El frontend necesita un archivo `packages/nextjs/.env.local` con:
+El frontend necesita un archivo `packages/nextjs/.env` con:
 
 ```env
-NEXT_PUBLIC_COUNTER_ADDRESS=0x...   # Dirección del contrato desplegado
+DATABASE_URL="postgresql://root:root@localhost:5435/cryptocampusdb?schema=public"
+SESSION_SECRET="tu-secreto-local"
 ```
 
-> El script `pnpm dev` genera este archivo automáticamente tras desplegar el contrato.
+`DATABASE_URL` se usa en Prisma y `SESSION_SECRET` para cifrado de claves privadas/sesiones.
 
 ## Desarrollo — Arrancar todo con un solo comando
 
@@ -127,13 +146,18 @@ pnpm dev
 
 Este comando ejecuta el script [`scripts/dev.mjs`](scripts/dev.mjs), que automáticamente:
 
-1. Arranca un **nodo local de Hardhat** en `http://127.0.0.1:8545`
-2. Limpia deployments anteriores para evitar conflictos
-3. **Despliega el contrato** Counter con Hardhat Ignition
-4. Escribe la **dirección del contrato** en `packages/nextjs/.env.local`
-5. Arranca **Next.js** en `http://localhost:3000`
+1. Levanta PostgreSQL con Docker Compose (`docker compose up -d db`)
+2. Arranca un **nodo local de Hardhat** en `http://127.0.0.1:8545`
+3. Limpia deployments anteriores para evitar conflictos
+4. **Despliega los contratos** del campus con Hardhat Ignition
+5. Resincroniza usuarios existentes con blockchain
+6. Ejecuta seed del admin por defecto (idempotente)
+7. Limpia archivos de impresión expirados
+8. Arranca **Next.js** en `http://localhost:3000`
 
 Para detener todos los procesos: `Ctrl + C`.
+
+> Si Docker no está activo, `pnpm dev` abortará con un mensaje de error indicando que debes iniciar Docker Desktop.
 
 ## Configuración de MetaMask
 
@@ -175,8 +199,14 @@ El nodo de Hardhat genera cuentas de prueba con 10 000 ETH cada una. Para import
 
 | Comando | Descripción |
 |---|---|
-| `pnpm dev` | Arranca nodo Hardhat + deploy + Next.js (todo en uno) |
+| `pnpm dev` | Arranca PostgreSQL + nodo Hardhat + deploy + Next.js (todo en uno) |
 | `pnpm dev:next` | Arranca solo el frontend Next.js |
+| `pnpm run db:up` | Levanta PostgreSQL local (`docker compose up -d db`) |
+| `pnpm run db:down` | Apaga contenedores Docker Compose |
+| `pnpm run db:logs` | Sigue logs del contenedor PostgreSQL |
+| `pnpm run db:reset` | Ejecuta `prisma db push --force-reset` en `packages/nextjs` |
+| `pnpm --filter nextjs run db:push` | Sincroniza el esquema Prisma sin reset |
+| `pnpm --filter nextjs run db:studio` | Abre Prisma Studio |
 | `pnpm compile` | Compila los smart contracts |
 | `pnpm test` | Ejecuta los tests de los contratos |
 | `pnpm deploy` | Despliega contratos en red local |
