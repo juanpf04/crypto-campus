@@ -23,7 +23,7 @@ import { encrypt } from "@/lib/crypto";
 import { adminWalletClient, publicClient } from "@/lib/viem";
 import {
   CONTRACT_ADDRESSES,
-  CAMPUS_ACCESS_CONTROL_ABI,
+  CAMPUS_ROLES_ABI,
   LIBRARY_TOKEN_ABI,
   SHOP_TOKEN_ABI,
   ROLES,
@@ -123,8 +123,8 @@ export async function POST(req: NextRequest) {
 
   // Registrar on-chain con el rol correspondiente
   const regHash = await adminWalletClient.writeContract({
-    address: CONTRACT_ADDRESSES.campusAccessControl,
-    abi: CAMPUS_ACCESS_CONTROL_ABI,
+    address: CONTRACT_ADDRESSES.campusRoles,
+    abi: CAMPUS_ROLES_ABI,
     functionName: "registerUser",
     args: [account.address, name, ROLE_MAP[role]],
   });

@@ -9,7 +9,7 @@
  * 3. Genera un wallet Ethereum (clave privada + dirección)
  * 4. Cifra la clave privada con AES-256-GCM
  * 5. Fondea la wallet con ETH (para gas en futuras transacciones)
- * 6. Registra al admin en CampusAccessControl con DEFAULT_ADMIN_ROLE
+ * 6. Registra al admin en CampusRoles con DEFAULT_ADMIN_ROLE
  * 7. Guarda en PostgreSQL con rol ADMIN
  *
  * NO mintea tokens (LIB/SHOP) porque el admin es un rol de organización,
@@ -94,13 +94,13 @@ function loadAbi(contractName) {
 }
 
 const ADDRESSES = {
-  campusAccessControl: "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+  campusRoles: "0x5FbDB2315678afecb367f032d93F642f64180aa3",
 };
 
 // DEFAULT_ADMIN_ROLE en OpenZeppelin = 0x00...00 (32 bytes de ceros)
 const DEFAULT_ADMIN_ROLE = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
-const CAMPUS_ABI = loadAbi("CampusAccessControl");
+const CAMPUS_ABI = loadAbi("CampusRoles");
 
 // ── Clientes viem ──
 const publicClient = createPublicClient({
@@ -154,9 +154,9 @@ async function main() {
     });
     await publicClient.waitForTransactionReceipt({ hash: fundHash });
 
-    // 6. Registrar en CampusAccessControl con DEFAULT_ADMIN_ROLE
+    // 6. Registrar en CampusRoles con DEFAULT_ADMIN_ROLE
     const regHash = await adminWalletClient.writeContract({
-      address: ADDRESSES.campusAccessControl,
+      address: ADDRESSES.campusRoles,
       abi: CAMPUS_ABI,
       functionName: "registerUser",
       args: [account.address, ADMIN_NAME, DEFAULT_ADMIN_ROLE],

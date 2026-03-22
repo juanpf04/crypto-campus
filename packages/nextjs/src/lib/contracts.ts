@@ -8,12 +8,12 @@
  *
  * Flujo de uso:
  * 1. Un módulo del backend importa la dirección y el ABI del contrato que necesita:
- *    import { CONTRACT_ADDRESSES, CAMPUS_ACCESS_CONTROL_ABI } from "@/lib/contracts";
+ *    import { CONTRACT_ADDRESSES, CAMPUS_ROLES_ABI } from "@/lib/contracts";
  *
  * 2. Los usa con Viem para leer o escribir en el contrato:
  *    await adminWalletClient.writeContract({
- *      address: CONTRACT_ADDRESSES.campusAccessControl,
- *      abi: CAMPUS_ACCESS_CONTROL_ABI,
+ *      address: CONTRACT_ADDRESSES.campusRoles,
+ *      abi: CAMPUS_ROLES_ABI,
  *      functionName: "registerUser",
  *      args: [userAddress, ROLES.STUDENT],
  *    });
@@ -27,7 +27,7 @@
  * y se recompila, los cambios en el ABI se propagan automáticamente.
  *
  * Contratos del sistema CryptoCampus:
- * - CampusAccessControl: Control de acceso basado en roles (quién puede hacer qué).
+ * - CampusRoles: Control de acceso basado en roles (quien puede hacer que).
  * - LibraryToken: Token ERC-20 para el sistema de biblioteca.
  * - ShopToken: Token ERC-20 para la tienda del campus.
  * - BadgeSystem: Sistema de badges/insignias NFT para logros académicos.
@@ -36,7 +36,7 @@
  * - CampusShop: Tienda donde se intercambian tokens por productos/servicios.
  */
 
-import CampusAccessControlArtifact from "../../../hardhat/artifacts/contracts/CampusAccessControl.sol/CampusAccessControl.json";
+import CampusRolesArtifact from "../../../hardhat/artifacts/contracts/CampusRoles.sol/CampusRoles.json";
 import LibraryTokenArtifact from "../../../hardhat/artifacts/contracts/LibraryToken.sol/LibraryToken.json";
 import ShopTokenArtifact from "../../../hardhat/artifacts/contracts/ShopToken.sol/ShopToken.json";
 import BadgeSystemArtifact from "../../../hardhat/artifacts/contracts/BadgeSystem.sol/BadgeSystem.json";
@@ -51,7 +51,7 @@ import CampusShopArtifact from "../../../hardhat/artifacts/contracts/CampusShop.
  * 0xe7f..., etc.
  */
 export const CONTRACT_ADDRESSES = {
-  campusAccessControl: "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+  campusRoles:         "0x5FbDB2315678afecb367f032d93F642f64180aa3",
   libraryToken:        "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
   shopToken:           "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
   badgeSystem:         "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
@@ -61,7 +61,7 @@ export const CONTRACT_ADDRESSES = {
 } as const;
 
 /** ABIs extraídos de los artifacts de compilación de Hardhat */
-export const CAMPUS_ACCESS_CONTROL_ABI = CampusAccessControlArtifact.abi;
+export const CAMPUS_ROLES_ABI          = CampusRolesArtifact.abi;
 export const LIBRARY_TOKEN_ABI         = LibraryTokenArtifact.abi;
 export const SHOP_TOKEN_ABI            = ShopTokenArtifact.abi;
 export const BADGE_SYSTEM_ABI          = BadgeSystemArtifact.abi;
@@ -70,7 +70,7 @@ export const LIBRARY_MANAGER_ABI       = LibraryManagerArtifact.abi;
 export const CAMPUS_SHOP_ABI           = CampusShopArtifact.abi;
 
 /**
- * Hashes de roles para CampusAccessControl.
+ * Hashes de roles para CampusRoles.
  *
  * En Solidity, los roles se identifican por el keccak256 de su nombre:
  *   bytes32 public constant STUDENT_ROLE = keccak256("STUDENT_ROLE");

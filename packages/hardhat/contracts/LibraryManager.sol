@@ -1,28 +1,33 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
-import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
-import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "./CampusAccessControl.sol";
-import "./LibraryToken.sol";
+import { ERC1155 } from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import { ERC1155Supply } from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
+import { ERC1155Holder } from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
+import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-/**
- * @title LibraryManager
- * @dev Gestion del catalogo de libros (ERC-1155) y sistema de prestamos.
- *      Cada token ID = un titulo de libro, supply = numero de copias fisicas.
- *      El contrato actua como custodio de los libros disponibles.
- */
+import { CampusRoles } from "./CampusRoles.sol";
+import { LibraryToken } from "./LibraryToken.sol";
+
+/// @title LibraryManager
+/// @author CryptoCampus Team
+/// @notice Gestiona catalogo de libros y flujo de prestamos
+/// @dev Cada token ID representa un titulo; el contrato custodia copias disponibles.
 contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuard {
+    // ── Type declarations ───────────────────────────────────────────────
 
-    CampusAccessControl public immutable accessControl;
+    /// @notice Referencia al control de acceso del campus
+    CampusRoles public immutable campusRoles;
+
+    /// @notice Token de deposito para prestamos
     LibraryToken public immutable libraryToken;
 
+    /// @notice Duracion por defecto de un prestamo aprobado
     uint256 public constant DEFAULT_LOAN_DURATION = 21 days;
+
+    /// @notice Deposito en token requerido por prestamo
     uint256 public constant DEPOSIT_PER_LOAN = 1;
 
-    // --- Book metadata ---
     // Titulo, autor, isbn y demas metadatos se guardan en Prisma vinculados por tokenId.
     // En la blockchain solo guardamos lo necesario para la logica de prestamos.
     struct Book {
@@ -30,7 +35,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
         bool exists;
     }
 
-    // --- Loan state machine ---
+    /// @notice Estados posibles de un prestamo
     enum LoanStatus { None, Requested, Approved, Rejected, Returned }
 
     struct Loan {
@@ -43,7 +48,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
         uint40 returnDate;
     }
 
-    // --- State ---
+    // ── State variables ─────────────────────────────────────────────────
     uint256 public nextBookId = 1;
     mapping(uint256 => Book) private _books;
 
@@ -57,7 +62,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
     // bookId => count of active loans
     mapping(uint256 => uint256) public activeLoansForBook;
 
-    // --- Custom Errors ---
+    // ── Errors ──────────────────────────────────────────────────────────
     error NotLibrarian();
     error NotStudent();
     error BookNotFound(uint256 bookId);
@@ -73,7 +78,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
     error LoanNotOverdue(uint256 loanId);
     error ZeroCopies();
 
-    // --- Events ---
+    // ── Events ──────────────────────────────────────────────────────────
     event BookAdded(uint256 indexed bookId, uint256 copies);
     event BookCopiesAdded(uint256 indexed bookId, uint256 additionalCopies);
     event BookRemoved(uint256 indexed bookId);
@@ -84,31 +89,34 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
     event LoanRequestCancelled(uint256 indexed loanId);
     event LoanForceReturned(uint256 indexed loanId, address indexed librarian);
 
+    // ── Modifiers ───────────────────────────────────────────────────────
+
     constructor(
-        address _accessControl,
+        address _campusRoles,
         address _libraryToken,
         string memory uri_
     ) ERC1155(uri_) {
-        accessControl = CampusAccessControl(_accessControl);
+        campusRoles = CampusRoles(_campusRoles);
         libraryToken = LibraryToken(_libraryToken);
     }
 
-    // --- Modifiers ---
     modifier onlyLibrarian() {
-        if (!accessControl.hasRole(accessControl.LIBRARIAN_ROLE(), msg.sender))
+        if (!campusRoles.hasRole(campusRoles.LIBRARIAN_ROLE(), msg.sender))
             revert NotLibrarian();
         _;
     }
 
     modifier onlyStudent() {
-        if (!accessControl.hasRole(accessControl.STUDENT_ROLE(), msg.sender))
+        if (!campusRoles.hasRole(campusRoles.STUDENT_ROLE(), msg.sender))
             revert NotStudent();
         _;
     }
 
-    // =========================================================================
-    // BOOK MANAGEMENT (Librarian only)
-    // =========================================================================
+    // ── Functions ───────────────────────────────────────────────────────
+
+    // ── External functions ──────────────────────────────────────────────
+
+    // ── Book management ─────────────────────────────────────────────────
 
     /**
      * @dev Anade un nuevo libro al catalogo. Mintea N copias ERC-1155 al contrato.
@@ -171,9 +179,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
         return balanceOf(address(this), bookId);
     }
 
-    // =========================================================================
-    // LOAN FLOW
-    // =========================================================================
+    // ── Loan flow ───────────────────────────────────────────────────────
 
     /**
      * @dev Estudiante solicita prestamo de un libro.
@@ -330,9 +336,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
         emit LoanForceReturned(loanId, msg.sender);
     }
 
-    // =========================================================================
-    // VIEW FUNCTIONS
-    // =========================================================================
+    // ── External view functions ─────────────────────────────────────────
 
     function getBookInfo(uint256 bookId) external view returns (
         uint256 totalCopies,
@@ -360,9 +364,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
         return loan.status == LoanStatus.Approved && block.timestamp > loan.dueDate;
     }
 
-    // =========================================================================
-    // ERC-1155 OVERRIDES
-    // =========================================================================
+    // ── Public view functions ───────────────────────────────────────────
 
     /**
      * @dev Restriccion de transferencias: solo se permiten operaciones donde

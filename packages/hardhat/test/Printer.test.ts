@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { before, describe, it } from "node:test";
+import { describe, it } from "node:test";
 
 import { network } from "hardhat";
 import { getAddress } from "viem";
@@ -8,38 +8,38 @@ import { getAddress } from "viem";
 describe("Printer", async function () {
     const { viem } = await network.connect();
 
-    // Helper: despliega AccessControl + Printer y registra un estudiante.
+    // Helper: despliega CampusRoles + Printer y registra un estudiante.
     // Reutilizado en todos los describe para evitar repetir el deploy en cada test.
     async function deployWithStudent() {
-        const accessControl = await viem.deployContract("CampusAccessControl");
-        const printer = await viem.deployContract("Printer", [accessControl.address]);
+        const campusRoles = await viem.deployContract("CampusRoles");
+        const printer = await viem.deployContract("Printer", [campusRoles.address]);
         const [, student] = await viem.getWalletClients();
-        const studentRole = await accessControl.read.STUDENT_ROLE();
+        const studentRole = await campusRoles.read.STUDENT_ROLE();
 
-        await accessControl.write.registerUser([
+        await campusRoles.write.registerUser([
             student.account.address,
             "TestStudent",
             studentRole,
         ]);
 
-        return { accessControl, printer, student, studentRole };
+        return { campusRoles, printer, student, studentRole };
     }
 
     // Helper: solo despliega contratos sin registrar estudiante.
     async function deployOnly() {
-        const accessControl = await viem.deployContract("CampusAccessControl");
-        const printer = await viem.deployContract("Printer", [accessControl.address]);
-        return { accessControl, printer };
+        const campusRoles = await viem.deployContract("CampusRoles");
+        const printer = await viem.deployContract("Printer", [campusRoles.address]);
+        return { campusRoles, printer };
     }
 
 
     describe("Deployment", function () {
-        it("Should set accessControl reference correctly", async function () {
-            const { accessControl, printer } = await deployOnly();
+        it("Should set campusRoles reference correctly", async function () {
+            const { campusRoles, printer } = await deployOnly();
 
             assert.equal(
-                getAddress(await printer.read.accessControl()),
-                getAddress(accessControl.address),
+                getAddress(await printer.read.campusRoles()),
+                getAddress(campusRoles.address),
             );
         });
     });
@@ -210,10 +210,10 @@ describe("Printer", async function () {
 
     describe("Multiple students", function () {
         it("Should track credits independently per student", async function () {
-            const { accessControl, printer, student: student1, studentRole } = await deployWithStudent();
+            const { campusRoles, printer, student: student1, studentRole } = await deployWithStudent();
 
             const [, , student2] = await viem.getWalletClients();
-            await accessControl.write.registerUser([
+            await campusRoles.write.registerUser([
                 student2.account.address,
                 "Student2",
                 studentRole,
@@ -235,10 +235,10 @@ describe("Printer", async function () {
         });
 
         it("Should handle setCredits independently for multiple students", async function () {
-            const { accessControl, printer, student: student1, studentRole } = await deployWithStudent();
+            const { campusRoles, printer, student: student1, studentRole } = await deployWithStudent();
 
             const [, , student2] = await viem.getWalletClients();
-            await accessControl.write.registerUser([
+            await campusRoles.write.registerUser([
                 student2.account.address,
                 "Student2",
                 studentRole,

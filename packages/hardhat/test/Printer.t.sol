@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.28;
 
-import {Test} from "forge-std/Test.sol";
-import {CampusAccessControl} from "../contracts/CampusAccessControl.sol";
-import {Printer} from "../contracts/Printer.sol";
+import { Test } from "forge-std/Test.sol";
+import { CampusRoles } from "../contracts/CampusRoles.sol";
+import { Printer } from "../contracts/Printer.sol";
 
 /// @notice Basic behavioral tests for Printer.
 contract PrinterTest is Test {
-    CampusAccessControl accessControl;
+    CampusRoles campusRoles;
     Printer printer;
 
     address student;
@@ -15,13 +15,13 @@ contract PrinterTest is Test {
 
     function setUp() public {
         // Deploy contracts and register a baseline student for test scenarios.
-        accessControl = new CampusAccessControl();
-        printer = new Printer(address(accessControl));
+        campusRoles = new CampusRoles();
+        printer = new Printer(address(campusRoles));
 
         student = makeAddr("student");
         outsider = makeAddr("outsider");
 
-        accessControl.registerUser(student, "Alice", accessControl.STUDENT_ROLE());
+        campusRoles.registerUser(student, "Alice", campusRoles.STUDENT_ROLE());
     }
 
     function test_InitialCreditsForRegisteredStudent() public view {

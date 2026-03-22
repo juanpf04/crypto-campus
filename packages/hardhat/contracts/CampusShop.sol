@@ -1,23 +1,25 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
-import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "./CampusAccessControl.sol";
-import "./ShopToken.sol";
+import { ERC1155 } from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import { ERC1155Supply } from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
+import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import { CampusRoles } from "./CampusRoles.sol";
+import { ShopToken } from "./ShopToken.sol";
 
-/**
- * @title CampusShop
- * @dev Tienda del campus. Productos como ERC-1155 (recibos/prueba de compra).
- *      Pagos con ShopToken (ERC-20) en escrow para permitir reembolsos.
- */
+/// @title CampusShop
+/// @author CryptoCampus Team
+/// @notice Tienda del campus con flujo de compra y devolucion
+/// @dev Productos y recibos modelados como ERC-1155; pagos con ShopToken.
 contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard {
+    // ── Type declarations ───────────────────────────────────────────────
 
-    CampusAccessControl public immutable accessControl;
+    /// @notice Referencia al control de acceso del campus
+    CampusRoles public immutable campusRoles;
+
+    /// @notice Token ERC-20 usado para pagos y reembolsos
     ShopToken public immutable shopToken;
 
-    // --- Structs ---
     // El nombre, descripcion e imagen del producto se guardan en Prisma vinculados por productId.
     // En la blockchain solo guardamos precio y stock (necesarios para la logica de compra).
     struct Product {
@@ -27,8 +29,10 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard {
         bool exists;
     }
 
+    /// @notice Estados posibles de una orden
     enum OrderStatus { None, Paid, Delivered, Returned }
 
+    /// @notice Datos de orden de compra
     struct Order {
         uint256 productId;
         address buyer;
@@ -39,7 +43,8 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard {
         uint40 returnDate;
     }
 
-    // --- State ---
+    // ── State variables ─────────────────────────────────────────────────
+
     uint256 public nextProductId = 1;
     mapping(uint256 => Product) private _products;
 
@@ -47,14 +52,13 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard {
     mapping(uint256 => Order) private _orders;
     mapping(address => uint256[]) private _studentOrders;
 
-    // --- Constants ---
     uint256 public constant RETURN_WINDOW = 30 days;
     /// @dev Los recibos de compra usan token IDs 1..999999 (productId).
     ///      Los recibos de devolucion usan RETURN_RECEIPT_OFFSET + orderId
     ///      para evitar colisiones sin necesidad de un contador separado.
     uint256 public constant RETURN_RECEIPT_OFFSET = 1_000_000;
 
-    // --- Custom Errors ---
+    // ── Errors ──────────────────────────────────────────────────────────
     error NotAdmin();
     error NotStudent();
     error ProductNotFound(uint256 productId);
@@ -67,7 +71,8 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard {
     error ZeroPrice();
     error ProductAlreadyInState(uint256 productId, bool active);
 
-    // --- Events ---
+    // ── Events ──────────────────────────────────────────────────────────
+
     event ProductAdded(uint256 indexed productId, uint256 price, uint256 stock);
     event ProductUpdated(uint256 indexed productId, uint256 newPrice, uint256 newStock);
     event ProductDeactivated(uint256 indexed productId);
@@ -78,30 +83,32 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard {
     event ReturnReceiptMinted(uint256 indexed orderId, address indexed buyer, uint256 returnTokenId);
 
     constructor(
-        address _accessControl,
+        address _campusRoles,
         address _shopToken,
         string memory uri_
     ) ERC1155(uri_) {
-        accessControl = CampusAccessControl(_accessControl);
+        campusRoles = CampusRoles(_campusRoles);
         shopToken = ShopToken(_shopToken);
     }
 
-    // --- Modifiers ---
+    // ── Modifiers ───────────────────────────────────────────────────────
     modifier onlyAdmin() {
-        if (!accessControl.hasRole(accessControl.DEFAULT_ADMIN_ROLE(), msg.sender))
+        if (!campusRoles.hasRole(campusRoles.DEFAULT_ADMIN_ROLE(), msg.sender))
             revert NotAdmin();
         _;
     }
 
     modifier onlyStudent() {
-        if (!accessControl.hasRole(accessControl.STUDENT_ROLE(), msg.sender))
+        if (!campusRoles.hasRole(campusRoles.STUDENT_ROLE(), msg.sender))
             revert NotStudent();
         _;
     }
 
-    // =========================================================================
-    // PRODUCT MANAGEMENT (Admin)
-    // =========================================================================
+    // ── Functions ───────────────────────────────────────────────────────
+
+    // ── External functions ──────────────────────────────────────────────
+
+    // ── Product management ──────────────────────────────────────────────
 
     /**
      * @dev Anade un nuevo producto al catalogo.
@@ -164,9 +171,7 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard {
         emit ProductReactivated(productId);
     }
 
-    // =========================================================================
-    // PURCHASE FLOW (Student)
-    // =========================================================================
+    // ── Purchase flow ───────────────────────────────────────────────────
 
     /**
      * @dev Compra un producto. Paga ShopTokens (escrow), recibe NFT recibo.
@@ -207,9 +212,7 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard {
         emit OrderCreated(orderId, msg.sender, productId, price);
     }
 
-    // =========================================================================
-    // ORDER MANAGEMENT (Admin)
-    // =========================================================================
+    // ── Order management ────────────────────────────────────────────────
 
     /**
      * @dev Marca un pedido como entregado.
@@ -301,9 +304,7 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard {
         emit OrderReturned(orderId, buyer, refund);
     }
 
-    // =========================================================================
-    // VIEW FUNCTIONS
-    // =========================================================================
+    // ── External view functions ─────────────────────────────────────────
 
     function getProduct(uint256 productId) external view returns (
         uint256 price,
@@ -329,9 +330,7 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard {
         return RETURN_RECEIPT_OFFSET + orderId;
     }
 
-    // =========================================================================
-    // ERC-1155 OVERRIDES
-    // =========================================================================
+    // ── Internal functions ──────────────────────────────────────────────
 
     /**
      * @dev OZ v5: _update reemplaza a _beforeTokenTransfer (firma sin operator ni data).

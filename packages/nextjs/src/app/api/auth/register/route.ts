@@ -7,7 +7,7 @@ import { encrypt } from "@/lib/crypto";
 import { adminWalletClient, publicClient } from "@/lib/viem";
 import {
   CONTRACT_ADDRESSES,
-  CAMPUS_ACCESS_CONTROL_ABI,
+  CAMPUS_ROLES_ABI,
   LIBRARY_TOKEN_ABI,
   SHOP_TOKEN_ABI,
   ROLES,
@@ -78,12 +78,12 @@ export async function POST(req: NextRequest) {
     value: parseEther("10"), // 10 ETH de gas para operar
   });
 
-  // ─── 8. Registrar en el contrato CampusAccessControl ───
+  // ─── 8. Registrar en el contrato CampusRoles ───
   // Sin este paso los contratos no reconocerían al usuario (isStudent devolvería false).
   // El admin llama a registerUser(address, name, STUDENT_ROLE) en nombre del estudiante.
   const registerHash = await adminWalletClient.writeContract({
-    address: CONTRACT_ADDRESSES.campusAccessControl,
-    abi: CAMPUS_ACCESS_CONTROL_ABI,
+    address: CONTRACT_ADDRESSES.campusRoles,
+    abi: CAMPUS_ROLES_ABI,
     functionName: "registerUser",
     args: [account.address, name, ROLES.STUDENT],
   });

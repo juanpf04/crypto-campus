@@ -104,7 +104,7 @@ packages/hardhat/
 
 ### Los 7 contratos
 
-#### CampusAccessControl
+#### CampusRoles
 - **Hereda de**: OpenZeppelin AccessControl
 - **Responsabilidad**: Registro de usuarios y gestión de roles
 - **Roles**: `STUDENT_ROLE`, `PROFESSOR_ROLE`, `LIBRARIAN_ROLE` (ADMIN = DEFAULT_ADMIN_ROLE)
@@ -151,7 +151,7 @@ packages/hardhat/
 
 ```json
 {
-  "CampusAccessControl": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+  "CampusRoles": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
   "BadgeSystem":         "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
   "LibraryToken":        "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
   "Printer":     "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
@@ -496,7 +496,7 @@ Respuesta al componente: { success: true, item: { id, title, tokenId } }
 4. `generatePrivateKey()` → `privateKeyToAccount()` → obtener address
 5. `encrypt(privateKey)` con AES-256-GCM usando `SESSION_SECRET`
 6. `adminWalletClient.sendTransaction({ to: address, value: 1000 ETH })` — gas para operar
-7. `adminWalletClient.writeContract(CampusAccessControl.registerUser(address, name, STUDENT_ROLE))`
+7. `adminWalletClient.writeContract(CampusRoles.registerUser(address, name, STUDENT_ROLE))`
 8. Mintear 10 LibraryTokens + 100 ShopTokens al nuevo address
 9. `prisma.user.create({ email, password: hash, name, address, encryptedKey, role: STUDENT })`
 
@@ -534,7 +534,7 @@ await userWalletClient.writeContract({ ... });
 
 ## 9. Roles y permisos
 
-### On-chain (CampusAccessControl)
+### On-chain (CampusRoles)
 
 | Rol | Capacidades on-chain |
 |---|---|

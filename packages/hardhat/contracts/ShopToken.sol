@@ -1,102 +1,102 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "./CampusAccessControl.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-/**
- * @title ShopToken
- * @dev Token ERC-20 de pago para la tienda del campus.
- *      Se gana asistiendo a eventos, charlas, buen comportamiento, etc.
- *      Se gasta comprando productos en CampusShop.
- */
+import { CampusRoles } from "./CampusRoles.sol";
+
+/// @title ShopToken
+/// @author CryptoCampus Team
+/// @notice Token ERC-20 de pago para la tienda del campus
+/// @dev Se gana por actividades del campus y se usa en CampusShop.
 contract ShopToken is ERC20 {
+    
+    // ── State variables ─────────────────────────────────────────────────
 
-    CampusAccessControl public immutable accessControl;
+    /// @notice Referencia al control de acceso del campus
+    CampusRoles public immutable campusRoles;
 
-    /// @dev Contrato de confianza que puede gastar tokens sin approve individual.
-    ///      Se configura una vez tras el despliegue con setTrustedSpender.
+    /// @notice Spender de confianza para operar sin approve individual
     address public trustedSpender;
 
-    // --- Custom Errors ---
+    // ── Errors ──────────────────────────────────────────────────────────
+
+    /// @notice Caller sin rol admin
     error NotAdmin();
+
+    /// @notice Direccion cero no permitida
     error ZeroAddress();
+
+    /// @notice Monto cero no permitido
     error ZeroAmount();
-    // TODO: Revisar si finalmente se necesita mintBatch y su error asociado
-    // error ArrayLengthMismatch();
 
-    constructor(address _accessControl) ERC20("ShopToken", "SHPT") {
-        accessControl = CampusAccessControl(_accessControl);
-    }
+    // ── Modifiers ───────────────────────────────────────────────────────
 
-    // --- Modifiers ---
+    /// @notice Restringe la ejecucion a admins del sistema
     modifier onlyAdmin() {
-        if (!accessControl.hasRole(accessControl.DEFAULT_ADMIN_ROLE(), msg.sender))
+        if (!campusRoles.hasRole(campusRoles.DEFAULT_ADMIN_ROLE(), msg.sender))
             revert NotAdmin();
         _;
     }
 
-    /**
-     * @dev Override decimals a 0 (tokens enteros, sin fracciones).
-     */
+    // ── Functions ───────────────────────────────────────────────────────
+
+    // ── Constructor ─────────────────────────────────────────────────────
+
+    /// @notice Inicializa el token y su referencia de acceso
+    /// @param _campusRoles Direccion del contrato CampusRoles
+    constructor(address _campusRoles) ERC20("ShopToken", "SHPT") {
+        campusRoles = CampusRoles(_campusRoles);
+    }
+
+    // ── Public pure functions ───────────────────────────────────────────
+
+    /// @notice Decimales del token
+    /// @dev Se usa 0 para manejar unidades enteras
+    /// @return Cantidad de decimales
     function decimals() public pure override returns (uint8) {
         return 0;
     }
 
-    /**
-     * @dev Configura el contrato de confianza (CampusShop) que puede
-     *      gastar tokens sin que cada usuario haga approve individualmente.
-     *      Solo se necesita llamar una vez tras el despliegue.
-     */
+    // ── External functions ──────────────────────────────────────────────
+
+    /// @notice Configura el spender de confianza
+    /// @dev Debe apuntar al contrato CampusShop
+    /// @param spender Direccion del spender autorizado
     function setTrustedSpender(address spender) external onlyAdmin {
         if (spender == address(0)) revert ZeroAddress();
         trustedSpender = spender;
     }
 
-    /**
-     * @dev Override: si el spender es el trustedSpender, devuelve max (approve infinito).
-     *      Asi CampusShop puede operar sin approve individual de cada estudiante.
-     */
-    function allowance(address owner, address spender) public view override returns (uint256) {
-        if (spender == trustedSpender && trustedSpender != address(0)) {
-            return type(uint256).max;
-        }
-        return super.allowance(owner, spender);
-    }
-
-    /**
-     * @dev Mintea tokens a un usuario (por eventos, registro, etc.)
-     */
+    /// @notice Mintea tokens a un usuario
+    /// @param to Cuenta receptora
+    /// @param amount Cantidad a mintear
     function mint(address to, uint256 amount) external onlyAdmin {
         if (to == address(0)) revert ZeroAddress();
         if (amount == 0) revert ZeroAmount();
         _mint(to, amount);
     }
 
-    // TODO: Revisar si finalmente se anade mintBatch
-    // /**
-    //  * @dev Mintea tokens a multiples usuarios en batch.
-    //  */
-    // function mintBatch(
-    //     address[] calldata recipients,
-    //     uint256[] calldata amounts
-    // ) external onlyAdmin {
-    //     if (recipients.length != amounts.length) revert ArrayLengthMismatch();
-    //
-    //     for (uint256 i = 0; i < recipients.length;) {
-    //         if (recipients[i] == address(0)) revert ZeroAddress();
-    //         if (amounts[i] == 0) revert ZeroAmount();
-    //         _mint(recipients[i], amounts[i]);
-    //         unchecked { ++i; }
-    //     }
-    // }
-
-    /**
-     * @dev Quema tokens si es necesario (admin only).
-     */
+    /// @notice Quema tokens de una cuenta
+    /// @param from Cuenta de origen
+    /// @param amount Cantidad a quemar
     function burn(address from, uint256 amount) external onlyAdmin {
         if (from == address(0)) revert ZeroAddress();
         if (amount == 0) revert ZeroAmount();
         _burn(from, amount);
+    }
+
+    // ── Public view functions ───────────────────────────────────────────
+
+    /// @notice Consulta allowance entre owner y spender
+    /// @dev Si spender es trustedSpender retorna allowance infinito
+    /// @param owner Cuenta dueña de fondos
+    /// @param spender Cuenta que intenta gastar
+    /// @return Monto permitido
+    function allowance(address owner, address spender) public view override returns (uint256) {
+        if (spender == trustedSpender && trustedSpender != address(0)) {
+            return type(uint256).max;
+        }
+        return super.allowance(owner, spender);
     }
 }

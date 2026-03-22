@@ -6,13 +6,13 @@ import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
  * Despliega todos los contratos del ecosistema CryptoCampus en orden.
  *
  * Orden de despliegue:
- *   1. CampusAccessControl  — sin dependencias
- *   2. LibraryToken         — necesita CampusAccessControl
- *   3. ShopToken            — necesita CampusAccessControl
- *   4. BadgeSystem          — necesita CampusAccessControl
- *   5. Printer              — necesita CampusAccessControl
- *   6. LibraryManager       — necesita CampusAccessControl + LibraryToken
- *   7. CampusShop           — necesita CampusAccessControl + ShopToken
+ *   1. CampusRoles          — sin dependencias
+ *   2. LibraryToken         — necesita CampusRoles
+ *   3. ShopToken            — necesita CampusRoles
+ *   4. BadgeSystem          — necesita CampusRoles
+ *   5. Printer              — necesita CampusRoles
+ *   6. LibraryManager       — necesita CampusRoles + LibraryToken
+ *   7. CampusShop           — necesita CampusRoles + ShopToken
  *
  * Post-despliegue:
  *   - LibraryToken.setTrustedSpender(LibraryManager)
@@ -24,31 +24,31 @@ export default buildModule("CampusModule", (m) => {
   const libraryUri  = m.getParameter("libraryUri", "https://cryptocampus.local/library/{id}.json");
   const shopUri     = m.getParameter("shopUri",    "https://cryptocampus.local/shop/{id}.json");
 
-  // 1. CampusAccessControl
-  const accessControl = m.contract("CampusAccessControl");
+  // 1. CampusRoles
+  const campusRoles = m.contract("CampusRoles");
 
   // 2. LibraryToken
-  const libraryToken = m.contract("LibraryToken", [accessControl]);
+  const libraryToken = m.contract("LibraryToken", [campusRoles]);
 
   // 3. ShopToken
-  const shopToken = m.contract("ShopToken", [accessControl]);
+  const shopToken = m.contract("ShopToken", [campusRoles]);
 
   // 4. BadgeSystem
-  const badgeSystem = m.contract("BadgeSystem", [accessControl, badgeUri]);
+  const badgeSystem = m.contract("BadgeSystem", [campusRoles, badgeUri]);
 
   // 5. Printer
-  const printer = m.contract("Printer", [accessControl]);
+  const printer = m.contract("Printer", [campusRoles]);
 
   // 6. LibraryManager
   const libraryManager = m.contract("LibraryManager", [
-    accessControl,
+    campusRoles,
     libraryToken,
     libraryUri,
   ]);
 
   // 7. CampusShop
   const campusShop = m.contract("CampusShop", [
-    accessControl,
+    campusRoles,
     shopToken,
     shopUri,
   ]);
@@ -65,7 +65,7 @@ export default buildModule("CampusModule", (m) => {
   });
 
   return {
-    accessControl,
+    campusRoles,
     libraryToken,
     shopToken,
     badgeSystem,

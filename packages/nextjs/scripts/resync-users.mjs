@@ -4,7 +4,7 @@
  * Después de un deploy limpio de Hardhat, los usuarios de Prisma
  * ya no existen on-chain. Este script los re-registra:
  *   1. Fondea cada wallet con ETH (gas)
- *   2. Registra cada usuario en CampusAccessControl con su rol
+ *   2. Registra cada usuario en CampusRoles con su rol
  *   3. Mintea tokens iniciales (LibraryToken + ShopToken)
  *
  * Se ejecuta automáticamente desde dev.mjs tras el deploy de contratos.
@@ -90,7 +90,7 @@ function loadAbi(contractName) {
 
 // Direcciones desplegadas (deterministas en Hardhat)
 const ADDRESSES = {
-  campusAccessControl: "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+  campusRoles:         "0x5FbDB2315678afecb367f032d93F642f64180aa3",
   libraryToken:        "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
   shopToken:           "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
 };
@@ -102,7 +102,7 @@ const ROLE_MAP = {
   ADMIN:     "0x0000000000000000000000000000000000000000000000000000000000000000", // DEFAULT_ADMIN_ROLE
 };
 
-const CAMPUS_ABI = loadAbi("CampusAccessControl");
+const CAMPUS_ABI = loadAbi("CampusRoles");
 const LIB_TOKEN_ABI = loadAbi("LibraryToken");
 const SHOP_TOKEN_ABI = loadAbi("ShopToken");
 
@@ -156,10 +156,10 @@ async function main() {
         });
         await publicClient.waitForTransactionReceipt({ hash: fundHash });
 
-        // 3. Registrar en CampusAccessControl
+        // 3. Registrar en CampusRoles
         const role = ROLE_MAP[user.role] || ROLE_MAP.STUDENT;
         const regHash = await adminWalletClient.writeContract({
-          address: ADDRESSES.campusAccessControl,
+          address: ADDRESSES.campusRoles,
           abi: CAMPUS_ABI,
           functionName: "registerUser",
           args: [account.address, user.name, role],

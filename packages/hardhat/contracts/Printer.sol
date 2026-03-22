@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "./CampusAccessControl.sol";
+import { CampusRoles } from "./CampusRoles.sol";
 
 /// @title Printer
+/// @author CryptoCampus Team
 /// @notice Contrato para gestionar creditos de impresion de estudiantes.
 /// @dev 1 credito = 1 pagina. Cada estudiante inicia con creditos por defecto.
 contract Printer {
 
-    // -- State variables ----------------------------------------------------
+    // ── State variables ─────────────────────────────────────────────────
 
     /// @notice Referencia al contrato de control de acceso del campus
-    CampusAccessControl public immutable accessControl;
+    CampusRoles public immutable campusRoles;
 
     /// @notice Creditos iniciales para estudiantes
     uint256 public constant INITIAL_CREDITS = 200;
@@ -22,7 +23,7 @@ contract Printer {
     /// @dev Indica si el estudiante ya fue configurado por un admin
     mapping(address => bool) private _modified;
 
-    // -- Events -------------------------------------------------------------
+    // ── Events ──────────────────────────────────────────────────────────
 
     /// @notice Se emite cuando un admin fija creditos para un estudiante
     /// @param student Direccion del estudiante
@@ -35,7 +36,7 @@ contract Printer {
     /// @param remainingCredits Creditos restantes luego de imprimir
     event PrintJobExecuted(address indexed student, uint256 pages, uint256 remainingCredits);
 
-    // -- Errors -------------------------------------------------------------
+    // ── Errors ──────────────────────────────────────────────────────────
 
     /// @notice El caller no tiene rol de administrador
     error NotAdmin();
@@ -55,27 +56,27 @@ contract Printer {
     /// @notice La direccion proporcionada no puede ser la direccion cero
     error ZeroAddress();
 
-    // -- Modifiers ----------------------------------------------------------
+    // ── Modifiers ───────────────────────────────────────────────────────
 
     /// @notice Restringe la ejecucion a administradores del sistema
     modifier onlyAdmin() {
-        if (!accessControl.hasRole(accessControl.DEFAULT_ADMIN_ROLE(), msg.sender)) {
+        if (!campusRoles.hasRole(campusRoles.DEFAULT_ADMIN_ROLE(), msg.sender)) {
             revert NotAdmin();
         }
         _;
     }
 
-    // -- Functions ----------------------------------------------------------
+    // ── Functions ───────────────────────────────────────────────────────
 
-    // -- Constructor --------------------------------------------------------
+    // ── Constructor ─────────────────────────────────────────────────────
 
     /// @notice Inicializa el contrato con el control de acceso del campus
-    /// @param _accessControl Direccion del contrato CampusAccessControl
-    constructor(address _accessControl) {
-        accessControl = CampusAccessControl(_accessControl);
+    /// @param _campusRoles Direccion del contrato CampusRoles
+    constructor(address _campusRoles) {
+        campusRoles = CampusRoles(_campusRoles);
     }
 
-    // -- External functions -------------------------------------------------
+    // ── External functions ──────────────────────────────────────────────
 
     /// @notice Establece directamente los creditos de un estudiante
     /// @dev Permite tanto anadir como quitar creditos
@@ -85,7 +86,7 @@ contract Printer {
         if (student == address(0)) {
             revert ZeroAddress();
         }
-        if (!accessControl.isStudent(student)) {
+        if (!campusRoles.isStudent(student)) {
             revert NotStudent(student);
         }
 
@@ -103,7 +104,7 @@ contract Printer {
         if (student == address(0)) {
             revert ZeroAddress();
         }
-        if (!accessControl.isStudent(student)) {
+        if (!campusRoles.isStudent(student)) {
             revert NotStudent(student);
         }
         if (pages == 0) {
@@ -128,14 +129,14 @@ contract Printer {
         emit PrintJobExecuted(student, pages, remaining);
     }
 
-    // -- External view functions -------------------------------------------
+    // ── External view functions ─────────────────────────────────────────
 
     /// @notice Obtiene los creditos disponibles de un estudiante
     /// @dev Devuelve -1 si la direccion no pertenece a un estudiante
     /// @param student Direccion a consultar
     /// @return Creditos actuales o -1 si no es estudiante
     function getCredits(address student) external view returns (int256) {
-        if (!accessControl.isStudent(student)) {
+        if (!campusRoles.isStudent(student)) {
             return -1;
         }
         return int256(_modified[student] ? _credits[student] : INITIAL_CREDITS);

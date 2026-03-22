@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
-import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
-import "./CampusAccessControl.sol";
+import { ERC1155 } from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import { ERC1155Supply } from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
 
-/**
- * @title BadgeSystem
- * @dev Sistema de insignias academicas soulbound (no transferibles).
- *      Profesores crean tipos de insignia, tareas y recompensas.
- *      Estudiantes ganan insignias y las canjean por recompensas.
- */
+import { CampusRoles } from "./CampusRoles.sol";
+
+/// @title BadgeSystem
+/// @author CryptoCampus Team
+/// @notice Sistema de insignias academicas soulbound no transferibles
+/// @dev Profesores crean insignias/tareas/recompensas y estudiantes las canjean.
 contract BadgeSystem is ERC1155, ERC1155Supply {
+    // ── Type declarations ───────────────────────────────────────────────
 
-    CampusAccessControl public immutable accessControl;
+    /// @notice Referencia al control de acceso del campus
+    CampusRoles public immutable campusRoles;
 
-    // --- Structs ---
     // Los metadatos (nombre, descripcion) se guardan en Prisma vinculados por ID.
     // En la blockchain solo guardamos lo estrictamente necesario para la logica.
     struct BadgeType {
@@ -53,7 +53,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
         UseRequestStatus status;
     }
 
-    // --- State ---
+    // ── State variables ─────────────────────────────────────────────────
     uint256 public constant REWARD_TOKEN_OFFSET = 1_000_000;
 
     uint256 public nextBadgeTypeId = 1;
@@ -78,7 +78,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
     mapping(uint256 => UseRequest) private _useRequests;
     mapping(address => uint256[]) private _studentUseRequests;
 
-    // --- Custom Errors ---
+    // ── Errors ──────────────────────────────────────────────────────────
     error NotProfessor();
     error NotStudent();
     error BadgeTypeNotFound(uint256 badgeTypeId);
@@ -100,7 +100,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
     error NotRequestOwner(uint256 requestId);
     error InsufficientRewardTokens(uint256 rewardId);
 
-    // --- Events ---
+    // ── Events ──────────────────────────────────────────────────────────
     event BadgeTypeCreated(uint256 indexed badgeTypeId, address indexed professor);
     event TaskCreated(uint256 indexed taskId, uint256 indexed badgeTypeId, address indexed professor);
     event TaskDeactivated(uint256 indexed taskId);
@@ -120,26 +120,29 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
     event UseRequestApproved(uint256 indexed requestId, address indexed student, uint256 indexed rewardId);
     event UseRequestRejected(uint256 indexed requestId);
 
-    constructor(address _accessControl, string memory uri_) ERC1155(uri_) {
-        accessControl = CampusAccessControl(_accessControl);
+    // ── Modifiers ───────────────────────────────────────────────────────
+
+    constructor(address _campusRoles, string memory uri_) ERC1155(uri_) {
+        campusRoles = CampusRoles(_campusRoles);
     }
 
-    // --- Modifiers ---
     modifier onlyProfessor() {
-        if (!accessControl.hasRole(accessControl.PROFESSOR_ROLE(), msg.sender))
+        if (!campusRoles.hasRole(campusRoles.PROFESSOR_ROLE(), msg.sender))
             revert NotProfessor();
         _;
     }
 
     modifier onlyStudent() {
-        if (!accessControl.hasRole(accessControl.STUDENT_ROLE(), msg.sender))
+        if (!campusRoles.hasRole(campusRoles.STUDENT_ROLE(), msg.sender))
             revert NotStudent();
         _;
     }
 
-    // =========================================================================
-    // BADGE TYPE MANAGEMENT (Professor)
-    // =========================================================================
+    // ── Functions ───────────────────────────────────────────────────────
+
+    // ── External functions ──────────────────────────────────────────────
+
+    // ── Badge type management ───────────────────────────────────────────
 
     /**
      * @dev Crea un nuevo tipo de insignia.
@@ -156,9 +159,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
         emit BadgeTypeCreated(badgeTypeId, msg.sender);
     }
 
-    // =========================================================================
-    // TASK MANAGEMENT (Professor)
-    // =========================================================================
+    // ── Task management ─────────────────────────────────────────────────
 
     /**
      * @dev Crea una tarea vinculada a un tipo de insignia.
@@ -198,9 +199,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
         emit TaskDeactivated(taskId);
     }
 
-    // =========================================================================
-    // BADGE AWARDING (Professor)
-    // =========================================================================
+    // ── Badge awarding ──────────────────────────────────────────────────
 
     /**
      * @dev Otorga insignias a un estudiante por completar una tarea.
@@ -210,7 +209,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
         if (task.professor == address(0)) revert TaskNotFound(taskId);
         if (task.professor != msg.sender) revert NotTaskOwner(taskId, msg.sender);
         if (!task.active) revert TaskNotActive(taskId);
-        if (!accessControl.hasRole(accessControl.STUDENT_ROLE(), student))
+        if (!campusRoles.hasRole(campusRoles.STUDENT_ROLE(), student))
             revert NotStudent();
         if (taskAwarded[student][taskId]) revert AlreadyAwarded(student, taskId);
 
@@ -222,9 +221,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
         emit BadgeAwarded(taskId, student, task.badgeTypeId, task.rewardAmount);
     }
 
-    // =========================================================================
-    // REWARD MANAGEMENT (Professor)
-    // =========================================================================
+    // ── Reward management ───────────────────────────────────────────────
 
     /**
      * @dev Crea una recompensa canjeable con insignias.
@@ -265,9 +262,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
         emit RewardDeactivated(rewardId);
     }
 
-    // =========================================================================
-    // REDEMPTION (Student)
-    // =========================================================================
+    // ── Redemption ──────────────────────────────────────────────────────
 
     /**
      * @dev Canjea una recompensa quemando las insignias requeridas.
@@ -313,9 +308,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
         emit RewardTokenMinted(rewardId, msg.sender, rewardTokenId);
     }
 
-    // =========================================================================
-    // REWARD USE FLOW (Student requests, Professor approves/rejects)
-    // =========================================================================
+    // ── Reward use flow ─────────────────────────────────────────────────
 
     /**
      * @dev El estudiante solicita usar su token de recompensa.
@@ -394,9 +387,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
         emit UseRequestRejected(requestId);
     }
 
-    // =========================================================================
-    // VIEW FUNCTIONS
-    // =========================================================================
+    // ── External view functions ─────────────────────────────────────────
 
     function getBadgeType(uint256 badgeTypeId) external view returns (BadgeType memory) {
         return _badgeTypes[badgeTypeId];
@@ -434,9 +425,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
         return REWARD_TOKEN_OFFSET + rewardId;
     }
 
-    // =========================================================================
-    // SOULBOUND ENFORCEMENT
-    // =========================================================================
+    // ── Public pure functions ───────────────────────────────────────────
 
     /**
      * @dev Solo permite mint (from=0) y burn (to=0). Bloquea transferencias.
