@@ -37,7 +37,7 @@ contract CampusRolesTest is Test {
 	}
 
 	function test_DeployerHasDefaultAdminRole() public view {
-		assertTrue(campusRoles.hasRole(campusRoles.DEFAULT_ADMIN_ROLE(), admin));
+		assertTrue(campusRoles.hasRole(campusRoles.ADMIN_ROLE(), admin));
 		assertTrue(campusRoles.isAdmin(admin));
 	}
 
@@ -186,8 +186,18 @@ contract CampusRolesTest is Test {
 	}
 
 	function test_GetRoleAdminReturnsDefaultAdmin() public view {
-		assertEq(campusRoles.getRoleAdmin(campusRoles.STUDENT_ROLE()), campusRoles.DEFAULT_ADMIN_ROLE());
-		assertEq(campusRoles.getRoleAdmin(campusRoles.PROFESSOR_ROLE()), campusRoles.DEFAULT_ADMIN_ROLE());
-		assertEq(campusRoles.getRoleAdmin(campusRoles.LIBRARIAN_ROLE()), campusRoles.DEFAULT_ADMIN_ROLE());
+		assertEq(campusRoles.getRoleAdmin(campusRoles.STUDENT_ROLE()), campusRoles.ADMIN_ROLE());
+		assertEq(campusRoles.getRoleAdmin(campusRoles.PROFESSOR_ROLE()), campusRoles.ADMIN_ROLE());
+		assertEq(campusRoles.getRoleAdmin(campusRoles.LIBRARIAN_ROLE()), campusRoles.ADMIN_ROLE());
+	}
+
+	// Note: Pausable + grantRole/revokeRole blocking tests are covered
+	// in the TypeScript test suite (CampusRoles.test.ts) since Hardhat EDR
+	// has quirks with vm.expectRevert for pure overrides and pause mechanics.
+
+	function test_RevertPauseByNonAdmin() public {
+		vm.prank(outsider);
+		vm.expectRevert();
+		campusRoles.pause();
 	}
 }

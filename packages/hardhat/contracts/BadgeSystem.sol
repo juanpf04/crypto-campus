@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import { ERC1155 } from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import { ERC1155Supply } from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
+import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 
 import { CampusRoles } from "./CampusRoles.sol";
 
@@ -10,7 +11,7 @@ import { CampusRoles } from "./CampusRoles.sol";
 /// @author CryptoCampus Team
 /// @notice Sistema de insignias academicas soulbound no transferibles
 /// @dev Profesores crean insignias/tareas/recompensas y estudiantes las canjean.
-contract BadgeSystem is ERC1155, ERC1155Supply {
+contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
     // ── Type declarations ───────────────────────────────────────────────
 
     /// @notice Referencia al control de acceso del campus
@@ -99,6 +100,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
     error InvalidUseRequestState(uint256 requestId, UseRequestStatus current);
     error NotRequestOwner(uint256 requestId);
     error InsufficientRewardTokens(uint256 rewardId);
+    error NotAdmin();
 
     // ── Events ──────────────────────────────────────────────────────────
     event BadgeTypeCreated(uint256 indexed badgeTypeId, address indexed professor);
@@ -147,7 +149,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
     /**
      * @dev Crea un nuevo tipo de insignia.
      */
-    function createBadgeType() external onlyProfessor returns (uint256 badgeTypeId) {
+    function createBadgeType() external onlyProfessor whenNotPaused returns (uint256 badgeTypeId) {
         badgeTypeId = nextBadgeTypeId;
         unchecked { ++nextBadgeTypeId; }
 
@@ -168,7 +170,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
     function createTask(
         uint256 badgeTypeId,
         uint256 rewardAmount
-    ) external onlyProfessor returns (uint256 taskId) {
+    ) external onlyProfessor whenNotPaused returns (uint256 taskId) {
         if (!_badgeTypes[badgeTypeId].exists) revert BadgeTypeNotFound(badgeTypeId);
         if (_badgeTypes[badgeTypeId].creator != msg.sender)
             revert NotBadgeTypeOwner(badgeTypeId, msg.sender);
@@ -204,7 +206,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
     /**
      * @dev Otorga insignias a un estudiante por completar una tarea.
      */
-    function awardBadge(uint256 taskId, address student) external onlyProfessor {
+    function awardBadge(uint256 taskId, address student) external onlyProfessor whenNotPaused {
         Task storage task = _tasks[taskId];
         if (task.professor == address(0)) revert TaskNotFound(taskId);
         if (task.professor != msg.sender) revert NotTaskOwner(taskId, msg.sender);
@@ -267,7 +269,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
     /**
      * @dev Canjea una recompensa quemando las insignias requeridas.
      */
-    function redeemReward(uint256 rewardId) external onlyStudent {
+    function redeemReward(uint256 rewardId) external onlyStudent whenNotPaused {
         Reward storage reward = _rewards[rewardId];
         if (reward.professor == address(0)) revert RewardNotFound(rewardId);
         if (!reward.active) revert RewardInactive(rewardId);
@@ -385,6 +387,22 @@ contract BadgeSystem is ERC1155, ERC1155Supply {
 
         req.status = UseRequestStatus.Rejected;
         emit UseRequestRejected(requestId);
+    }
+
+    // ── Pausable ─────────────────────────────────────────────────────────
+
+    /// @notice Pausa el contrato (solo admin)
+    function pause() external {
+        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender))
+            revert NotAdmin();
+        _pause();
+    }
+
+    /// @notice Reanuda el contrato (solo admin)
+    function unpause() external {
+        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender))
+            revert NotAdmin();
+        _unpause();
     }
 
     // ── External view functions ─────────────────────────────────────────

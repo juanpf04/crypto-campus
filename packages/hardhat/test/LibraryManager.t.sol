@@ -150,6 +150,23 @@ contract LibraryManagerTest is Test {
         assertEq(uint256(loan.status), uint256(LibraryManager.LoanStatus.Rejected));
     }
 
+    function test_PauseAndUnpause() public {
+        // Admin pauses the contract
+        libraryManager.pause();
+
+        // Adding a book reverts while paused
+        vm.prank(librarian);
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        libraryManager.addBook(1);
+
+        // Admin unpauses
+        libraryManager.unpause();
+
+        // Now it works again
+        vm.prank(librarian);
+        libraryManager.addBook(1);
+    }
+
     function test_IsOverdue() public {
         vm.prank(student);
         libraryManager.requestLoan(1);

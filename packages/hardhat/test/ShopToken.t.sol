@@ -91,6 +91,22 @@ contract ShopTokenTest is Test {
         shopToken.setTrustedSpender(spender);
     }
 
+    function test_PauseAndUnpause() public {
+        // Admin pauses the contract
+        shopToken.pause();
+
+        // Minting reverts while paused
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        shopToken.mint(user, 100);
+
+        // Admin unpauses
+        shopToken.unpause();
+
+        // Now it works again
+        shopToken.mint(user, 100);
+        assertEq(shopToken.balanceOf(user), 100);
+    }
+
     function test_AllowanceReturnsZeroForNonTrusted() public view {
         assertEq(shopToken.allowance(user, spender), 0);
     }

@@ -236,6 +236,27 @@ contract BadgeSystemTest is Test {
         assertEq(uint256(req.status), uint256(BadgeSystem.UseRequestStatus.Rejected));
     }
 
+    function test_PauseAndUnpause() public {
+        // Setup: professor creates badge type before pausing
+        vm.prank(professor);
+        badgeSystem.createBadgeType();
+
+        // Admin pauses the contract
+        badgeSystem.pause();
+
+        // Creating a badge type reverts while paused
+        vm.prank(professor);
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        badgeSystem.createBadgeType();
+
+        // Admin unpauses
+        badgeSystem.unpause();
+
+        // Now it works again
+        vm.prank(professor);
+        badgeSystem.createBadgeType();
+    }
+
     function test_SafeBatchTransferFromBlocked() public {
         vm.startPrank(professor);
         badgeSystem.createBadgeType();

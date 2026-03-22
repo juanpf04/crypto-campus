@@ -95,6 +95,22 @@ contract LibraryTokenTest is Test {
         assertEq(libraryToken.allowance(user, spender), 0);
     }
 
+    function test_PauseAndUnpause() public {
+        // Admin pauses the contract
+        libraryToken.pause();
+
+        // Minting reverts while paused
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        libraryToken.mint(user, 10);
+
+        // Admin unpauses
+        libraryToken.unpause();
+
+        // Now it works again
+        libraryToken.mint(user, 10);
+        assertEq(libraryToken.balanceOf(user), 10);
+    }
+
     function test_ChangeTrustedSpender() public {
         address spender2 = makeAddr("spender2");
 

@@ -116,6 +116,22 @@ contract PrinterTest is Test {
         assertEq(printer.getCredits(student), int256(0));
     }
 
+    function test_PauseAndUnpause() public {
+        // Admin pauses the contract
+        printer.pause();
+
+        // Printing reverts while paused
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        printer.print(student, 10);
+
+        // Admin unpauses
+        printer.unpause();
+
+        // Now it works again
+        printer.print(student, 10);
+        assertEq(printer.getCredits(student), int256(190));
+    }
+
     function test_RevertPrintAfterCreditsExhausted() public {
         printer.setCredits(student, 10);
         printer.print(student, 10);

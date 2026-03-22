@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 import { CampusRoles } from "./CampusRoles.sol";
 
 /// @title Printer
 /// @author CryptoCampus Team
 /// @notice Contrato para gestionar creditos de impresion de estudiantes.
 /// @dev 1 credito = 1 pagina. Cada estudiante inicia con creditos por defecto.
-contract Printer {
+contract Printer is Pausable {
 
     // ── State variables ─────────────────────────────────────────────────
 
@@ -60,7 +61,7 @@ contract Printer {
 
     /// @notice Restringe la ejecucion a administradores del sistema
     modifier onlyAdmin() {
-        if (!campusRoles.hasRole(campusRoles.DEFAULT_ADMIN_ROLE(), msg.sender)) {
+        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender)) {
             revert NotAdmin();
         }
         _;
@@ -82,7 +83,7 @@ contract Printer {
     /// @dev Permite tanto anadir como quitar creditos
     /// @param student Direccion del estudiante
     /// @param credits Nueva cantidad de creditos
-    function setCredits(address student, uint256 credits) external onlyAdmin {
+    function setCredits(address student, uint256 credits) external onlyAdmin whenNotPaused {
         if (student == address(0)) {
             revert ZeroAddress();
         }
@@ -100,7 +101,7 @@ contract Printer {
     /// @dev Llamada por un admin para registrar consumo de paginas
     /// @param student Direccion del estudiante
     /// @param pages Cantidad de paginas a imprimir
-    function print(address student, uint256 pages) external onlyAdmin {
+    function print(address student, uint256 pages) external onlyAdmin whenNotPaused {
         if (student == address(0)) {
             revert ZeroAddress();
         }
@@ -140,5 +141,17 @@ contract Printer {
             return -1;
         }
         return int256(_modified[student] ? _credits[student] : INITIAL_CREDITS);
+    }
+
+    // ── Pausable ─────────────────────────────────────────────────────────
+
+    /// @notice Pausa el contrato (solo admin)
+    function pause() external onlyAdmin {
+        _pause();
+    }
+
+    /// @notice Reanuda el contrato (solo admin)
+    function unpause() external onlyAdmin {
+        _unpause();
     }
 }

@@ -154,6 +154,24 @@ contract CampusShopTest is Test {
         campusShop.markDelivered(1);
     }
 
+    function test_PauseAndUnpause() public {
+        // Admin pauses the contract
+        campusShop.pause();
+
+        // Purchasing reverts while paused
+        vm.prank(student);
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        campusShop.purchase(1);
+
+        // Admin unpauses
+        campusShop.unpause();
+
+        // Now it works again
+        vm.prank(student);
+        campusShop.purchase(1);
+        assertEq(campusShop.balanceOf(student, 1), 1);
+    }
+
     function test_ProcessReturnOnDeliveredOrder() public {
         vm.prank(student);
         campusShop.purchase(1);

@@ -2,12 +2,16 @@
 pragma solidity ^0.8.28;
 
 import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol";
+import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 
 /// @title CampusRoles
 /// @notice Gestion centralizada de roles para el ecosistema CryptoCampus
 /// @dev Cada usuario tiene un unico rol funcional no acumulable.
-///      El rol de administracion se gestiona con DEFAULT_ADMIN_ROLE de AccessControl.
-contract CampusRoles is AccessControl {
+///      Usa un ADMIN_ROLE custom en vez de DEFAULT_ADMIN_ROLE para evitar
+///      conflicto con el sentinel NO_ROLE (bytes32(0)).
+///      grantRole/revokeRole heredados de AccessControl estan bloqueados
+///      para forzar el uso de registerUser/removeUser/changeRole.
+contract CampusRoles is AccessControl, Pausable {
 
     // ── Type declarations ───────────────────────────────────────────────
 
@@ -18,6 +22,9 @@ contract CampusRoles is AccessControl {
     }
 
     // ── State variables ─────────────────────────────────────────────────
+
+    /// @notice Rol de administrador (custom, no usa DEFAULT_ADMIN_ROLE para evitar colision con NO_ROLE)
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
     /// @notice Rol de bibliotecario
     bytes32 public constant LIBRARIAN_ROLE = keccak256("LIBRARIAN_ROLE");
@@ -70,6 +77,9 @@ contract CampusRoles is AccessControl {
     /// @notice La direccion no puede ser cero
     error ZeroAddress();
 
+    /// @notice grantRole/revokeRole directos estan bloqueados
+    error UseContractFunctions();
+
     // ── Modifiers ───────────────────────────────────────────────────────
 
     /// @notice Valida que el rol pertenezca al conjunto permitido
@@ -79,7 +89,7 @@ contract CampusRoles is AccessControl {
             role != LIBRARIAN_ROLE &&
             role != PROFESSOR_ROLE &&
             role != STUDENT_ROLE &&
-            role != DEFAULT_ADMIN_ROLE
+            role != ADMIN_ROLE
         ) revert InvalidRole(role);
         _;
     }
@@ -95,9 +105,16 @@ contract CampusRoles is AccessControl {
 
     // ── Constructor ─────────────────────────────────────────────────────
 
-    /// @notice Otorga el rol admin inicial al deployer
+    /// @notice Otorga el rol admin inicial al deployer y configura la jerarquia de roles
     constructor() {
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        // El deployer recibe ADMIN_ROLE (no DEFAULT_ADMIN_ROLE para evitar colision con NO_ROLE)
+        _grantRole(ADMIN_ROLE, msg.sender);
+
+        // Configurar que ADMIN_ROLE gestiona todos los roles (incluido a si mismo)
+        _setRoleAdmin(ADMIN_ROLE, ADMIN_ROLE);
+        _setRoleAdmin(STUDENT_ROLE, ADMIN_ROLE);
+        _setRoleAdmin(LIBRARIAN_ROLE, ADMIN_ROLE);
+        _setRoleAdmin(PROFESSOR_ROLE, ADMIN_ROLE);
     }
 
     // ── External functions ──────────────────────────────────────────────
@@ -113,7 +130,8 @@ contract CampusRoles is AccessControl {
         bytes32 role
     )
         external
-        onlyRole(DEFAULT_ADMIN_ROLE)
+        onlyRole(ADMIN_ROLE)
+        whenNotPaused
         notZeroAddress(user)
         validRole(role)
     {
@@ -130,7 +148,8 @@ contract CampusRoles is AccessControl {
     /// @param user Direccion del usuario a eliminar
     function removeUser(address user)
         external
-        onlyRole(DEFAULT_ADMIN_ROLE)
+        onlyRole(ADMIN_ROLE)
+        whenNotPaused
         notZeroAddress(user)
     {
         UserRecord memory previousData = _userRecords[user];
@@ -152,7 +171,8 @@ contract CampusRoles is AccessControl {
         bytes32 newRole
     )
         external
-        onlyRole(DEFAULT_ADMIN_ROLE)
+        onlyRole(ADMIN_ROLE)
+        whenNotPaused
         notZeroAddress(user)
         validRole(newRole)
     {
@@ -194,7 +214,7 @@ contract CampusRoles is AccessControl {
     /// @param user Direccion a consultar
     /// @return True si el usuario es admin
     function isAdmin(address user) external view returns (bool) {
-        return hasRole(DEFAULT_ADMIN_ROLE, user);
+        return hasRole(ADMIN_ROLE, user);
     }
 
     /// @notice Obtiene informacion completa de un usuario
@@ -223,5 +243,29 @@ contract CampusRoles is AccessControl {
     /// @return True si tiene rol registrado
     function isRegistered(address user) external view returns (bool) {
         return _userRecords[user].role != NO_ROLE;
+    }
+
+    // ── Pausable ─────────────────────────────────────────────────────────
+
+    /// @notice Pausa el contrato (solo admin)
+    function pause() external onlyRole(ADMIN_ROLE) {
+        _pause();
+    }
+
+    /// @notice Reanuda el contrato (solo admin)
+    function unpause() external onlyRole(ADMIN_ROLE) {
+        _unpause();
+    }
+
+    // ── Bloqueo de AccessControl directo ─────────────────────────────────
+
+    /// @dev Bloqueado: usar registerUser/changeRole en su lugar
+    function grantRole(bytes32, address) public pure override {
+        revert UseContractFunctions();
+    }
+
+    /// @dev Bloqueado: usar removeUser/changeRole en su lugar
+    function revokeRole(bytes32, address) public pure override {
+        revert UseContractFunctions();
     }
 }

@@ -4,6 +4,7 @@ pragma solidity ^0.8.28;
 import { ERC1155 } from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import { ERC1155Supply } from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 import { CampusRoles } from "./CampusRoles.sol";
 import { ShopToken } from "./ShopToken.sol";
 
@@ -11,7 +12,7 @@ import { ShopToken } from "./ShopToken.sol";
 /// @author CryptoCampus Team
 /// @notice Tienda del campus con flujo de compra y devolucion
 /// @dev Productos y recibos modelados como ERC-1155; pagos con ShopToken.
-contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard {
+contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard, Pausable {
     // ── Type declarations ───────────────────────────────────────────────
 
     /// @notice Referencia al control de acceso del campus
@@ -93,7 +94,7 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard {
 
     // ── Modifiers ───────────────────────────────────────────────────────
     modifier onlyAdmin() {
-        if (!campusRoles.hasRole(campusRoles.DEFAULT_ADMIN_ROLE(), msg.sender))
+        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender))
             revert NotAdmin();
         _;
     }
@@ -176,7 +177,7 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard {
     /**
      * @dev Compra un producto. Paga ShopTokens (escrow), recibe NFT recibo.
      */
-    function purchase(uint256 productId) external onlyStudent nonReentrant returns (uint256 orderId) {
+    function purchase(uint256 productId) external onlyStudent whenNotPaused nonReentrant returns (uint256 orderId) {
         Product storage product = _products[productId];
         if (!product.exists) revert ProductNotFound(productId);
         if (!product.active) revert ProductNotActive(productId);
@@ -233,7 +234,7 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard {
      * @dev Procesa devolucion/cancelacion. Quema NFT, reembolsa tokens, restaura stock.
      *      Acepta pedidos Paid (cancelacion) o Delivered (devolucion).
      */
-    function processReturn(uint256 orderId) external onlyAdmin nonReentrant {
+    function processReturn(uint256 orderId) external onlyAdmin whenNotPaused nonReentrant {
         Order storage order = _orders[orderId];
         if (order.status == OrderStatus.None) revert OrderNotFound(orderId);
         if (order.status != OrderStatus.Paid && order.status != OrderStatus.Delivered)
@@ -270,7 +271,7 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard {
      *      automaticamente. Solo funciona si el pedido esta en estado Delivered
      *      y no han pasado mas de RETURN_WINDOW (30 dias) desde la entrega.
      */
-    function requestReturn(uint256 orderId) external onlyStudent nonReentrant {
+    function requestReturn(uint256 orderId) external onlyStudent whenNotPaused nonReentrant {
         Order storage order = _orders[orderId];
         if (order.status == OrderStatus.None) revert OrderNotFound(orderId);
         if (order.status != OrderStatus.Delivered)
@@ -302,6 +303,18 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard {
 
         emit ReturnReceiptMinted(orderId, buyer, returnTokenId);
         emit OrderReturned(orderId, buyer, refund);
+    }
+
+    // ── Pausable ─────────────────────────────────────────────────────────
+
+    /// @notice Pausa el contrato (solo admin)
+    function pause() external onlyAdmin {
+        _pause();
+    }
+
+    /// @notice Reanuda el contrato (solo admin)
+    function unpause() external onlyAdmin {
+        _unpause();
     }
 
     // ── External view functions ─────────────────────────────────────────

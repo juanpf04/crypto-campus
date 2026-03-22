@@ -220,6 +220,9 @@ contract IntegrationTest is Test {
         assertEq(libraryToken.balanceOf(student1), 9);
     }
 
+    // Note: Pausable cross-contract integration test is covered in
+    // Integration.test.ts since Hardhat EDR has quirks with CampusRoles pause.
+
     function test_MultipleStudentsIndependentState() public {
         // Librarian adds book with 2 copies
         vm.prank(librarian);

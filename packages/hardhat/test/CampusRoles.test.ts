@@ -14,7 +14,7 @@ describe("CampusRoles", async function () {
         const campusRoles = await viem.deployContract("CampusRoles");
         const [admin, user1, user2, user3, outsider] = await viem.getWalletClients();
 
-        const adminRole = await campusRoles.read.DEFAULT_ADMIN_ROLE();
+        const adminRole = await campusRoles.read.ADMIN_ROLE();
         const librarianRole = await campusRoles.read.LIBRARIAN_ROLE();
         const professorRole = await campusRoles.read.PROFESSOR_ROLE();
         const studentRole = await campusRoles.read.STUDENT_ROLE();
@@ -115,8 +115,8 @@ describe("CampusRoles", async function () {
             ]);
 
             assert.equal(await campusRoles.read.isAdmin([user1.account.address]), true);
-            // DEFAULT_ADMIN_ROLE == bytes32(0), same sentinel used by isRegistered/getUserRole.
-            assert.equal(await campusRoles.read.isRegistered([user1.account.address]), false);
+            // ADMIN_ROLE is now keccak256("ADMIN_ROLE"), not bytes32(0), so isRegistered returns true.
+            assert.equal(await campusRoles.read.isRegistered([user1.account.address]), true);
         });
 
         it("Should store role in user record", async function () {
@@ -544,7 +544,7 @@ describe("CampusRoles", async function () {
             });
         });
 
-        it("Should change role from STUDENT to DEFAULT_ADMIN_ROLE", async function () {
+        it("Should change role from STUDENT to ADMIN_ROLE", async function () {
             const { campusRoles, user1, studentRole, adminRole } = await deploy();
 
             await campusRoles.write.registerUser([
@@ -594,7 +594,7 @@ describe("CampusRoles", async function () {
             assert.equal(registered, true);
         });
 
-        it("Should register user with ADMIN role but isRegistered returns false", async function () {
+        it("Should register user with ADMIN role and isRegistered returns true", async function () {
             const { campusRoles, user1, adminRole } = await deploy();
 
             await campusRoles.write.registerUser([
@@ -604,7 +604,8 @@ describe("CampusRoles", async function () {
             ]);
 
             assert.equal(await campusRoles.read.isAdmin([user1.account.address]), true);
-            assert.equal(await campusRoles.read.isRegistered([user1.account.address]), false);
+            // ADMIN_ROLE is now keccak256("ADMIN_ROLE"), not bytes32(0), so isRegistered returns true.
+            assert.equal(await campusRoles.read.isRegistered([user1.account.address]), true);
         });
 
         it("Should register multiple users with different roles and verify isolation via getUserInfo", async function () {
@@ -632,7 +633,7 @@ describe("CampusRoles", async function () {
     });
 
     describe("removeUser edge cases", function () {
-        it("Should revert when removing user registered with ADMIN role (DEFAULT_ADMIN_ROLE == NO_ROLE sentinel)", async function () {
+        it("Should successfully remove user registered with ADMIN role", async function () {
             const { campusRoles, user1, adminRole } = await deploy();
 
             await campusRoles.write.registerUser([
@@ -641,11 +642,11 @@ describe("CampusRoles", async function () {
                 adminRole,
             ]);
 
-            // DEFAULT_ADMIN_ROLE == bytes32(0) == NO_ROLE, so removeUser sees role == NO_ROLE
-            // and reverts with UserNotRegistered. This is a known design quirk.
-            await assert.rejects(async () => {
-                await campusRoles.write.removeUser([user1.account.address]);
-            });
+            // ADMIN_ROLE is now keccak256("ADMIN_ROLE"), not bytes32(0), so removeUser works.
+            await campusRoles.write.removeUser([user1.account.address]);
+
+            assert.equal(await campusRoles.read.isRegistered([user1.account.address]), false);
+            assert.equal(await campusRoles.read.isAdmin([user1.account.address]), false);
         });
 
         it("Should return empty struct from getUserInfo after removal", async function () {
@@ -684,7 +685,7 @@ describe("CampusRoles", async function () {
     });
 
     describe("AccessControl inherited functions", function () {
-        it("Should return DEFAULT_ADMIN_ROLE as role admin for each role", async function () {
+        it("Should return ADMIN_ROLE as role admin for each role", async function () {
             const { campusRoles, adminRole, studentRole, librarianRole, professorRole } = await deploy();
 
             assert.equal(await campusRoles.read.getRoleAdmin([studentRole]), adminRole);
@@ -767,6 +768,83 @@ describe("CampusRoles", async function () {
             assert.equal(name, "Alice Prof");
             assert.equal(role, professorRole);
             assert.equal(registered, true);
+        });
+    });
+
+    describe("Pausable", function () {
+        it("Should allow admin to pause and unpause", async function () {
+            const { campusRoles } = await deploy();
+
+            await campusRoles.write.pause();
+            assert.equal(await campusRoles.read.paused(), true);
+
+            await campusRoles.write.unpause();
+            assert.equal(await campusRoles.read.paused(), false);
+        });
+
+        it("Should revert pause when called by non-admin", async function () {
+            const { campusRoles, outsider } = await deploy();
+
+            await assert.rejects(async () => {
+                await campusRoles.write.pause({ account: outsider.account });
+            });
+        });
+
+        it("Should revert unpause when called by non-admin", async function () {
+            const { campusRoles, outsider } = await deploy();
+
+            await campusRoles.write.pause();
+
+            await assert.rejects(async () => {
+                await campusRoles.write.unpause({ account: outsider.account });
+            });
+        });
+
+        it("Should revert registerUser when paused", async function () {
+            const { campusRoles, user1, studentRole } = await deploy();
+
+            await campusRoles.write.pause();
+
+            await assert.rejects(async () => {
+                await campusRoles.write.registerUser([
+                    user1.account.address,
+                    "Alice",
+                    studentRole,
+                ]);
+            });
+        });
+
+        it("Should allow registerUser after unpause", async function () {
+            const { campusRoles, user1, studentRole } = await deploy();
+
+            await campusRoles.write.pause();
+            await campusRoles.write.unpause();
+
+            await campusRoles.write.registerUser([
+                user1.account.address,
+                "Alice",
+                studentRole,
+            ]);
+
+            assert.equal(await campusRoles.read.isStudent([user1.account.address]), true);
+        });
+    });
+
+    describe("grantRole and revokeRole blocked", function () {
+        it("Should revert grantRole with UseContractFunctions", async function () {
+            const { campusRoles, user1, studentRole } = await deploy();
+
+            await assert.rejects(async () => {
+                await campusRoles.write.grantRole([studentRole, user1.account.address]);
+            });
+        });
+
+        it("Should revert revokeRole with UseContractFunctions", async function () {
+            const { campusRoles, user1, studentRole } = await deploy();
+
+            await assert.rejects(async () => {
+                await campusRoles.write.revokeRole([studentRole, user1.account.address]);
+            });
         });
     });
 });

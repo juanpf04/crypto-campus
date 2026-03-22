@@ -167,4 +167,41 @@ describe("LibraryToken", async function () {
             );
         });
     });
+
+    describe("Pausable", function () {
+        it("Should allow admin to pause", async function () {
+            const { token } = await deploy();
+
+            await token.write.pause();
+            assert.equal(await token.read.paused(), true);
+        });
+
+        it("Should revert pause when called by non-admin", async function () {
+            const { token, outsider } = await deploy();
+
+            await assert.rejects(async () => {
+                await token.write.pause({ account: outsider.account });
+            });
+        });
+
+        it("Should revert mint when paused", async function () {
+            const { token, student1 } = await deploy();
+
+            await token.write.pause();
+
+            await assert.rejects(async () => {
+                await token.write.mint([student1.account.address, 10n]);
+            });
+        });
+
+        it("Should restore functionality after unpause", async function () {
+            const { token, student1 } = await deploy();
+
+            await token.write.pause();
+            await token.write.unpause();
+
+            await token.write.mint([student1.account.address, 10n]);
+            assert.equal(await token.read.balanceOf([student1.account.address]), 10n);
+        });
+    });
 });

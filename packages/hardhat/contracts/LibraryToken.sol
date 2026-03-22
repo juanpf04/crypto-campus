@@ -2,6 +2,7 @@
 pragma solidity ^0.8.28;
 
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 
 import { CampusRoles } from "./CampusRoles.sol";
 
@@ -9,7 +10,7 @@ import { CampusRoles } from "./CampusRoles.sol";
 /// @author CryptoCampus Team
 /// @notice Token ERC-20 de capacidad de prestamo bibliotecario
 /// @dev 1 token equivale a 1 slot de prestamo simultaneo.
-contract LibraryToken is ERC20 {
+contract LibraryToken is ERC20, Pausable {
     // ── State variables ─────────────────────────────────────────────────
 
     /// @notice Referencia al control de acceso del campus
@@ -30,7 +31,7 @@ contract LibraryToken is ERC20 {
     // ── Modifiers ───────────────────────────────────────────────────────
 
     modifier onlyAdmin() {
-        if (!campusRoles.hasRole(campusRoles.DEFAULT_ADMIN_ROLE(), msg.sender)) {
+        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender)) {
             revert NotAdmin();
         }
         _;
@@ -56,7 +57,7 @@ contract LibraryToken is ERC20 {
 
     /// @notice Configura el spender de confianza
     /// @dev Debe apuntar al contrato LibraryManager
-    function setTrustedSpender(address spender) external onlyAdmin {
+    function setTrustedSpender(address spender) external onlyAdmin whenNotPaused {
         if (spender == address(0)) {
             revert ZeroAddress();
         }
@@ -64,7 +65,7 @@ contract LibraryToken is ERC20 {
     }
 
     /// @notice Mintea tokens de capacidad de prestamo
-    function mint(address to, uint256 amount) external onlyAdmin {
+    function mint(address to, uint256 amount) external onlyAdmin whenNotPaused {
         if (to == address(0)) {
             revert ZeroAddress();
         }
@@ -75,7 +76,7 @@ contract LibraryToken is ERC20 {
     }
 
     /// @notice Quema tokens de una cuenta
-    function burn(address from, uint256 amount) external onlyAdmin {
+    function burn(address from, uint256 amount) external onlyAdmin whenNotPaused {
         if (from == address(0)) {
             revert ZeroAddress();
         }
@@ -83,6 +84,18 @@ contract LibraryToken is ERC20 {
             revert ZeroAmount();
         }
         _burn(from, amount);
+    }
+
+    // ── Pausable ─────────────────────────────────────────────────────────
+
+    /// @notice Pausa el contrato (solo admin)
+    function pause() external onlyAdmin {
+        _pause();
+    }
+
+    /// @notice Reanuda el contrato (solo admin)
+    function unpause() external onlyAdmin {
+        _unpause();
     }
 
     // ── Public view functions ───────────────────────────────────────────

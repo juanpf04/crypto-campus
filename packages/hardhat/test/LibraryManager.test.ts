@@ -495,4 +495,43 @@ describe("LibraryManager", async function () {
             assert.equal(await libraryManager.read.getAvailableCopies([1n]), 3n);
         });
     });
+
+    describe("Pausable", function () {
+        it("Should allow admin to pause", async function () {
+            const { libraryManager } = await deploySystem();
+
+            await libraryManager.write.pause();
+            assert.equal(await libraryManager.read.paused(), true);
+        });
+
+        it("Should revert pause when called by non-admin", async function () {
+            const { libraryManager, outsider } = await deploySystem();
+
+            await assert.rejects(async () => {
+                await libraryManager.write.pause({ account: outsider.account });
+            });
+        });
+
+        it("Should revert addBook when paused", async function () {
+            const { libraryManager, librarian } = await deploySystem();
+
+            await libraryManager.write.pause();
+
+            await assert.rejects(async () => {
+                await libraryManager.write.addBook([2n], { account: librarian.account });
+            });
+        });
+
+        it("Should restore functionality after unpause", async function () {
+            const { libraryManager, librarian } = await deploySystem();
+
+            await libraryManager.write.pause();
+            await libraryManager.write.unpause();
+
+            await libraryManager.write.addBook([2n], { account: librarian.account });
+            const [totalCopies, , exists] = await libraryManager.read.getBookInfo([1n]);
+            assert.equal(totalCopies, 2n);
+            assert.equal(exists, true);
+        });
+    });
 });

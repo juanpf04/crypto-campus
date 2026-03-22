@@ -2,6 +2,7 @@
 pragma solidity ^0.8.28;
 
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 
 import { CampusRoles } from "./CampusRoles.sol";
 
@@ -9,7 +10,7 @@ import { CampusRoles } from "./CampusRoles.sol";
 /// @author CryptoCampus Team
 /// @notice Token ERC-20 de pago para la tienda del campus
 /// @dev Se gana por actividades del campus y se usa en CampusShop.
-contract ShopToken is ERC20 {
+contract ShopToken is ERC20, Pausable {
     
     // ── State variables ─────────────────────────────────────────────────
 
@@ -34,7 +35,7 @@ contract ShopToken is ERC20 {
 
     /// @notice Restringe la ejecucion a admins del sistema
     modifier onlyAdmin() {
-        if (!campusRoles.hasRole(campusRoles.DEFAULT_ADMIN_ROLE(), msg.sender))
+        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender))
             revert NotAdmin();
         _;
     }
@@ -63,7 +64,7 @@ contract ShopToken is ERC20 {
     /// @notice Configura el spender de confianza
     /// @dev Debe apuntar al contrato CampusShop
     /// @param spender Direccion del spender autorizado
-    function setTrustedSpender(address spender) external onlyAdmin {
+    function setTrustedSpender(address spender) external onlyAdmin whenNotPaused {
         if (spender == address(0)) revert ZeroAddress();
         trustedSpender = spender;
     }
@@ -71,7 +72,7 @@ contract ShopToken is ERC20 {
     /// @notice Mintea tokens a un usuario
     /// @param to Cuenta receptora
     /// @param amount Cantidad a mintear
-    function mint(address to, uint256 amount) external onlyAdmin {
+    function mint(address to, uint256 amount) external onlyAdmin whenNotPaused {
         if (to == address(0)) revert ZeroAddress();
         if (amount == 0) revert ZeroAmount();
         _mint(to, amount);
@@ -80,10 +81,22 @@ contract ShopToken is ERC20 {
     /// @notice Quema tokens de una cuenta
     /// @param from Cuenta de origen
     /// @param amount Cantidad a quemar
-    function burn(address from, uint256 amount) external onlyAdmin {
+    function burn(address from, uint256 amount) external onlyAdmin whenNotPaused {
         if (from == address(0)) revert ZeroAddress();
         if (amount == 0) revert ZeroAmount();
         _burn(from, amount);
+    }
+
+    // ── Pausable ─────────────────────────────────────────────────────────
+
+    /// @notice Pausa el contrato (solo admin)
+    function pause() external onlyAdmin {
+        _pause();
+    }
+
+    /// @notice Reanuda el contrato (solo admin)
+    function unpause() external onlyAdmin {
+        _unpause();
     }
 
     // ── Public view functions ───────────────────────────────────────────

@@ -338,4 +338,55 @@ describe("Integration", async function () {
         // Contract should have 2 copies now (1 returned + 1 not loaned)
         assert.equal(await libraryManager.read.balanceOf([libraryManager.address, 1n]), 2n);
     });
+
+    it("Should pause and unpause all contracts via admin", async function () {
+        const {
+            campusRoles,
+            libraryToken,
+            shopToken,
+            printer,
+            libraryManager,
+            badgeSystem,
+            campusShop,
+            librarian,
+            professor,
+            student1,
+        } = await deployAll();
+
+        // Pause all contracts
+        await campusRoles.write.pause();
+        await libraryToken.write.pause();
+        await shopToken.write.pause();
+        await printer.write.pause();
+        await libraryManager.write.pause();
+        await badgeSystem.write.pause();
+        await campusShop.write.pause();
+
+        // Verify all are paused
+        assert.equal(await campusRoles.read.paused(), true);
+        assert.equal(await libraryToken.read.paused(), true);
+        assert.equal(await shopToken.read.paused(), true);
+        assert.equal(await printer.read.paused(), true);
+        assert.equal(await libraryManager.read.paused(), true);
+        assert.equal(await badgeSystem.read.paused(), true);
+        assert.equal(await campusShop.read.paused(), true);
+
+        // Verify operations revert when paused
+        await assert.rejects(async () => {
+            await printer.write.print([student1.account.address, 1n]);
+        });
+
+        // Unpause all contracts
+        await campusRoles.write.unpause();
+        await libraryToken.write.unpause();
+        await shopToken.write.unpause();
+        await printer.write.unpause();
+        await libraryManager.write.unpause();
+        await badgeSystem.write.unpause();
+        await campusShop.write.unpause();
+
+        // Verify operations work after unpause
+        await printer.write.print([student1.account.address, 1n]);
+        assert.equal(await printer.read.getCredits([student1.account.address]), 199n);
+    });
 });

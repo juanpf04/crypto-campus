@@ -19,7 +19,7 @@ describe("BadgeSystem", async function () {
             "https://badges.ucm.es/",
         ]);
 
-        const [, professor1, professor2, student1, student2, outsider] = await viem.getWalletClients();
+        const [admin, professor1, professor2, student1, student2, outsider] = await viem.getWalletClients();
         const professorRole = await campusRoles.read.PROFESSOR_ROLE();
         const studentRole = await campusRoles.read.STUDENT_ROLE();
 
@@ -28,7 +28,7 @@ describe("BadgeSystem", async function () {
         await campusRoles.write.registerUser([student1.account.address, "Student1", studentRole]);
         await campusRoles.write.registerUser([student2.account.address, "Student2", studentRole]);
 
-        return { badgeSystem, campusRoles, professor1, professor2, student1, student2, outsider };
+        return { badgeSystem, campusRoles, admin, professor1, professor2, student1, student2, outsider };
     }
 
     describe("Deployment", function () {
@@ -676,6 +676,44 @@ describe("BadgeSystem", async function () {
             assert.equal(useRequests.length, 2);
             assert.equal(useRequests[0], 1n);
             assert.equal(useRequests[1], 2n);
+        });
+    });
+
+    describe("Pausable", function () {
+        it("Should allow admin to pause", async function () {
+            const { badgeSystem } = await deploySystem();
+
+            await badgeSystem.write.pause();
+            assert.equal(await badgeSystem.read.paused(), true);
+        });
+
+        it("Should revert pause when called by non-admin", async function () {
+            const { badgeSystem, outsider } = await deploySystem();
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.pause({ account: outsider.account });
+            });
+        });
+
+        it("Should revert createBadgeType when paused", async function () {
+            const { badgeSystem, professor1 } = await deploySystem();
+
+            await badgeSystem.write.pause();
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.createBadgeType({ account: professor1.account });
+            });
+        });
+
+        it("Should restore functionality after unpause", async function () {
+            const { badgeSystem, professor1 } = await deploySystem();
+
+            await badgeSystem.write.pause();
+            await badgeSystem.write.unpause();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            const badgeType = await badgeSystem.read.getBadgeType([1n]);
+            assert.equal(badgeType.exists, true);
         });
     });
 });

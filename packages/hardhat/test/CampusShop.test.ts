@@ -373,4 +373,43 @@ describe("CampusShop", async function () {
             assert.equal(stock, 20n);
         });
     });
+
+    describe("Pausable", function () {
+        it("Should allow admin to pause", async function () {
+            const { campusShop } = await deploySystem();
+
+            await campusShop.write.pause();
+            assert.equal(await campusShop.read.paused(), true);
+        });
+
+        it("Should revert pause when called by non-admin", async function () {
+            const { campusShop, outsider } = await deploySystem();
+
+            await assert.rejects(async () => {
+                await campusShop.write.pause({ account: outsider.account });
+            });
+        });
+
+        it("Should revert purchase when paused", async function () {
+            const { campusShop, student1 } = await deploySystem();
+
+            await campusShop.write.addProduct([50n, 20n]);
+            await campusShop.write.pause();
+
+            await assert.rejects(async () => {
+                await campusShop.write.purchase([1n], { account: student1.account });
+            });
+        });
+
+        it("Should restore functionality after unpause", async function () {
+            const { campusShop, shopToken, student1 } = await deploySystem();
+
+            await campusShop.write.addProduct([50n, 20n]);
+            await campusShop.write.pause();
+            await campusShop.write.unpause();
+
+            await campusShop.write.purchase([1n], { account: student1.account });
+            assert.equal(await shopToken.read.balanceOf([student1.account.address]), 150n);
+        });
+    });
 });

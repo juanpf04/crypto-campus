@@ -330,4 +330,47 @@ describe("Printer", async function () {
             );
         });
     });
+
+    describe("Pausable", function () {
+        it("Should allow admin to pause", async function () {
+            const { printer } = await deployOnly();
+
+            await printer.write.pause();
+            assert.equal(await printer.read.paused(), true);
+        });
+
+        it("Should revert pause when called by non-admin", async function () {
+            const { printer } = await deployWithStudent();
+            const [, , outsider] = await viem.getWalletClients();
+
+            await assert.rejects(async () => {
+                await printer.write.pause({ account: outsider.account });
+            });
+        });
+
+        it("Should revert print when paused", async function () {
+            const { printer, student } = await deployWithStudent();
+
+            await printer.write.setCredits([student.account.address, 100n]);
+            await printer.write.pause();
+
+            await assert.rejects(async () => {
+                await printer.write.print([student.account.address, 10n]);
+            });
+        });
+
+        it("Should restore functionality after unpause", async function () {
+            const { printer, student } = await deployWithStudent();
+
+            await printer.write.setCredits([student.account.address, 100n]);
+            await printer.write.pause();
+            await printer.write.unpause();
+
+            await printer.write.print([student.account.address, 10n]);
+            assert.equal(
+                await printer.read.getCredits([student.account.address]),
+                90n,
+            );
+        });
+    });
 });

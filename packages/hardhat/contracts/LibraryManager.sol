@@ -5,6 +5,7 @@ import { ERC1155 } from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import { ERC1155Supply } from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
 import { ERC1155Holder } from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 
 import { CampusRoles } from "./CampusRoles.sol";
 import { LibraryToken } from "./LibraryToken.sol";
@@ -13,7 +14,7 @@ import { LibraryToken } from "./LibraryToken.sol";
 /// @author CryptoCampus Team
 /// @notice Gestiona catalogo de libros y flujo de prestamos
 /// @dev Cada token ID representa un titulo; el contrato custodia copias disponibles.
-contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuard {
+contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuard, Pausable {
     // ── Type declarations ───────────────────────────────────────────────
 
     /// @notice Referencia al control de acceso del campus
@@ -77,6 +78,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
     error NotLoanOwner(uint256 loanId, address caller);
     error LoanNotOverdue(uint256 loanId);
     error ZeroCopies();
+    error NotAdmin();
 
     // ── Events ──────────────────────────────────────────────────────────
     event BookAdded(uint256 indexed bookId, uint256 copies);
@@ -123,7 +125,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
      */
     function addBook(
         uint256 copies
-    ) external onlyLibrarian returns (uint256 bookId) {
+    ) external onlyLibrarian whenNotPaused returns (uint256 bookId) {
         if (copies == 0) revert ZeroCopies();
 
         bookId = nextBookId;
@@ -143,7 +145,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
     /**
      * @dev Anade copias adicionales de un libro existente.
      */
-    function addCopies(uint256 bookId, uint256 amount) external onlyLibrarian {
+    function addCopies(uint256 bookId, uint256 amount) external onlyLibrarian whenNotPaused {
         if (!_books[bookId].exists) revert BookNotFound(bookId);
         if (amount == 0) revert ZeroCopies();
 
@@ -185,7 +187,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
      * @dev Estudiante solicita prestamo de un libro.
      *      No bloquea tokens todavia (eso se hace al aprobar).
      */
-    function requestLoan(uint256 bookId) external onlyStudent returns (uint256 loanId) {
+    function requestLoan(uint256 bookId) external onlyStudent whenNotPaused returns (uint256 loanId) {
         if (!_books[bookId].exists) revert BookNotFound(bookId);
         if (balanceOf(address(this), bookId) == 0) revert BookNotAvailable(bookId);
         if (activeLoanByStudentAndBook[msg.sender][bookId] != 0)
@@ -228,7 +230,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
      * @dev Bibliotecario aprueba un prestamo.
      *      Bloquea 1 LibraryToken del estudiante y transfiere 1 copia del libro.
      */
-    function approveLoan(uint256 loanId) external onlyLibrarian nonReentrant {
+    function approveLoan(uint256 loanId) external onlyLibrarian whenNotPaused nonReentrant {
         Loan storage loan = _loans[loanId];
         if (loan.status == LoanStatus.None) revert LoanNotFound(loanId);
         if (loan.status != LoanStatus.Requested)
@@ -283,7 +285,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
      * @dev Bibliotecario confirma la devolucion fisica del libro.
      *      Recupera el NFT del estudiante y devuelve el deposito.
      */
-    function confirmReturn(uint256 loanId) external onlyLibrarian nonReentrant {
+    function confirmReturn(uint256 loanId) external onlyLibrarian whenNotPaused nonReentrant {
         Loan storage loan = _loans[loanId];
         if (loan.status == LoanStatus.None) revert LoanNotFound(loanId);
         if (loan.status != LoanStatus.Approved)
@@ -313,7 +315,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
      * @dev Bibliotecario fuerza la devolucion de un libro atrasado.
      *      El deposito NO se devuelve (penalizacion).
      */
-    function forceReturn(uint256 loanId) external onlyLibrarian nonReentrant {
+    function forceReturn(uint256 loanId) external onlyLibrarian whenNotPaused nonReentrant {
         Loan storage loan = _loans[loanId];
         if (loan.status == LoanStatus.None) revert LoanNotFound(loanId);
         if (loan.status != LoanStatus.Approved)
@@ -334,6 +336,22 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
         _safeTransferFrom(student, address(this), bookId, 1, "");
 
         emit LoanForceReturned(loanId, msg.sender);
+    }
+
+    // ── Pausable ─────────────────────────────────────────────────────────
+
+    /// @notice Pausa el contrato (solo admin)
+    function pause() external {
+        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender))
+            revert NotAdmin();
+        _pause();
+    }
+
+    /// @notice Reanuda el contrato (solo admin)
+    function unpause() external {
+        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender))
+            revert NotAdmin();
+        _unpause();
     }
 
     // ── External view functions ─────────────────────────────────────────

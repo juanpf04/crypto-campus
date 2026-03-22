@@ -84,6 +84,6 @@ export const ROLES = {
   STUDENT:   keccak256(toBytes("STUDENT_ROLE"))   as `0x${string}`,
   LIBRARIAN: keccak256(toBytes("LIBRARIAN_ROLE")) as `0x${string}`,
   PROFESSOR: keccak256(toBytes("PROFESSOR_ROLE")) as `0x${string}`,
-  /** DEFAULT_ADMIN_ROLE en OpenZeppelin = 0x00...00 (32 bytes de ceros) */
-  ADMIN:     "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`,
+  /** ADMIN_ROLE custom = keccak256("ADMIN_ROLE") — ya no usa DEFAULT_ADMIN_ROLE para evitar colision con NO_ROLE */
+  ADMIN:     keccak256(toBytes("ADMIN_ROLE")) as `0x${string}`,
 } as const;

@@ -9,7 +9,7 @@
  * 3. Genera un wallet Ethereum (clave privada + dirección)
  * 4. Cifra la clave privada con AES-256-GCM
  * 5. Fondea la wallet con ETH (para gas en futuras transacciones)
- * 6. Registra al admin en CampusRoles con DEFAULT_ADMIN_ROLE
+ * 6. Registra al admin en CampusRoles con ADMIN_ROLE
  * 7. Guarda en PostgreSQL con rol ADMIN
  *
  * NO mintea tokens (LIB/SHOP) porque el admin es un rol de organización,
@@ -19,7 +19,7 @@
  * Se ejecuta automáticamente desde dev.mjs tras el resync de usuarios.
  */
 
-import { createPublicClient, createWalletClient, http, parseEther } from "viem";
+import { createPublicClient, createWalletClient, http, parseEther, keccak256, toBytes } from "viem";
 import { hardhat } from "viem/chains";
 import { privateKeyToAccount, generatePrivateKey } from "viem/accounts";
 import { PrismaClient } from "@prisma/client";
@@ -97,8 +97,8 @@ const ADDRESSES = {
   campusRoles: "0x5FbDB2315678afecb367f032d93F642f64180aa3",
 };
 
-// DEFAULT_ADMIN_ROLE en OpenZeppelin = 0x00...00 (32 bytes de ceros)
-const DEFAULT_ADMIN_ROLE = "0x0000000000000000000000000000000000000000000000000000000000000000";
+// ADMIN_ROLE custom = keccak256("ADMIN_ROLE")
+const ADMIN_ROLE_HASH = keccak256(toBytes("ADMIN_ROLE"));
 
 const CAMPUS_ABI = loadAbi("CampusRoles");
 
@@ -159,7 +159,7 @@ async function main() {
       address: ADDRESSES.campusRoles,
       abi: CAMPUS_ABI,
       functionName: "registerUser",
-      args: [account.address, ADMIN_NAME, DEFAULT_ADMIN_ROLE],
+      args: [account.address, ADMIN_NAME, ADMIN_ROLE_HASH],
     });
     await publicClient.waitForTransactionReceipt({ hash: regHash });
 
