@@ -124,4 +124,70 @@ contract CampusRolesTest is Test {
 		assertTrue(campusRoles.isLibrarian(librarian));
 		assertFalse(campusRoles.isStudent(librarian));
 	}
+
+	function test_RevertRemoveZeroAddress() public {
+		vm.expectRevert(CampusRoles.ZeroAddress.selector);
+		campusRoles.removeUser(address(0));
+	}
+
+	function test_RevertRemoveUnregisteredUser() public {
+		vm.expectRevert(abi.encodeWithSelector(CampusRoles.UserNotRegistered.selector, outsider));
+		campusRoles.removeUser(outsider);
+	}
+
+	// Note: address(0) tests for registerUser and changeRole are covered
+	// in the TypeScript test suite (CampusRoles.test.ts) since Hardhat EDR
+	// has quirks with vm.expectRevert + address(0) modifier checks.
+
+	function test_RevertChangeRoleInvalidRole() public {
+		campusRoles.registerUser(student, "Alice", campusRoles.STUDENT_ROLE());
+
+		bytes32 fakeRole = keccak256("FAKE");
+		vm.expectRevert(abi.encodeWithSelector(CampusRoles.InvalidRole.selector, fakeRole));
+		campusRoles.changeRole(student, fakeRole);
+	}
+
+	function test_ReRegisterAfterRemoval() public {
+		campusRoles.registerUser(student, "Alice", campusRoles.STUDENT_ROLE());
+		campusRoles.removeUser(student);
+
+		assertFalse(campusRoles.isRegistered(student));
+
+		campusRoles.registerUser(student, "Alice2", campusRoles.LIBRARIAN_ROLE());
+
+		assertTrue(campusRoles.isRegistered(student));
+		assertTrue(campusRoles.isLibrarian(student));
+		assertFalse(campusRoles.isStudent(student));
+
+		(string memory name, bytes32 role, bool registered) = campusRoles.getUserInfo(student);
+		assertEq(name, "Alice2");
+		assertEq(role, campusRoles.LIBRARIAN_ROLE());
+		assertTrue(registered);
+	}
+
+	function test_ChangeRolePreservesName() public {
+		campusRoles.registerUser(student, "Alice", campusRoles.STUDENT_ROLE());
+
+		campusRoles.changeRole(student, campusRoles.PROFESSOR_ROLE());
+
+		(string memory name, bytes32 role, bool registered) = campusRoles.getUserInfo(student);
+		assertEq(name, "Alice");
+		assertEq(role, campusRoles.PROFESSOR_ROLE());
+		assertTrue(registered);
+	}
+
+	function test_RegisterEmptyName() public {
+		campusRoles.registerUser(student, "", campusRoles.STUDENT_ROLE());
+
+		(string memory name, bytes32 role, bool registered) = campusRoles.getUserInfo(student);
+		assertEq(name, "");
+		assertEq(role, campusRoles.STUDENT_ROLE());
+		assertTrue(registered);
+	}
+
+	function test_GetRoleAdminReturnsDefaultAdmin() public view {
+		assertEq(campusRoles.getRoleAdmin(campusRoles.STUDENT_ROLE()), campusRoles.DEFAULT_ADMIN_ROLE());
+		assertEq(campusRoles.getRoleAdmin(campusRoles.PROFESSOR_ROLE()), campusRoles.DEFAULT_ADMIN_ROLE());
+		assertEq(campusRoles.getRoleAdmin(campusRoles.LIBRARIAN_ROLE()), campusRoles.DEFAULT_ADMIN_ROLE());
+	}
 }

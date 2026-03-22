@@ -70,4 +70,58 @@ contract PrinterTest is Test {
         vm.expectRevert(Printer.NotAdmin.selector);
         printer.setCredits(student, 100);
     }
+
+    function test_RevertSetCreditsZeroAddress() public {
+        vm.expectRevert(Printer.ZeroAddress.selector);
+        printer.setCredits(address(0), 100);
+    }
+
+    function test_RevertPrintZeroAddress() public {
+        vm.expectRevert(Printer.ZeroAddress.selector);
+        printer.print(address(0), 10);
+    }
+
+    function test_RevertPrintZeroPages() public {
+        vm.expectRevert(Printer.ZeroPages.selector);
+        printer.print(student, 0);
+    }
+
+    function test_RevertNonAdminPrint() public {
+        vm.prank(student);
+        vm.expectRevert(Printer.NotAdmin.selector);
+        printer.print(student, 10);
+    }
+
+    function test_PrintWithDefaultCredits() public {
+        // Print without calling setCredits first; should use INITIAL_CREDITS (200).
+        printer.print(student, 30);
+        assertEq(printer.getCredits(student), int256(170));
+    }
+
+    function test_SetCreditsToZero() public {
+        printer.setCredits(student, 0);
+        assertEq(printer.getCredits(student), int256(0));
+    }
+
+    function test_MultiplePrintsConsumeCorrectly() public {
+        printer.setCredits(student, 50);
+
+        printer.print(student, 20);
+        assertEq(printer.getCredits(student), int256(30));
+
+        printer.print(student, 15);
+        assertEq(printer.getCredits(student), int256(15));
+
+        printer.print(student, 15);
+        assertEq(printer.getCredits(student), int256(0));
+    }
+
+    function test_RevertPrintAfterCreditsExhausted() public {
+        printer.setCredits(student, 10);
+        printer.print(student, 10);
+        assertEq(printer.getCredits(student), int256(0));
+
+        vm.expectRevert(abi.encodeWithSelector(Printer.InsufficientCredits.selector, 0, 1));
+        printer.print(student, 1);
+    }
 }

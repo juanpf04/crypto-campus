@@ -41,4 +41,57 @@ contract ShopTokenTest is Test {
         assertEq(shopToken.balanceOf(user), 75);
         assertEq(shopToken.balanceOf(spender), 25);
     }
+
+    function test_DecimalsReturnsZero() public view {
+        assertEq(shopToken.decimals(), 0);
+    }
+
+    function test_RevertMintZeroAddress() public {
+        vm.expectRevert(ShopToken.ZeroAddress.selector);
+        shopToken.mint(address(0), 1);
+    }
+
+    function test_RevertMintZeroAmount() public {
+        vm.expectRevert(ShopToken.ZeroAmount.selector);
+        shopToken.mint(user, 0);
+    }
+
+    function test_RevertMintNonAdmin() public {
+        vm.prank(user);
+        vm.expectRevert(ShopToken.NotAdmin.selector);
+        shopToken.mint(user, 1);
+    }
+
+    function test_RevertBurnZeroAddress() public {
+        vm.expectRevert(ShopToken.ZeroAddress.selector);
+        shopToken.burn(address(0), 1);
+    }
+
+    function test_RevertBurnZeroAmount() public {
+        shopToken.mint(user, 50);
+
+        vm.expectRevert(ShopToken.ZeroAmount.selector);
+        shopToken.burn(user, 0);
+    }
+
+    function test_RevertBurnNonAdmin() public {
+        vm.prank(user);
+        vm.expectRevert(ShopToken.NotAdmin.selector);
+        shopToken.burn(user, 1);
+    }
+
+    function test_RevertSetTrustedSpenderZeroAddress() public {
+        vm.expectRevert(ShopToken.ZeroAddress.selector);
+        shopToken.setTrustedSpender(address(0));
+    }
+
+    function test_RevertSetTrustedSpenderNonAdmin() public {
+        vm.prank(user);
+        vm.expectRevert(ShopToken.NotAdmin.selector);
+        shopToken.setTrustedSpender(spender);
+    }
+
+    function test_AllowanceReturnsZeroForNonTrusted() public view {
+        assertEq(shopToken.allowance(user, spender), 0);
+    }
 }

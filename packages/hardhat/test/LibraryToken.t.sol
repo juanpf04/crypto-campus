@@ -41,4 +41,68 @@ contract LibraryTokenTest is Test {
         assertEq(libraryToken.balanceOf(user), 7);
         assertEq(libraryToken.balanceOf(spender), 3);
     }
+
+    function test_DecimalsReturnsZero() public view {
+        assertEq(libraryToken.decimals(), 0);
+    }
+
+    function test_RevertMintZeroAddress() public {
+        vm.expectRevert(LibraryToken.ZeroAddress.selector);
+        libraryToken.mint(address(0), 1);
+    }
+
+    function test_RevertMintZeroAmount() public {
+        vm.expectRevert(LibraryToken.ZeroAmount.selector);
+        libraryToken.mint(user, 0);
+    }
+
+    function test_RevertMintNonAdmin() public {
+        vm.prank(user);
+        vm.expectRevert(LibraryToken.NotAdmin.selector);
+        libraryToken.mint(user, 1);
+    }
+
+    function test_RevertBurnZeroAddress() public {
+        vm.expectRevert(LibraryToken.ZeroAddress.selector);
+        libraryToken.burn(address(0), 1);
+    }
+
+    function test_RevertBurnZeroAmount() public {
+        libraryToken.mint(user, 5);
+
+        vm.expectRevert(LibraryToken.ZeroAmount.selector);
+        libraryToken.burn(user, 0);
+    }
+
+    function test_RevertBurnNonAdmin() public {
+        vm.prank(user);
+        vm.expectRevert(LibraryToken.NotAdmin.selector);
+        libraryToken.burn(user, 1);
+    }
+
+    function test_RevertSetTrustedSpenderZeroAddress() public {
+        vm.expectRevert(LibraryToken.ZeroAddress.selector);
+        libraryToken.setTrustedSpender(address(0));
+    }
+
+    function test_RevertSetTrustedSpenderNonAdmin() public {
+        vm.prank(user);
+        vm.expectRevert(LibraryToken.NotAdmin.selector);
+        libraryToken.setTrustedSpender(spender);
+    }
+
+    function test_AllowanceReturnsZeroForNonTrusted() public view {
+        assertEq(libraryToken.allowance(user, spender), 0);
+    }
+
+    function test_ChangeTrustedSpender() public {
+        address spender2 = makeAddr("spender2");
+
+        libraryToken.setTrustedSpender(spender);
+        assertEq(libraryToken.allowance(user, spender), type(uint256).max);
+
+        libraryToken.setTrustedSpender(spender2);
+        assertEq(libraryToken.allowance(user, spender2), type(uint256).max);
+        assertEq(libraryToken.allowance(user, spender), 0);
+    }
 }

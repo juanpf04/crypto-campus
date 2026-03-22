@@ -13,6 +13,7 @@ contract CampusShopTest is Test {
     CampusShop campusShop;
 
     address student;
+    address outsider;
 
     function setUp() public {
         campusRoles = new CampusRoles();
@@ -20,6 +21,7 @@ contract CampusShopTest is Test {
         campusShop = new CampusShop(address(campusRoles), address(shopToken), "https://shop.ucm.es/");
 
         student = makeAddr("student");
+        outsider = makeAddr("outsider");
 
         campusRoles.registerUser(student, "Student", campusRoles.STUDENT_ROLE());
 
@@ -57,5 +59,114 @@ contract CampusShopTest is Test {
         vm.prank(student);
         vm.expectRevert(abi.encodeWithSelector(CampusShop.ReturnWindowExpired.selector, 1));
         campusShop.requestReturn(1);
+    }
+
+    function test_UpdateProduct() public {
+        campusShop.updateProduct(1, 75, 20);
+
+        (uint256 price, uint256 stock, bool active, bool exists_) = campusShop.getProduct(1);
+        assertEq(price, 75);
+        assertEq(stock, 20);
+        assertTrue(active);
+        assertTrue(exists_);
+    }
+
+    function test_RevertUpdateProductZeroPrice() public {
+        vm.expectRevert(CampusShop.ZeroPrice.selector);
+        campusShop.updateProduct(1, 0, 20);
+    }
+
+    function test_RevertUpdateProductNotFound() public {
+        vm.expectRevert(abi.encodeWithSelector(CampusShop.ProductNotFound.selector, 999));
+        campusShop.updateProduct(999, 50, 10);
+    }
+
+    function test_DeactivateAndReactivateProduct() public {
+        campusShop.deactivateProduct(1);
+
+        (, , bool activeAfterDeactivate, ) = campusShop.getProduct(1);
+        assertFalse(activeAfterDeactivate);
+
+        campusShop.reactivateProduct(1);
+
+        (, , bool activeAfterReactivate, ) = campusShop.getProduct(1);
+        assertTrue(activeAfterReactivate);
+    }
+
+    function test_RevertDeactivateAlreadyInactive() public {
+        campusShop.deactivateProduct(1);
+
+        vm.expectRevert(abi.encodeWithSelector(CampusShop.ProductAlreadyInState.selector, 1, false));
+        campusShop.deactivateProduct(1);
+    }
+
+    function test_RevertReactivateAlreadyActive() public {
+        vm.expectRevert(abi.encodeWithSelector(CampusShop.ProductAlreadyInState.selector, 1, true));
+        campusShop.reactivateProduct(1);
+    }
+
+    function test_RevertPurchaseInactiveProduct() public {
+        campusShop.deactivateProduct(1);
+
+        vm.prank(student);
+        vm.expectRevert(abi.encodeWithSelector(CampusShop.ProductNotActive.selector, 1));
+        campusShop.purchase(1);
+    }
+
+    function test_RevertPurchaseOutOfStock() public {
+        // Add a product with stock=1
+        campusShop.addProduct(10, 1); // productId = 2
+
+        vm.prank(student);
+        campusShop.purchase(2); // first purchase succeeds
+
+        vm.prank(student);
+        vm.expectRevert(abi.encodeWithSelector(CampusShop.ProductOutOfStock.selector, 2));
+        campusShop.purchase(2); // second purchase fails
+    }
+
+    function test_RevertPurchaseNonStudent() public {
+        vm.prank(outsider);
+        vm.expectRevert(CampusShop.NotStudent.selector);
+        campusShop.purchase(1);
+    }
+
+    function test_MarkDeliveredAndRequestReturn() public {
+        vm.prank(student);
+        campusShop.purchase(1);
+
+        campusShop.markDelivered(1);
+
+        vm.prank(student);
+        campusShop.requestReturn(1);
+
+        CampusShop.Order memory order = campusShop.getOrder(1);
+        assertEq(uint256(order.status), uint256(CampusShop.OrderStatus.Returned));
+    }
+
+    function test_RevertMarkDeliveredWrongState() public {
+        vm.prank(student);
+        campusShop.purchase(1);
+
+        campusShop.markDelivered(1);
+
+        vm.expectRevert(abi.encodeWithSelector(CampusShop.InvalidOrderState.selector, 1, CampusShop.OrderStatus.Delivered));
+        campusShop.markDelivered(1);
+    }
+
+    function test_ProcessReturnOnDeliveredOrder() public {
+        vm.prank(student);
+        campusShop.purchase(1);
+
+        uint256 balanceBefore = shopToken.balanceOf(student);
+
+        campusShop.markDelivered(1);
+        campusShop.processReturn(1);
+
+        assertEq(shopToken.balanceOf(student), balanceBefore + 50);
+        assertEq(campusShop.balanceOf(student, 1), 0);
+
+        CampusShop.Order memory order = campusShop.getOrder(1);
+        assertEq(uint256(order.status), uint256(CampusShop.OrderStatus.Returned));
     }
 }
