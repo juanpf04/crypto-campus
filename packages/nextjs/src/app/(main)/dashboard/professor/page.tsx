@@ -10,7 +10,7 @@
  */
 
 import { useAuthUser } from "@/hooks/useAuthUser";
-import { icons } from "@/lib/icons";
+import { icons } from "@/components/ui/icons";
 import { StatCard } from "@/components/shared/StatCard";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { CompoundCard } from "@/components/shared/CompoundCard";

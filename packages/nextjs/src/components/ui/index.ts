@@ -23,3 +23,4 @@ export { Pagination } from "./Pagination";
 export { SearchInput } from "./SearchInput";
 export { FileDropZone } from "./FileDropZone";
 export { FilePreview } from "./FilePreview";
+export { icons } from "./icons";

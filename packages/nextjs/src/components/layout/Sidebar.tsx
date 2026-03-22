@@ -6,7 +6,7 @@ import { NavGroup } from "@/components/shared/NavGroup";
 import { UserMenu } from "@/components/shared/UserMenu";
 import { ThemeSwitcher } from "@/components/shared/ThemeSwitcher";
 import { cn } from "@/lib/utils";
-import { icons } from "@/lib/icons";
+import { icons } from "@/components/ui/icons";
 import type { UserRole } from "@/types";
 
 interface SidebarProps {

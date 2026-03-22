@@ -11,7 +11,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useToast } from "@/hooks/useToast";
-import { icons } from "@/lib/icons";
+import { icons } from "@/components/ui/icons";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { CreditsBanner } from "@/components/shared/CreditsBanner";
 import { PrintJobForm, type PrintJobResult } from "@/components/forms/PrintJobForm";
