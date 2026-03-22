@@ -206,4 +206,476 @@ describe("BadgeSystem", async function () {
             assert.equal(taskEvents[0].args.taskId, 1n);
         });
     });
+
+    describe("deactivateTask", function () {
+        it("Should deactivate a task successfully", async function () {
+            const { badgeSystem, professor1 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createTask([1n, 5n], { account: professor1.account });
+
+            await badgeSystem.write.deactivateTask([1n], { account: professor1.account });
+
+            const task = await badgeSystem.read.getTask([1n]);
+            assert.equal(task.active, false);
+        });
+
+        it("Should revert with TaskNotFound for non-existent task", async function () {
+            const { badgeSystem, professor1 } = await deploySystem();
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.deactivateTask([999n], { account: professor1.account });
+            });
+        });
+
+        it("Should revert with NotTaskOwner when called by different professor", async function () {
+            const { badgeSystem, professor1, professor2 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createTask([1n, 5n], { account: professor1.account });
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.deactivateTask([1n], { account: professor2.account });
+            });
+        });
+    });
+
+    describe("deactivateReward", function () {
+        it("Should deactivate a reward successfully", async function () {
+            const { badgeSystem, professor1 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createReward([1n, 3n, 10n], { account: professor1.account });
+
+            await badgeSystem.write.deactivateReward([1n], { account: professor1.account });
+
+            const reward = await badgeSystem.read.getReward([1n]);
+            assert.equal(reward.active, false);
+        });
+
+        it("Should revert with RewardNotFound for non-existent reward", async function () {
+            const { badgeSystem, professor1 } = await deploySystem();
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.deactivateReward([999n], { account: professor1.account });
+            });
+        });
+
+        it("Should revert with NotRewardOwner when called by different professor", async function () {
+            const { badgeSystem, professor1, professor2 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createReward([1n, 3n, 10n], { account: professor1.account });
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.deactivateReward([1n], { account: professor2.account });
+            });
+        });
+    });
+
+    describe("cancelUseRequest", function () {
+        it("Should cancel a pending use request", async function () {
+            const { badgeSystem, professor1, student1 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createTask([1n, 3n], { account: professor1.account });
+            await badgeSystem.write.awardBadge([1n, student1.account.address], { account: professor1.account });
+            await badgeSystem.write.createReward([1n, 2n, 10n], { account: professor1.account });
+            await badgeSystem.write.redeemReward([1n], { account: student1.account });
+            await badgeSystem.write.requestUseReward([1n], { account: student1.account });
+
+            await badgeSystem.write.cancelUseRequest([1n], { account: student1.account });
+
+            const req = await badgeSystem.read.getUseRequest([1n]);
+            assert.equal(req.status, 4); // Cancelled
+        });
+
+        it("Should revert with UseRequestNotFound for non-existent request", async function () {
+            const { badgeSystem, student1 } = await deploySystem();
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.cancelUseRequest([999n], { account: student1.account });
+            });
+        });
+
+        it("Should revert with NotRequestOwner when called by different student", async function () {
+            const { badgeSystem, professor1, student1, student2 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createTask([1n, 3n], { account: professor1.account });
+            await badgeSystem.write.awardBadge([1n, student1.account.address], { account: professor1.account });
+            await badgeSystem.write.createReward([1n, 2n, 10n], { account: professor1.account });
+            await badgeSystem.write.redeemReward([1n], { account: student1.account });
+            await badgeSystem.write.requestUseReward([1n], { account: student1.account });
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.cancelUseRequest([1n], { account: student2.account });
+            });
+        });
+
+        it("Should revert with InvalidUseRequestState when request is not Pending", async function () {
+            const { badgeSystem, professor1, student1 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createTask([1n, 3n], { account: professor1.account });
+            await badgeSystem.write.awardBadge([1n, student1.account.address], { account: professor1.account });
+            await badgeSystem.write.createReward([1n, 2n, 10n], { account: professor1.account });
+            await badgeSystem.write.redeemReward([1n], { account: student1.account });
+            await badgeSystem.write.requestUseReward([1n], { account: student1.account });
+
+            await badgeSystem.write.cancelUseRequest([1n], { account: student1.account });
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.cancelUseRequest([1n], { account: student1.account });
+            });
+        });
+    });
+
+    describe("rejectUseRequest", function () {
+        it("Should reject a pending use request", async function () {
+            const { badgeSystem, professor1, student1 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createTask([1n, 3n], { account: professor1.account });
+            await badgeSystem.write.awardBadge([1n, student1.account.address], { account: professor1.account });
+            await badgeSystem.write.createReward([1n, 2n, 10n], { account: professor1.account });
+            await badgeSystem.write.redeemReward([1n], { account: student1.account });
+            await badgeSystem.write.requestUseReward([1n], { account: student1.account });
+
+            await badgeSystem.write.rejectUseRequest([1n], { account: professor1.account });
+
+            const req = await badgeSystem.read.getUseRequest([1n]);
+            assert.equal(req.status, 3); // Rejected
+        });
+
+        it("Should revert with UseRequestNotFound for non-existent request", async function () {
+            const { badgeSystem, professor1 } = await deploySystem();
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.rejectUseRequest([999n], { account: professor1.account });
+            });
+        });
+
+        it("Should revert with InvalidUseRequestState when request is not Pending", async function () {
+            const { badgeSystem, professor1, student1 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createTask([1n, 3n], { account: professor1.account });
+            await badgeSystem.write.awardBadge([1n, student1.account.address], { account: professor1.account });
+            await badgeSystem.write.createReward([1n, 2n, 10n], { account: professor1.account });
+            await badgeSystem.write.redeemReward([1n], { account: student1.account });
+            await badgeSystem.write.requestUseReward([1n], { account: student1.account });
+
+            await badgeSystem.write.rejectUseRequest([1n], { account: professor1.account });
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.rejectUseRequest([1n], { account: professor1.account });
+            });
+        });
+
+        it("Should revert with NotRewardOwner when called by different professor", async function () {
+            const { badgeSystem, professor1, professor2, student1 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createTask([1n, 3n], { account: professor1.account });
+            await badgeSystem.write.awardBadge([1n, student1.account.address], { account: professor1.account });
+            await badgeSystem.write.createReward([1n, 2n, 10n], { account: professor1.account });
+            await badgeSystem.write.redeemReward([1n], { account: student1.account });
+            await badgeSystem.write.requestUseReward([1n], { account: student1.account });
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.rejectUseRequest([1n], { account: professor2.account });
+            });
+        });
+    });
+
+    describe("safeBatchTransferFrom soulbound", function () {
+        it("Should revert with SoulboundTransferBlocked", async function () {
+            const batchAbi = parseAbi([
+                "function safeBatchTransferFrom(address from,address to,uint256[] ids,uint256[] values,bytes data)",
+            ]);
+
+            const { badgeSystem, professor1, student1, student2 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createTask([1n, 1n], { account: professor1.account });
+            await badgeSystem.write.awardBadge([1n, student1.account.address], { account: professor1.account });
+
+            await assert.rejects(async () => {
+                await student1.writeContract({
+                    address: badgeSystem.address,
+                    abi: batchAbi,
+                    functionName: "safeBatchTransferFrom",
+                    args: [student1.account.address, student2.account.address, [1n], [1n], "0x"],
+                    account: student1.account,
+                });
+            });
+        });
+    });
+
+    describe("createTask additional reverts", function () {
+        it("Should revert with BadgeTypeNotFound for non-existent badgeTypeId", async function () {
+            const { badgeSystem, professor1 } = await deploySystem();
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.createTask([999n, 5n], { account: professor1.account });
+            });
+        });
+
+        it("Should revert with ZeroRewardAmount when rewardAmount is 0", async function () {
+            const { badgeSystem, professor1 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.createTask([1n, 0n], { account: professor1.account });
+            });
+        });
+    });
+
+    describe("awardBadge additional reverts", function () {
+        it("Should revert with TaskNotFound for non-existent taskId", async function () {
+            const { badgeSystem, professor1, student1 } = await deploySystem();
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.awardBadge([999n, student1.account.address], { account: professor1.account });
+            });
+        });
+
+        it("Should revert with TaskNotActive when task is deactivated", async function () {
+            const { badgeSystem, professor1, student1 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createTask([1n, 5n], { account: professor1.account });
+            await badgeSystem.write.deactivateTask([1n], { account: professor1.account });
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.awardBadge([1n, student1.account.address], { account: professor1.account });
+            });
+        });
+
+        it("Should revert with NotStudent when target is not a student", async function () {
+            const { badgeSystem, professor1, outsider } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createTask([1n, 5n], { account: professor1.account });
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.awardBadge([1n, outsider.account.address], { account: professor1.account });
+            });
+        });
+    });
+
+    describe("createReward additional reverts", function () {
+        it("Should revert with BadgeTypeNotFound for non-existent badgeTypeId", async function () {
+            const { badgeSystem, professor1 } = await deploySystem();
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.createReward([999n, 3n, 10n], { account: professor1.account });
+            });
+        });
+
+        it("Should revert with ZeroCost when badgeCost is 0", async function () {
+            const { badgeSystem, professor1 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.createReward([1n, 0n, 10n], { account: professor1.account });
+            });
+        });
+
+        it("Should revert with NotProfessor when called by student", async function () {
+            const { badgeSystem, professor1, student1 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.createReward([1n, 3n, 10n], { account: student1.account });
+            });
+        });
+    });
+
+    describe("redeemReward additional reverts", function () {
+        it("Should revert with RewardNotFound for non-existent reward", async function () {
+            const { badgeSystem, student1 } = await deploySystem();
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.redeemReward([999n], { account: student1.account });
+            });
+        });
+
+        it("Should revert with RewardInactive when reward is deactivated", async function () {
+            const { badgeSystem, professor1, student1 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createTask([1n, 5n], { account: professor1.account });
+            await badgeSystem.write.awardBadge([1n, student1.account.address], { account: professor1.account });
+            await badgeSystem.write.createReward([1n, 2n, 10n], { account: professor1.account });
+            await badgeSystem.write.deactivateReward([1n], { account: professor1.account });
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.redeemReward([1n], { account: student1.account });
+            });
+        });
+
+        it("Should revert with RewardOutOfSupply when supply is exhausted", async function () {
+            const { badgeSystem, professor1, student1, student2 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            // Give student1 enough badges
+            await badgeSystem.write.createTask([1n, 5n], { account: professor1.account });
+            await badgeSystem.write.awardBadge([1n, student1.account.address], { account: professor1.account });
+            // Give student2 enough badges
+            await badgeSystem.write.createTask([1n, 5n], { account: professor1.account });
+            await badgeSystem.write.awardBadge([2n, student2.account.address], { account: professor1.account });
+
+            // Create reward with supply of 1
+            await badgeSystem.write.createReward([1n, 2n, 1n], { account: professor1.account });
+            await badgeSystem.write.redeemReward([1n], { account: student1.account });
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.redeemReward([1n], { account: student2.account });
+            });
+        });
+
+        it("Should revert with NotStudent when called by non-student", async function () {
+            const { badgeSystem, professor1 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createReward([1n, 2n, 10n], { account: professor1.account });
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.redeemReward([1n], { account: professor1.account });
+            });
+        });
+    });
+
+    describe("requestUseReward additional reverts", function () {
+        it("Should revert with RewardNotFound for non-existent reward", async function () {
+            const { badgeSystem, student1 } = await deploySystem();
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.requestUseReward([999n], { account: student1.account });
+            });
+        });
+
+        it("Should revert with InsufficientRewardTokens when student has no reward tokens", async function () {
+            const { badgeSystem, professor1, student1 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createReward([1n, 2n, 10n], { account: professor1.account });
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.requestUseReward([1n], { account: student1.account });
+            });
+        });
+
+        it("Should revert with NotStudent when called by non-student", async function () {
+            const { badgeSystem, professor1 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createReward([1n, 2n, 10n], { account: professor1.account });
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.requestUseReward([1n], { account: professor1.account });
+            });
+        });
+    });
+
+    describe("approveUseRequest additional reverts", function () {
+        it("Should revert with UseRequestNotFound for non-existent request", async function () {
+            const { badgeSystem, professor1 } = await deploySystem();
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.approveUseRequest([999n], { account: professor1.account });
+            });
+        });
+
+        it("Should revert with InvalidUseRequestState when request is not Pending", async function () {
+            const { badgeSystem, professor1, student1 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createTask([1n, 3n], { account: professor1.account });
+            await badgeSystem.write.awardBadge([1n, student1.account.address], { account: professor1.account });
+            await badgeSystem.write.createReward([1n, 2n, 10n], { account: professor1.account });
+            await badgeSystem.write.redeemReward([1n], { account: student1.account });
+            await badgeSystem.write.requestUseReward([1n], { account: student1.account });
+
+            await badgeSystem.write.approveUseRequest([1n], { account: professor1.account });
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.approveUseRequest([1n], { account: professor1.account });
+            });
+        });
+
+        it("Should revert with NotRewardOwner when called by different professor", async function () {
+            const { badgeSystem, professor1, professor2, student1 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createTask([1n, 3n], { account: professor1.account });
+            await badgeSystem.write.awardBadge([1n, student1.account.address], { account: professor1.account });
+            await badgeSystem.write.createReward([1n, 2n, 10n], { account: professor1.account });
+            await badgeSystem.write.redeemReward([1n], { account: student1.account });
+            await badgeSystem.write.requestUseReward([1n], { account: student1.account });
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.approveUseRequest([1n], { account: professor2.account });
+            });
+        });
+    });
+
+    describe("View functions", function () {
+        it("Should return correct student redemptions via getStudentRedemptions", async function () {
+            const { badgeSystem, professor1, student1 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createTask([1n, 10n], { account: professor1.account });
+            await badgeSystem.write.awardBadge([1n, student1.account.address], { account: professor1.account });
+            await badgeSystem.write.createReward([1n, 2n, 10n], { account: professor1.account });
+
+            await badgeSystem.write.redeemReward([1n], { account: student1.account });
+            await badgeSystem.write.redeemReward([1n], { account: student1.account });
+
+            const redemptions = await badgeSystem.read.getStudentRedemptions([student1.account.address]);
+            assert.equal(redemptions.length, 2);
+            assert.equal(redemptions[0], 1n);
+            assert.equal(redemptions[1], 2n);
+        });
+
+        it("Should return correct redemption struct via getRedemption", async function () {
+            const { badgeSystem, professor1, student1 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createTask([1n, 5n], { account: professor1.account });
+            await badgeSystem.write.awardBadge([1n, student1.account.address], { account: professor1.account });
+            await badgeSystem.write.createReward([1n, 2n, 10n], { account: professor1.account });
+            await badgeSystem.write.redeemReward([1n], { account: student1.account });
+
+            const redemption = await badgeSystem.read.getRedemption([1n]);
+            assert.equal(getAddress(redemption.student), getAddress(student1.account.address));
+            assert.equal(redemption.rewardId, 1n);
+            assert.ok(redemption.timestamp > 0n);
+        });
+
+        it("Should return correct student use requests via getStudentUseRequests", async function () {
+            const { badgeSystem, professor1, student1 } = await deploySystem();
+
+            await badgeSystem.write.createBadgeType({ account: professor1.account });
+            await badgeSystem.write.createTask([1n, 10n], { account: professor1.account });
+            await badgeSystem.write.awardBadge([1n, student1.account.address], { account: professor1.account });
+            await badgeSystem.write.createReward([1n, 2n, 10n], { account: professor1.account });
+
+            await badgeSystem.write.redeemReward([1n], { account: student1.account });
+            await badgeSystem.write.requestUseReward([1n], { account: student1.account });
+
+            await badgeSystem.write.redeemReward([1n], { account: student1.account });
+            await badgeSystem.write.requestUseReward([1n], { account: student1.account });
+
+            const useRequests = await badgeSystem.read.getStudentUseRequests([student1.account.address]);
+            assert.equal(useRequests.length, 2);
+            assert.equal(useRequests[0], 1n);
+            assert.equal(useRequests[1], 2n);
+        });
+    });
 });

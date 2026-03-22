@@ -82,4 +82,65 @@ describe("ShopToken", async function () {
             assert.equal(await token.read.balanceOf([student2.account.address]), 50n);
         });
     });
+
+    describe("setTrustedSpender reverts", function () {
+        it("Should revert on zero address", async function () {
+            const { token } = await deploy();
+
+            await assert.rejects(async () => {
+                await token.write.setTrustedSpender([zeroAddress]);
+            });
+        });
+
+        it("Should revert for non-admin", async function () {
+            const { token, student1, outsider } = await deploy();
+
+            await assert.rejects(async () => {
+                await token.write.setTrustedSpender([student1.account.address], { account: outsider.account });
+            });
+        });
+    });
+
+    describe("burn reverts", function () {
+        it("Should revert on zero address", async function () {
+            const { token } = await deploy();
+
+            await assert.rejects(async () => {
+                await token.write.burn([zeroAddress, 1n]);
+            });
+        });
+
+        it("Should revert on zero amount", async function () {
+            const { token, student1 } = await deploy();
+
+            await token.write.mint([student1.account.address, 100n]);
+
+            await assert.rejects(async () => {
+                await token.write.burn([student1.account.address, 0n]);
+            });
+        });
+
+        it("Should revert for non-admin", async function () {
+            const { token, student1, outsider } = await deploy();
+
+            await token.write.mint([student1.account.address, 100n]);
+
+            await assert.rejects(async () => {
+                await token.write.burn([student1.account.address, 1n], { account: outsider.account });
+            });
+        });
+    });
+
+    describe("allowance edge cases", function () {
+        it("Should return 0 for non-trusted, non-approved spender", async function () {
+            const { token, student1, outsider } = await deploy();
+
+            await token.write.mint([student1.account.address, 100n]);
+
+            assert.equal(
+                await token.read.allowance([student1.account.address, outsider.account.address]),
+                0n,
+            );
+        });
+    });
 });

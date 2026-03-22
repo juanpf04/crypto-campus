@@ -534,4 +534,239 @@ describe("CampusRoles", async function () {
             assert.equal(await campusRoles.read.isStudent([user3.account.address]), false);
         });
     });
+
+    describe("changeRole edge cases", function () {
+        it("Should revert changeRole with zero address", async function () {
+            const { campusRoles, librarianRole } = await deploy();
+
+            await assert.rejects(async () => {
+                await campusRoles.write.changeRole([zeroAddress, librarianRole]);
+            });
+        });
+
+        it("Should change role from STUDENT to DEFAULT_ADMIN_ROLE", async function () {
+            const { campusRoles, user1, studentRole, adminRole } = await deploy();
+
+            await campusRoles.write.registerUser([
+                user1.account.address,
+                "Alice",
+                studentRole,
+            ]);
+
+            await campusRoles.write.changeRole([user1.account.address, adminRole]);
+
+            assert.equal(await campusRoles.read.isStudent([user1.account.address]), false);
+            assert.equal(await campusRoles.read.getUserRole([user1.account.address]), adminRole);
+        });
+
+        it("After changeRole to ADMIN, user should have admin role via hasRole and isAdmin", async function () {
+            const { campusRoles, user1, studentRole, adminRole } = await deploy();
+
+            await campusRoles.write.registerUser([
+                user1.account.address,
+                "Alice",
+                studentRole,
+            ]);
+
+            await campusRoles.write.changeRole([user1.account.address, adminRole]);
+
+            assert.equal(
+                await campusRoles.read.hasRole([adminRole, user1.account.address]),
+                true,
+            );
+            assert.equal(await campusRoles.read.isAdmin([user1.account.address]), true);
+        });
+    });
+
+    describe("registerUser edge cases", function () {
+        it("Should register with empty name and store it", async function () {
+            const { campusRoles, user1, studentRole } = await deploy();
+
+            await campusRoles.write.registerUser([
+                user1.account.address,
+                "",
+                studentRole,
+            ]);
+
+            const [name, role, registered] = await campusRoles.read.getUserInfo([user1.account.address]);
+            assert.equal(name, "");
+            assert.equal(role, studentRole);
+            assert.equal(registered, true);
+        });
+
+        it("Should register user with ADMIN role but isRegistered returns false", async function () {
+            const { campusRoles, user1, adminRole } = await deploy();
+
+            await campusRoles.write.registerUser([
+                user1.account.address,
+                "AdminUser",
+                adminRole,
+            ]);
+
+            assert.equal(await campusRoles.read.isAdmin([user1.account.address]), true);
+            assert.equal(await campusRoles.read.isRegistered([user1.account.address]), false);
+        });
+
+        it("Should register multiple users with different roles and verify isolation via getUserInfo", async function () {
+            const { campusRoles, user1, user2, user3, studentRole, librarianRole, professorRole } = await deploy();
+
+            await campusRoles.write.registerUser([user1.account.address, "Student1", studentRole]);
+            await campusRoles.write.registerUser([user2.account.address, "Librarian1", librarianRole]);
+            await campusRoles.write.registerUser([user3.account.address, "Professor1", professorRole]);
+
+            const [name1, role1, reg1] = await campusRoles.read.getUserInfo([user1.account.address]);
+            assert.equal(name1, "Student1");
+            assert.equal(role1, studentRole);
+            assert.equal(reg1, true);
+
+            const [name2, role2, reg2] = await campusRoles.read.getUserInfo([user2.account.address]);
+            assert.equal(name2, "Librarian1");
+            assert.equal(role2, librarianRole);
+            assert.equal(reg2, true);
+
+            const [name3, role3, reg3] = await campusRoles.read.getUserInfo([user3.account.address]);
+            assert.equal(name3, "Professor1");
+            assert.equal(role3, professorRole);
+            assert.equal(reg3, true);
+        });
+    });
+
+    describe("removeUser edge cases", function () {
+        it("Should revert when removing user registered with ADMIN role (DEFAULT_ADMIN_ROLE == NO_ROLE sentinel)", async function () {
+            const { campusRoles, user1, adminRole } = await deploy();
+
+            await campusRoles.write.registerUser([
+                user1.account.address,
+                "AdminUser",
+                adminRole,
+            ]);
+
+            // DEFAULT_ADMIN_ROLE == bytes32(0) == NO_ROLE, so removeUser sees role == NO_ROLE
+            // and reverts with UserNotRegistered. This is a known design quirk.
+            await assert.rejects(async () => {
+                await campusRoles.write.removeUser([user1.account.address]);
+            });
+        });
+
+        it("Should return empty struct from getUserInfo after removal", async function () {
+            const { campusRoles, user1, studentRole } = await deploy();
+
+            await campusRoles.write.registerUser([
+                user1.account.address,
+                "Alice",
+                studentRole,
+            ]);
+
+            await campusRoles.write.removeUser([user1.account.address]);
+
+            const [name, role, registered] = await campusRoles.read.getUserInfo([user1.account.address]);
+            assert.equal(name, "");
+            assert.equal(role, NO_ROLE);
+            assert.equal(registered, false);
+        });
+
+        it("Should return false for hasRole after removal", async function () {
+            const { campusRoles, user1, studentRole } = await deploy();
+
+            await campusRoles.write.registerUser([
+                user1.account.address,
+                "Alice",
+                studentRole,
+            ]);
+
+            await campusRoles.write.removeUser([user1.account.address]);
+
+            assert.equal(
+                await campusRoles.read.hasRole([studentRole, user1.account.address]),
+                false,
+            );
+        });
+    });
+
+    describe("AccessControl inherited functions", function () {
+        it("Should return DEFAULT_ADMIN_ROLE as role admin for each role", async function () {
+            const { campusRoles, adminRole, studentRole, librarianRole, professorRole } = await deploy();
+
+            assert.equal(await campusRoles.read.getRoleAdmin([studentRole]), adminRole);
+            assert.equal(await campusRoles.read.getRoleAdmin([librarianRole]), adminRole);
+            assert.equal(await campusRoles.read.getRoleAdmin([professorRole]), adminRole);
+        });
+
+        it("Should support AccessControl interface (0x7965db0b)", async function () {
+            const { campusRoles } = await deploy();
+
+            assert.equal(
+                await campusRoles.read.supportsInterface(["0x7965db0b"]),
+                true,
+            );
+        });
+    });
+
+    describe("Stress and edge cases", function () {
+        it("Should register 3 users, remove the middle one, and leave others unaffected", async function () {
+            const { campusRoles, user1, user2, user3, studentRole, librarianRole, professorRole } = await deploy();
+
+            await campusRoles.write.registerUser([user1.account.address, "First", studentRole]);
+            await campusRoles.write.registerUser([user2.account.address, "Middle", librarianRole]);
+            await campusRoles.write.registerUser([user3.account.address, "Last", professorRole]);
+
+            await campusRoles.write.removeUser([user2.account.address]);
+
+            assert.equal(await campusRoles.read.isRegistered([user1.account.address]), true);
+            assert.equal(await campusRoles.read.isStudent([user1.account.address]), true);
+            const [name1] = await campusRoles.read.getUserInfo([user1.account.address]);
+            assert.equal(name1, "First");
+
+            assert.equal(await campusRoles.read.isRegistered([user2.account.address]), false);
+            assert.equal(await campusRoles.read.isLibrarian([user2.account.address]), false);
+
+            assert.equal(await campusRoles.read.isRegistered([user3.account.address]), true);
+            assert.equal(await campusRoles.read.isProfessor([user3.account.address]), true);
+            const [name3] = await campusRoles.read.getUserInfo([user3.account.address]);
+            assert.equal(name3, "Last");
+        });
+
+        it("Should register, remove, re-register with DIFFERENT role, verify old role gone and new role active", async function () {
+            const { campusRoles, user1, studentRole, professorRole } = await deploy();
+
+            await campusRoles.write.registerUser([
+                user1.account.address,
+                "Alice",
+                studentRole,
+            ]);
+
+            assert.equal(await campusRoles.read.isStudent([user1.account.address]), true);
+
+            await campusRoles.write.removeUser([user1.account.address]);
+
+            assert.equal(await campusRoles.read.isStudent([user1.account.address]), false);
+            assert.equal(
+                await campusRoles.read.hasRole([studentRole, user1.account.address]),
+                false,
+            );
+
+            await campusRoles.write.registerUser([
+                user1.account.address,
+                "Alice Prof",
+                professorRole,
+            ]);
+
+            assert.equal(await campusRoles.read.isProfessor([user1.account.address]), true);
+            assert.equal(await campusRoles.read.isStudent([user1.account.address]), false);
+            assert.equal(
+                await campusRoles.read.hasRole([studentRole, user1.account.address]),
+                false,
+            );
+            assert.equal(
+                await campusRoles.read.hasRole([professorRole, user1.account.address]),
+                true,
+            );
+            assert.equal(await campusRoles.read.getUserRole([user1.account.address]), professorRole);
+
+            const [name, role, registered] = await campusRoles.read.getUserInfo([user1.account.address]);
+            assert.equal(name, "Alice Prof");
+            assert.equal(role, professorRole);
+            assert.equal(registered, true);
+        });
+    });
 });

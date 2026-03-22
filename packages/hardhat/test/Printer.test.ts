@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { network } from "hardhat";
-import { getAddress } from "viem";
+import { getAddress, zeroAddress } from "viem";
 
 // Basic integration tests for Printer using Hardhat + viem.
 describe("Printer", async function () {
@@ -255,6 +255,78 @@ describe("Printer", async function () {
             assert.equal(
                 await printer.read.getCredits([student2.account.address]),
                 150n,
+            );
+        });
+    });
+
+
+    describe("setCredits reverts", function () {
+        it("Should revert on zero address", async function () {
+            const { printer } = await deployWithStudent();
+
+            await assert.rejects(async () => {
+                await printer.write.setCredits([zeroAddress, 100n]);
+            });
+        });
+
+        it("Should revert for non-admin caller", async function () {
+            const { printer, student } = await deployWithStudent();
+
+            await assert.rejects(async () => {
+                await printer.write.setCredits([student.account.address, 100n], { account: student.account });
+            });
+        });
+    });
+
+
+    describe("print reverts", function () {
+        it("Should revert on zero address", async function () {
+            const { printer } = await deployWithStudent();
+
+            await assert.rejects(async () => {
+                await printer.write.print([zeroAddress, 10n]);
+            });
+        });
+
+        it("Should revert on zero pages", async function () {
+            const { printer, student } = await deployWithStudent();
+
+            await printer.write.setCredits([student.account.address, 100n]);
+
+            await assert.rejects(async () => {
+                await printer.write.print([student.account.address, 0n]);
+            });
+        });
+
+        it("Should revert for non-admin caller", async function () {
+            const { printer, student } = await deployWithStudent();
+
+            await assert.rejects(async () => {
+                await printer.write.print([student.account.address, 10n], { account: student.account });
+            });
+        });
+    });
+
+
+    describe("INITIAL_CREDITS default behavior", function () {
+        it("Should print using default INITIAL_CREDITS without calling setCredits", async function () {
+            const { printer, student } = await deployWithStudent();
+
+            // Print without ever calling setCredits — should use INITIAL_CREDITS (200)
+            await printer.write.print([student.account.address, 50n]);
+
+            assert.equal(
+                await printer.read.getCredits([student.account.address]),
+                150n,
+            );
+        });
+
+        it("Should return INITIAL_CREDITS for newly registered student without setCredits", async function () {
+            const { printer, student } = await deployWithStudent();
+
+            assert.equal(
+                await printer.read.getCredits([student.account.address]),
+                200n,
             );
         });
     });
