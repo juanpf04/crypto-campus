@@ -7,12 +7,12 @@
  * - Imágenes: muestra un thumbnail con object-fit contain.
  * - Otros (DOCX, XLSX, etc.): muestra icono de documento con nombre y tamaño.
  *
- * Incluye un botón para cambiar de archivo (re-abre el file picker).
+ * Incluye un botón para cambiar de archivo (input nativo, sin react-dropzone
+ * para evitar interferencias con iframes y descargas no deseadas).
  * Reutilizable para cualquier módulo con subida de archivos.
  */
 
-import { useEffect, useState } from "react";
-import { useDropzone, type Accept } from "react-dropzone";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { icons } from "@/components/ui/icons";
 import { Modal } from "@/components/ui/Modal";
@@ -24,8 +24,8 @@ interface FilePreviewProps {
   pageCount?: number;
   /** Callback para cambiar el archivo */
   onChangeFile?: (file: File) => void;
-  /** Tipos MIME aceptados para el cambio (igual que el dropzone padre) */
-  accept?: Accept;
+  /** String de accept para el input nativo (ej: ".pdf,.docx,.jpg") */
+  acceptString?: string;
   /** Clase CSS adicional para el contenedor */
   className?: string;
 }
@@ -44,42 +44,56 @@ function getFileCategory(type: string): "pdf" | "image" | "other" {
   return "other";
 }
 
-export function FilePreview({ file, pageCount, onChangeFile, accept, className }: FilePreviewProps) {
+export function FilePreview({ file, pageCount, onChangeFile, acceptString, className }: FilePreviewProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const category = getFileCategory(file.type);
 
-  // Dropzone solo para el botón de cambiar archivo
-  const { getRootProps, getInputProps, open } = useDropzone({
-    accept,
-    multiple: false,
-    noClick: true,
-    noDrag: true,
-    onDropAccepted: (files) => {
-      if (files[0] && onChangeFile) onChangeFile(files[0]);
-    },
-  });
-
-  // Generar URL temporal para preview
+  // Generar URL temporal para preview (solo para PDF e imágenes)
   useEffect(() => {
+    if (category === "other") {
+      setPreviewUrl(null);
+      return;
+    }
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
     return () => URL.revokeObjectURL(url);
-  }, [file]);
+  }, [file, category]);
 
   useEffect(() => {
     setIsExpanded(false);
   }, [file]);
 
+  // Handler para el input nativo de cambio de archivo
+  function handleFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const selected = e.target.files?.[0];
+    if (selected && onChangeFile) {
+      onChangeFile(selected);
+    }
+    // Reset del input para permitir re-seleccionar el mismo archivo
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
   return (
     <div
-      {...getRootProps()}
       className={cn(
         "relative overflow-hidden rounded-lg border border-border-default bg-card",
         className,
       )}
     >
-      <input {...getInputProps()} />
+      {/* Input nativo oculto para cambiar archivo */}
+      {onChangeFile && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={acceptString}
+          className="hidden"
+          onChange={handleFileInputChange}
+        />
+      )}
 
       {/* Preview visual — más grande para que se vea bien */}
       <div className="flex items-center justify-center bg-black/5 h-64">
@@ -137,8 +151,8 @@ export function FilePreview({ file, pageCount, onChangeFile, accept, className }
           {onChangeFile && (
             <button
               type="button"
-              onClick={open}
-              className="text-xs font-medium text-primary hover:text-primary-hover transition-colors cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
+              className="rounded-md bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary hover:text-white transition-colors cursor-pointer"
             >
               Cambiar archivo
             </button>

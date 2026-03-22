@@ -15,6 +15,8 @@ import { cookies } from "next/headers";
 import { sessionOptions, type SessionData } from "@/lib/session";
 import { readFile, stat } from "fs/promises";
 import { join } from "path";
+import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 const UPLOAD_DIR = join(process.cwd(), "uploads", "prints");
 
@@ -50,6 +52,21 @@ export async function GET(
   // Prevenir path traversal
   if (filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
     return NextResponse.json({ error: "Nombre de archivo no válido" }, { status: 400 });
+  }
+
+  // Verificar ownership: el archivo debe pertenecer al usuario o el usuario debe ser ADMIN
+  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
+  const prisma = new PrismaClient({ adapter });
+  try {
+    const log = await prisma.printLog.findFirst({ where: { filePath: { contains: filename } } });
+    if (log) {
+      const user = await prisma.user.findUnique({ where: { id: session.userId } });
+      if (log.userId !== session.userId && user?.role !== "ADMIN") {
+        return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+      }
+    }
+  } finally {
+    await prisma.$disconnect();
   }
 
   const filePath = join(UPLOAD_DIR, filename);

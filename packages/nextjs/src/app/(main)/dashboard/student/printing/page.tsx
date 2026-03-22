@@ -8,12 +8,14 @@
  * - Sección principal: Simulador de impresión completo dentro de una Card
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { icons } from "@/components/ui/icons";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { CreditsBanner } from "@/components/shared/CreditsBanner";
+import { PrintingOverlay } from "@/components/shared/PrintingOverlay";
 import { PrintJobForm, type PrintJobResult } from "@/components/forms/PrintJobForm";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
@@ -25,6 +27,7 @@ interface Printer {
 }
 
 export default function StudentPrintingPage() {
+  const router = useRouter();
   const { addToast } = useToast();
 
   const [credits, setCredits] = useState<number | null>(null);
@@ -32,39 +35,32 @@ export default function StudentPrintingPage() {
   const [totalPrints, setTotalPrints] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // Carga inicial: créditos + impresoras + contar logs del usuario
+  // Estado de la pantalla de impresión
+  const [printingState, setPrintingState] = useState<{
+    active: boolean;
+    filename: string;
+    promise: Promise<string | null> | null;
+  }>({ active: false, filename: "", promise: null });
+
+  // Carga inicial: créditos + impresoras + total de impresiones
   useEffect(() => {
     Promise.all([
       fetch("/api/printer/credits").then((r) => r.json()),
       fetch("/api/printer").then((r) => r.json()),
-      fetch("/api/printer/logs?limit=1&offset=0").then((r) => r.json()),
+      fetch("/api/printer/logs?limit=200&offset=0").then((r) => r.json()),
     ])
       .then(([creditsData, printersData, logsData]) => {
         setCredits(creditsData.availableCredits ?? 0);
         setPrinters(printersData ?? []);
-        // Para obtener el total real necesitaríamos un endpoint de count,
-        // por ahora usamos la longitud como indicador mínimo
         setTotalPrints(Array.isArray(logsData) ? logsData.length : 0);
       })
       .catch(() => addToast("Error al cargar datos de impresión", "danger"))
       .finally(() => setLoading(false));
   }, []);
 
-  // Obtener total real de impresiones (haciendo fetch de todas con offset alto)
-  useEffect(() => {
-    if (loading) return;
-    // Petición para estimar el total: pedimos un límite alto
-    fetch("/api/printer/logs?limit=100&offset=0")
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) setTotalPrints(data.length);
-      })
-      .catch(() => {});
-  }, [loading]);
-
-  // Ejecutar trabajo de impresión
-  async function handlePrint(data: PrintJobResult) {
-    const res = await fetch("/api/printer/execute", {
+  // Ejecutar trabajo de impresión: crea una promise y activa el overlay
+  function handlePrint(data: PrintJobResult) {
+    const printPromise = fetch("/api/printer/execute", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -83,27 +79,50 @@ export default function StudentPrintingPage() {
         fileSize: data.fileSize,
         filePath: data.filePath,
       }),
+    }).then(async (res) => {
+      const body = await res.json();
+      if (!res.ok) {
+        addToast(body.error ?? "Error al ejecutar impresión", "danger");
+        return null;
+      }
+      setCredits(body.printLog?.creditsAfter ?? credits);
+      setTotalPrints((prev) => prev + 1);
+      return (body.printLog?.id as string) ?? null;
+    }).catch(() => {
+      addToast("Error al ejecutar impresión", "danger");
+      return null;
     });
 
-    const body = await res.json();
-
-    if (!res.ok) {
-      addToast(body.error ?? "Error al ejecutar impresión", "danger");
-      throw new Error(body.error);
-    }
-
-    addToast("Impresión ejecutada correctamente", "success");
-
-    // Actualizar créditos y contador
-    setCredits(body.printLog?.creditsAfter ?? credits);
-    setTotalPrints((prev) => prev + 1);
+    // Activar overlay de impresión
+    setPrintingState({ active: true, filename: data.filename, promise: printPromise });
   }
+
+  // Cuando la animación y el backend terminan
+  const handlePrintComplete = useCallback((logId: string | null) => {
+    setPrintingState({ active: false, filename: "", promise: null });
+    if (logId) {
+      addToast("Impresión completada correctamente", "success");
+      // replace para que "atrás" vuelva al formulario, no al overlay
+      router.replace(`/dashboard/student/printing/history/${logId}`);
+    }
+  }, [router, addToast]);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
         <Spinner size="lg" />
       </div>
+    );
+  }
+
+  // Si está imprimiendo, mostrar overlay en vez del formulario
+  if (printingState.active && printingState.promise) {
+    return (
+      <PrintingOverlay
+        filename={printingState.filename}
+        printPromise={printingState.promise}
+        onComplete={handlePrintComplete}
+      />
     );
   }
 

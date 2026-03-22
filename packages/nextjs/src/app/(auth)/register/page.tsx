@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { RegisterForm, type RegisterFormData } from "@/components/forms";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui";
@@ -42,9 +43,9 @@ export default function RegisterPage() {
           <RegisterForm onSubmit={handleRegister} />
           <p className="mt-4 text-center text-sm text-text-muted">
             ¿Ya tienes cuenta?{" "}
-            <a href="/login" className="font-medium text-primary hover:underline">
+            <Link href="/login" className="font-medium text-primary hover:underline">
               Inicia sesión
-            </a>
+            </Link>
           </p>
         </CardBody>
       </Card>

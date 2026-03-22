@@ -317,6 +317,7 @@ export function PrintJobForm({
             file={file}
             pageCount={filePages}
             onChangeFile={handleFile}
+            acceptString=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
           />
         )}
       </div>

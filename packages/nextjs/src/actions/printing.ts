@@ -5,7 +5,7 @@
  * impresión on-chain (créditos, trabajos de impresión, impresoras fisicas).
  *
  * Funcionalidades principales:
- * - Lectura de configuración del contrato Printer (INITIAL_CREDITS, accessControl).
+ * - Lectura de configuración del contrato Printer (INITIAL_CREDITS, campusRoles).
  * - Consulta y actualización de créditos de impresión (on-chain).
  * - Ejecución de trabajos de impresión (consumo de créditos).
  * - Gestión de impresoras físicas en BD (create, update, list).
@@ -155,11 +155,11 @@ async function readCredits(address: string): Promise<bigint> {
 
 /**
  * Obtiene la configuración de inicialización del contrato Printer.
- * @returns Dirección del contrato, accessControl y créditos iniciales por estudiante.
+ * @returns Dirección del contrato, campusRoles y créditos iniciales por estudiante.
  */
 export async function getPrinterConfig() {
 	try {
-		const [initialCredits, accessControl] = await Promise.all([
+		const [initialCredits, campusRoles] = await Promise.all([
 			publicClient.readContract({
 				address: CONTRACT_ADDRESSES.printer,
 				abi: PRINTER_ABI,
@@ -168,13 +168,13 @@ export async function getPrinterConfig() {
 			publicClient.readContract({
 				address: CONTRACT_ADDRESSES.printer,
 				abi: PRINTER_ABI,
-				functionName: "accessControl",
+				functionName: "campusRoles",
 			}) as Promise<`0x${string}`>,
 		]);
 
 		return {
 			contractAddress: CONTRACT_ADDRESSES.printer,
-			accessControl,
+			campusRoles,
 			initialCredits: Number(initialCredits),
 		};
 	} catch (error) {

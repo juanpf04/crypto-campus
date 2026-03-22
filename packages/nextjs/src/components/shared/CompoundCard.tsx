@@ -46,9 +46,9 @@ export function CompoundCard({ icon, title, slots, className }: CompoundCardProp
             <div
               key={slot.label}
               className={cn(
-                i === 0 && "pr-4",
-                i > 0 && i < slots.length - 1 && "px-4",
-                i === slots.length - 1 && slots.length > 1 && "pl-4",
+                i === 0 && "pr-6",
+                i > 0 && i < slots.length - 1 && "px-6",
+                i === slots.length - 1 && slots.length > 1 && "pl-6",
               )}
             >
               <p className={cn("text-xl font-bold", slot.color ?? "text-text")}>

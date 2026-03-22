@@ -234,12 +234,6 @@ export default function StudentPrintDetailPage() {
               }
             />
             <DetailField label="Créditos restantes" value={log.creditsAfter} />
-            <DetailField
-              label="Tx Hash (blockchain)"
-              value={
-                <span className="font-mono text-xs break-all">{log.txHash}</span>
-              }
-            />
           </div>
         </Card>
       </div>

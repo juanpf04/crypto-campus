@@ -112,6 +112,7 @@ export default function StudentPrintHistoryPage() {
                   <TableHead>Copias</TableHead>
                   <TableHead>Color</TableHead>
                   <TableHead>Créditos</TableHead>
+                  <TableHead className="w-10"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -141,6 +142,14 @@ export default function StudentPrintHistoryPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="warning">{log.creditsUsed}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <span className="grid h-7 w-7 place-items-center rounded-md bg-primary/10 text-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                          <path d="M7 17 17 7" />
+                          <path d="M7 7h10v10" />
+                        </svg>
+                      </span>
                     </TableCell>
                   </TableRow>
                 ))}

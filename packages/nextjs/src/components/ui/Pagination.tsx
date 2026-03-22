@@ -32,27 +32,35 @@ export function Pagination({ offset, limit, total, onChange }: PaginationProps) 
 
   return (
     <div className="flex items-center justify-between px-1 pt-4">
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={!hasPrev}
-        onClick={() => onChange(Math.max(offset - limit, 0))}
-      >
-        Anterior
-      </Button>
+      {/* Anterior: solo visible si no es la primera página */}
+      {hasPrev ? (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onChange(Math.max(offset - limit, 0))}
+        >
+          Anterior
+        </Button>
+      ) : (
+        <div />
+      )}
 
       <span className="text-sm text-text-muted">
         Página {currentPage} de {totalPages}
       </span>
 
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={!hasNext}
-        onClick={() => onChange(offset + limit)}
-      >
-        Siguiente
-      </Button>
+      {/* Siguiente: solo visible si no es la última página */}
+      {hasNext ? (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onChange(offset + limit)}
+        >
+          Siguiente
+        </Button>
+      ) : (
+        <div />
+      )}
     </div>
   );
 }

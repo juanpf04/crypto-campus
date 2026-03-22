@@ -4,31 +4,68 @@
  * Dashboard del ADMIN.
  *
  * Visión global de la plataforma para el administrador/secretario:
- * - Usuarios: totales, por rol, registros recientes
- * - Biblioteca: estado general del servicio (libros, préstamos activos, vencidos)
- * - Tienda: productos, pedidos, tokens SHOP en circulación
- * - Insignias: tipos creados, badges otorgados globalmente
- * - Impresión: créditos totales asignados, páginas impresas
+ * - Usuarios: totales (clicable → lista), por rol (datos reales)
+ * - Biblioteca: estado general del servicio
+ * - Tienda: productos, pedidos, tokens SHOP
+ * - Insignias: tipos creados, badges otorgados
+ * - Impresión: impresoras activas (clicable → gestión), impresiones (clicable → historial)
  */
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useAuthUser } from "@/hooks/useAuthUser";
 import { icons } from "@/components/ui/icons";
 import { StatCard } from "@/components/shared/StatCard";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { CompoundCard } from "@/components/shared/CompoundCard";
 import { DashboardGreeting } from "@/components/shared/DashboardGreeting";
+import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
+
+/** Icono de flecha diagonal ↗ para cards clicables */
+function ClickableArrow() {
+  return (
+    <span className="absolute top-4 right-4 grid h-8 w-8 place-items-center rounded-md bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+        <line x1="7" y1="17" x2="17" y2="7" />
+        <polyline points="7 7 17 7 17 17" />
+      </svg>
+    </span>
+  );
+}
+
+interface UserCounts {
+  total: number;
+  students: number;
+  professors: number;
+  librarians: number;
+  admins: number;
+}
 
 export default function AdminDashboard() {
   const { user, loading } = useAuthUser();
 
-  // Datos reales de impresión
+  const [userCounts, setUserCounts] = useState<UserCounts | null>(null);
   const [activePrinters, setActivePrinters] = useState<number | string>("—");
   const [totalPrintLogs, setTotalPrintLogs] = useState<number | string>("—");
 
   useEffect(() => {
     if (!user) return;
+
+    // Usuarios registrados con conteo por rol
+    fetch("/api/admin/users")
+      .then((r) => r.json())
+      .then((data) => {
+        const users = data.users ?? [];
+        setUserCounts({
+          total: users.length,
+          students: users.filter((u: { role: string }) => u.role === "STUDENT").length,
+          professors: users.filter((u: { role: string }) => u.role === "PROFESSOR").length,
+          librarians: users.filter((u: { role: string }) => u.role === "LIBRARIAN").length,
+          admins: users.filter((u: { role: string }) => u.role === "ADMIN").length,
+        });
+      })
+      .catch(() => {});
 
     // Impresoras activas
     fetch("/api/printer")
@@ -62,22 +99,32 @@ export default function AdminDashboard() {
       <section className="space-y-4">
         <SectionTitle icon={icons.users}>Usuarios</SectionTitle>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title="Usuarios totales"
-            value="—"
-            subtitle="Registrados en la plataforma"
-            icon={icons.users}
-          />
+          {/* Card clicable → lista de usuarios */}
+          <Link href="/dashboard/admin/users" className="group">
+            <Card className="relative h-full hover:border-primary/50 transition-colors">
+              <div className="flex items-center gap-4">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                  {icons.users}
+                </div>
+                <div>
+                  <p className="text-sm text-text-muted">Usuarios totales</p>
+                  <p className="text-2xl font-bold text-text">{userCounts?.total ?? "—"}</p>
+                  <p className="text-xs text-text-muted">Registrados en la plataforma</p>
+                </div>
+              </div>
+              <ClickableArrow />
+            </Card>
+          </Link>
 
           <CompoundCard
             icon={icons.student}
             title="Usuarios por rol"
             className="sm:col-span-2 lg:col-span-3"
             slots={[
-              { value: "—", label: "Estudiantes", color: "text-primary" },
-              { value: "—", label: "Profesores", color: "text-success" },
-              { value: "—", label: "Bibliotecarios", color: "text-warning" },
-              { value: "—", label: "Admins", color: "text-danger" },
+              { value: userCounts?.students ?? "—", label: "Estudiantes", color: "text-primary" },
+              { value: userCounts?.professors ?? "—", label: "Profesores", color: "text-success" },
+              { value: userCounts?.librarians ?? "—", label: "Bibliotecarios", color: "text-warning" },
+              { value: userCounts?.admins ?? "—", label: "Admins", color: "text-danger" },
             ]}
           />
         </div>
@@ -87,24 +134,9 @@ export default function AdminDashboard() {
       <section className="space-y-4">
         <SectionTitle icon={icons.library}>Biblioteca</SectionTitle>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard
-            title="Libros en catálogo"
-            value="—"
-            subtitle="Títulos registrados"
-            icon={icons.library}
-          />
-          <StatCard
-            title="Préstamos activos"
-            value="—"
-            subtitle="En curso"
-            icon={icons.loans}
-          />
-          <StatCard
-            title="Tokens LIB en circulación"
-            value="—"
-            subtitle="Total emitidos"
-            icon={icons.token}
-          />
+          <StatCard title="Libros en catálogo" value="—" subtitle="Títulos registrados" icon={icons.library} />
+          <StatCard title="Préstamos activos" value="—" subtitle="En curso" icon={icons.loans} />
+          <StatCard title="Tokens LIB en circulación" value="—" subtitle="Total emitidos" icon={icons.token} />
         </div>
       </section>
 
@@ -112,24 +144,9 @@ export default function AdminDashboard() {
       <section className="space-y-4">
         <SectionTitle icon={icons.shop}>Tienda</SectionTitle>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard
-            title="Productos activos"
-            value="—"
-            subtitle="En el catálogo"
-            icon={icons.shop}
-          />
-          <StatCard
-            title="Pedidos totales"
-            value="—"
-            subtitle="Realizados en la plataforma"
-            icon={icons.orders}
-          />
-          <StatCard
-            title="Tokens SHOP en circulación"
-            value="—"
-            subtitle="Total emitidos"
-            icon={icons.token}
-          />
+          <StatCard title="Productos activos" value="—" subtitle="En el catálogo" icon={icons.shop} />
+          <StatCard title="Pedidos totales" value="—" subtitle="Realizados en la plataforma" icon={icons.orders} />
+          <StatCard title="Tokens SHOP en circulación" value="—" subtitle="Total emitidos" icon={icons.token} />
         </div>
       </section>
 
@@ -137,18 +154,8 @@ export default function AdminDashboard() {
       <section className="space-y-4">
         <SectionTitle icon={icons.badge}>Insignias</SectionTitle>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard
-            title="Tipos de insignia"
-            value="—"
-            subtitle="Creados por profesores"
-            icon={icons.badge}
-          />
-          <StatCard
-            title="Insignias otorgadas"
-            value="—"
-            subtitle="Total en la plataforma"
-            icon={icons.badge}
-          />
+          <StatCard title="Tipos de insignia" value="—" subtitle="Creados por profesores" icon={icons.badge} />
+          <StatCard title="Insignias otorgadas" value="—" subtitle="Total en la plataforma" icon={icons.badge} />
         </div>
       </section>
 
@@ -156,18 +163,39 @@ export default function AdminDashboard() {
       <section className="space-y-4">
         <SectionTitle icon={icons.print}>Impresión</SectionTitle>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard
-            title="Impresoras activas"
-            value={activePrinters}
-            subtitle="Disponibles para imprimir"
-            icon={icons.print}
-          />
-          <StatCard
-            title="Impresiones realizadas"
-            value={totalPrintLogs}
-            subtitle="Total en la plataforma"
-            icon={icons.orders}
-          />
+          {/* Impresoras → gestión de impresoras */}
+          <Link href="/dashboard/admin/printing/printers" className="group">
+            <Card className="relative h-full hover:border-primary/50 transition-colors">
+              <div className="flex items-center gap-4">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                  {icons.print}
+                </div>
+                <div>
+                  <p className="text-sm text-text-muted">Impresoras activas</p>
+                  <p className="text-2xl font-bold text-text">{activePrinters}</p>
+                  <p className="text-xs text-text-muted">Disponibles para imprimir</p>
+                </div>
+              </div>
+              <ClickableArrow />
+            </Card>
+          </Link>
+
+          {/* Impresiones → historial */}
+          <Link href="/dashboard/admin/printing/logs" className="group">
+            <Card className="relative h-full hover:border-primary/50 transition-colors">
+              <div className="flex items-center gap-4">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                  {icons.orders}
+                </div>
+                <div>
+                  <p className="text-sm text-text-muted">Impresiones realizadas</p>
+                  <p className="text-2xl font-bold text-text">{totalPrintLogs}</p>
+                  <p className="text-xs text-text-muted">Total en la plataforma</p>
+                </div>
+              </div>
+              <ClickableArrow />
+            </Card>
+          </Link>
         </div>
       </section>
     </div>

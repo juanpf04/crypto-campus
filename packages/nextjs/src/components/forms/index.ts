@@ -6,7 +6,6 @@ export { ProductForm, type ProductFormData } from "./ProductForm";
 export { BadgeTypeForm, type BadgeTypeFormData } from "./BadgeTypeForm";
 export { TaskForm, type TaskFormData } from "./TaskForm";
 export { RewardForm, type RewardFormData } from "./RewardForm";
-export { PrintRequestForm, type PrintRequestFormData } from "./PrintRequestForm";
 export { PrinterForm, type PrinterFormData } from "./PrinterForm";
 export { SubjectForm, type SubjectFormData } from "./SubjectForm";
 export { SubjectOfferingForm, type SubjectOfferingFormData } from "./SubjectOfferingForm";
