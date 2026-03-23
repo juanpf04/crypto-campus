@@ -130,8 +130,8 @@ export async function POST(req: NextRequest) {
   });
   await publicClient.waitForTransactionReceipt({ hash: regHash });
 
-  // Solo mintear tokens si es STUDENT (los demás roles no los necesitan)
-  if (role === "STUDENT") {
+  // Mintear tokens a estudiantes y profesores (admin y bibliotecario no los necesitan)
+  if (role === "STUDENT" || role === "PROFESSOR") {
     const mintLibHash = await adminWalletClient.writeContract({
       address: CONTRACT_ADDRESSES.libraryToken,
       abi: LIBRARY_TOKEN_ABI,

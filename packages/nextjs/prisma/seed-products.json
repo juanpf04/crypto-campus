@@ -1,0 +1,138 @@
+[
+  {
+    "name": "Bolígrafo UCM",
+    "description": "Bolígrafo de tinta azul con el escudo de la Universidad Complutense de Madrid.",
+    "price": 5,
+    "stock": 100,
+    "category": "Papelería",
+    "imageUrl": "/images/shop/boligrafo.png"
+  },
+  {
+    "name": "Cuaderno A5 UCM",
+    "description": "Cuaderno de 80 hojas con tapas duras y logo de la UCM en la portada.",
+    "price": 12,
+    "stock": 60,
+    "category": "Papelería",
+    "imageUrl": "/images/shop/cuaderno.png"
+  },
+  {
+    "name": "Carpeta clasificadora UCM",
+    "description": "Carpeta con 12 separadores y cierre de goma. Diseño corporativo UCM.",
+    "price": 8,
+    "stock": 40,
+    "category": "Papelería",
+    "imageUrl": "/images/shop/carpeta.png"
+  },
+  {
+    "name": "Lápiz de grafito UCM",
+    "description": "Lápiz HB con el nombre de la universidad grabado en dorado.",
+    "price": 3,
+    "stock": 150,
+    "category": "Papelería",
+    "imageUrl": "/images/shop/lapiz.png"
+  },
+  {
+    "name": "Camiseta UCM Blanca",
+    "description": "Camiseta 100% algodón con el escudo de la Complutense bordado en el pecho.",
+    "price": 25,
+    "stock": 30,
+    "category": "Ropa",
+    "imageUrl": "/images/shop/camiseta-blanca.png"
+  },
+  {
+    "name": "Polo UCM Azul",
+    "description": "Polo de algodón piqué con el escudo de la UCM bordado. Cuello y puños en contraste.",
+    "price": 30,
+    "stock": 25,
+    "category": "Ropa",
+    "imageUrl": "/images/shop/polo-azul.png"
+  },
+  {
+    "name": "Sudadera UCM Gris",
+    "description": "Sudadera con capucha, logo de la UCM estampado y bolsillo canguro.",
+    "price": 45,
+    "stock": 20,
+    "category": "Ropa",
+    "imageUrl": "/images/shop/sudadera-gris.png"
+  },
+  {
+    "name": "Gorra UCM Azul",
+    "description": "Gorra de algodón con visera curva y escudo bordado. Ajustable.",
+    "price": 15,
+    "stock": 35,
+    "category": "Ropa",
+    "imageUrl": "/images/shop/gorra.png"
+  },
+  {
+    "name": "Taza UCM",
+    "description": "Taza de cerámica de 330ml con el escudo y lema de la universidad.",
+    "price": 10,
+    "stock": 50,
+    "category": "Accesorios",
+    "imageUrl": "/images/shop/taza.png"
+  },
+  {
+    "name": "Botella térmica UCM",
+    "description": "Botella de acero inoxidable de 500ml. Mantiene la temperatura 12 horas.",
+    "price": 20,
+    "stock": 25,
+    "category": "Accesorios",
+    "imageUrl": "/images/shop/botella.png"
+  },
+  {
+    "name": "Tote bag UCM",
+    "description": "Bolsa de tela de algodón orgánico con el logo de la Complutense.",
+    "price": 8,
+    "stock": 45,
+    "category": "Accesorios",
+    "imageUrl": "/images/shop/totebag.png"
+  },
+  {
+    "name": "Llavero UCM",
+    "description": "Llavero metálico con el escudo de la UCM esmaltado en colores.",
+    "price": 5,
+    "stock": 80,
+    "category": "Accesorios",
+    "imageUrl": "/images/shop/llavero.png"
+  },
+  {
+    "name": "Paraguas UCM",
+    "description": "Paraguas plegable automático con funda. Azul marino con logo blanco.",
+    "price": 18,
+    "stock": 20,
+    "category": "Accesorios",
+    "imageUrl": "/images/shop/paraguas.png"
+  },
+  {
+    "name": "USB 32GB UCM",
+    "description": "Memoria USB 3.0 de 32GB con forma del escudo de la Complutense.",
+    "price": 15,
+    "stock": 40,
+    "category": "Tecnología",
+    "imageUrl": "/images/shop/usb.png"
+  },
+  {
+    "name": "Alfombrilla de ratón UCM",
+    "description": "Alfombrilla con base antideslizante y diseño del campus de la UCM.",
+    "price": 10,
+    "stock": 30,
+    "category": "Tecnología",
+    "imageUrl": "/images/shop/alfombrilla.png"
+  },
+  {
+    "name": "Pin UCM",
+    "description": "Pin esmaltado con el escudo oficial. Cierre de mariposa.",
+    "price": 3,
+    "stock": 100,
+    "category": "Accesorios",
+    "imageUrl": "/images/shop/pin.png"
+  },
+  {
+    "name": "Mochila UCM",
+    "description": "Mochila con compartimento para portátil de hasta 15.6\". Azul marino con bordado UCM.",
+    "price": 35,
+    "stock": 15,
+    "category": "Accesorios",
+    "imageUrl": "/images/shop/mochila.png"
+  }
+]

@@ -166,22 +166,24 @@ async function main() {
         });
         await publicClient.waitForTransactionReceipt({ hash: regHash });
 
-        // 4. Mintear tokens
-        const mintLibHash = await adminWalletClient.writeContract({
-          address: ADDRESSES.libraryToken,
-          abi: LIB_TOKEN_ABI,
-          functionName: "mint",
-          args: [account.address, BigInt(10)],
-        });
-        await publicClient.waitForTransactionReceipt({ hash: mintLibHash });
+        // 4. Mintear tokens (solo a estudiantes y profesores, no a admin ni bibliotecario)
+        if (user.role === "STUDENT" || user.role === "PROFESSOR") {
+          const mintLibHash = await adminWalletClient.writeContract({
+            address: ADDRESSES.libraryToken,
+            abi: LIB_TOKEN_ABI,
+            functionName: "mint",
+            args: [account.address, BigInt(10)],
+          });
+          await publicClient.waitForTransactionReceipt({ hash: mintLibHash });
 
-        const mintShopHash = await adminWalletClient.writeContract({
-          address: ADDRESSES.shopToken,
-          abi: SHOP_TOKEN_ABI,
-          functionName: "mint",
-          args: [account.address, BigInt(100)],
-        });
-        await publicClient.waitForTransactionReceipt({ hash: mintShopHash });
+          const mintShopHash = await adminWalletClient.writeContract({
+            address: ADDRESSES.shopToken,
+            abi: SHOP_TOKEN_ABI,
+            functionName: "mint",
+            args: [account.address, BigInt(100)],
+          });
+          await publicClient.waitForTransactionReceipt({ hash: mintShopHash });
+        }
 
         log(green(`  ✓ ${user.email} (${user.role})`));
       } catch (err) {

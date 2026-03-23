@@ -232,7 +232,15 @@ await runNodeScript("scripts/seed-admin.mjs", {
   nonCriticalMessage: "Seed terminó con errores (no crítico, continuando...)",
 });
 
-// 8. Limpiar archivos de impresión expirados (>24h)
+// 8. Seed de productos de la tienda (idempotente — si ya hay productos, no hace nada)
+log("Cargando catálogo de productos...");
+await runNodeScript("scripts/seed-products.mjs", {
+  prefix: "[seed-products]",
+  allowFailure: true,
+  nonCriticalMessage: "Seed de productos terminó con errores (no crítico, continuando...)",
+});
+
+// 9. Limpiar archivos de impresión expirados (>24h)
 log("Limpiando archivos de impresión expirados...");
 await runNodeScript("scripts/cleanup-uploads.mjs", {
   prefix: "[cleanup]",
@@ -240,7 +248,7 @@ await runNodeScript("scripts/cleanup-uploads.mjs", {
   nonCriticalMessage: "Cleanup terminó con errores (no crítico, continuando...)",
 });
 
-// 9. Arrancar Next.js
+// 10. Arrancar Next.js
 log("Arrancando Next.js...");
 const nextDev = spawn("npx", ["next", "dev"], {
   cwd: NEXTJS_DIR,
