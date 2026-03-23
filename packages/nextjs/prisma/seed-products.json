@@ -1,138 +1,194 @@
 [
   {
-    "name": "Bolígrafo UCM",
-    "description": "Bolígrafo de tinta azul con el escudo de la Universidad Complutense de Madrid.",
+    "name": "Boligrafo Clip Engomado UCM Azul",
+    "description": "Boligrafo con clip metalico y acabado engomado azul con marcaje UCM.",
     "price": 5,
-    "stock": 100,
-    "category": "Papelería",
-    "imageUrl": "/images/shop/boligrafo.png"
+    "stock": 120,
+    "category": "Papeleria",
+    "imageUrl": "/products/boligrafo/clip-engomado/azul/main.webp"
   },
   {
-    "name": "Cuaderno A5 UCM",
-    "description": "Cuaderno de 80 hojas con tapas duras y logo de la UCM en la portada.",
+    "name": "Boligrafo Metalico UCM Negro",
+    "description": "Boligrafo metalico premium en color negro con logotipo UCM.",
+    "price": 7,
+    "stock": 80,
+    "category": "Papeleria",
+    "imageUrl": "/products/boligrafo/metalico/negro/main.webp"
+  },
+  {
+    "name": "Libreta A5 UCM Azul",
+    "description": "Libreta A5 con goma elastica y marca UCM en portada azul.",
     "price": 12,
+    "stock": 65,
+    "category": "Papeleria",
+    "imageUrl": "/products/libreta/a5/azul/main.webp"
+  },
+  {
+    "name": "Libreta A5 UCM Nature Blanca",
+    "description": "Libreta A5 blanca con diseno UCM, ideal para apuntes diarios.",
+    "price": 12,
+    "stock": 55,
+    "category": "Papeleria",
+    "imageUrl": "/products/libreta/a5/nature-blanca/main.webp"
+  },
+  {
+    "name": "Carpeta A4 PVC UCM Azul",
+    "description": "Carpeta clasificadora A4 de PVC con cierre elastico y logo UCM.",
+    "price": 9,
+    "stock": 70,
+    "category": "Papeleria",
+    "imageUrl": "/products/carpeta/a4-pvc/azul/main.webp"
+  },
+  {
+    "name": "Carpeta A4 PVC UCM Negra",
+    "description": "Carpeta A4 de PVC en negro con identidad visual UCM.",
+    "price": 9,
     "stock": 60,
-    "category": "Papelería",
-    "imageUrl": "/images/shop/cuaderno.png"
+    "category": "Papeleria",
+    "imageUrl": "/products/carpeta/a4-pvc/negra/main.webp"
   },
   {
-    "name": "Carpeta clasificadora UCM",
-    "description": "Carpeta con 12 separadores y cierre de goma. Diseño corporativo UCM.",
-    "price": 8,
-    "stock": 40,
-    "category": "Papelería",
-    "imageUrl": "/images/shop/carpeta.png"
-  },
-  {
-    "name": "Lápiz de grafito UCM",
-    "description": "Lápiz HB con el nombre de la universidad grabado en dorado.",
-    "price": 3,
-    "stock": 150,
-    "category": "Papelería",
-    "imageUrl": "/images/shop/lapiz.png"
-  },
-  {
-    "name": "Camiseta UCM Blanca",
-    "description": "Camiseta 100% algodón con el escudo de la Complutense bordado en el pecho.",
+    "name": "Camiseta UCM Basica Blanca",
+    "description": "Camiseta de algodon con escudo UCM en color blanco.",
     "price": 25,
-    "stock": 30,
-    "category": "Ropa",
-    "imageUrl": "/images/shop/camiseta-blanca.png"
-  },
-  {
-    "name": "Polo UCM Azul",
-    "description": "Polo de algodón piqué con el escudo de la UCM bordado. Cuello y puños en contraste.",
-    "price": 30,
-    "stock": 25,
-    "category": "Ropa",
-    "imageUrl": "/images/shop/polo-azul.png"
-  },
-  {
-    "name": "Sudadera UCM Gris",
-    "description": "Sudadera con capucha, logo de la UCM estampado y bolsillo canguro.",
-    "price": 45,
-    "stock": 20,
-    "category": "Ropa",
-    "imageUrl": "/images/shop/sudadera-gris.png"
-  },
-  {
-    "name": "Gorra UCM Azul",
-    "description": "Gorra de algodón con visera curva y escudo bordado. Ajustable.",
-    "price": 15,
     "stock": 35,
     "category": "Ropa",
-    "imageUrl": "/images/shop/gorra.png"
+    "imageUrl": "/products/camiseta/basica/blanca/main.webp"
   },
   {
-    "name": "Taza UCM",
-    "description": "Taza de cerámica de 330ml con el escudo y lema de la universidad.",
+    "name": "Camiseta UCM Basica Negra",
+    "description": "Camiseta basica negra con escudo UCM en contraste.",
+    "price": 25,
+    "stock": 35,
+    "category": "Ropa",
+    "imageUrl": "/products/camiseta/basica/negra/main.webp"
+  },
+  {
+    "name": "Camiseta UCM Complutense Granate",
+    "description": "Camiseta granate de la linea Complutense con tipografia frontal.",
+    "price": 27,
+    "stock": 30,
+    "category": "Ropa",
+    "imageUrl": "/products/camiseta/complutense/granate/main.webp"
+  },
+  {
+    "name": "Camiseta UCM New Azul",
+    "description": "Camiseta azul de la linea New con emblema circular UCM.",
+    "price": 27,
+    "stock": 28,
+    "category": "Ropa",
+    "imageUrl": "/products/camiseta/new/azul/main.webp"
+  },
+  {
+    "name": "Polo UCM Blanco",
+    "description": "Polo blanco bordado con escudo UCM en el pecho.",
+    "price": 30,
+    "stock": 24,
+    "category": "Ropa",
+    "imageUrl": "/products/polo/blanco/main.webp"
+  },
+  {
+    "name": "Polo UCM Negro",
+    "description": "Polo negro bordado, estilo sobrio para uso diario.",
+    "price": 30,
+    "stock": 24,
+    "category": "Ropa",
+    "imageUrl": "/products/polo/negro/main.webp"
+  },
+  {
+    "name": "Sudadera UCM con Capucha Gris",
+    "description": "Sudadera con capucha gris y logo UCM frontal.",
+    "price": 45,
+    "stock": 22,
+    "category": "Ropa",
+    "imageUrl": "/products/sudadera/capucha/gris/main.webp"
+  },
+  {
+    "name": "Sudadera UCM con Capucha Negra",
+    "description": "Sudadera con capucha negra con logo UCM en blanco.",
+    "price": 45,
+    "stock": 22,
+    "category": "Ropa",
+    "imageUrl": "/products/sudadera/capucha/negra/main.webp"
+  },
+  {
+    "name": "Sudadera UCM Basica Gris",
+    "description": "Sudadera basica sin capucha en color gris con escudo UCM.",
+    "price": 39,
+    "stock": 20,
+    "category": "Ropa",
+    "imageUrl": "/products/sudadera/basica/gris/main.webp"
+  },
+  {
+    "name": "Sudadera UCM Basica Blanca",
+    "description": "Sudadera sin capucha blanca con logo UCM en rojo.",
+    "price": 39,
+    "stock": 18,
+    "category": "Ropa",
+    "imageUrl": "/products/sudadera/basica/ucm-blanca/main.webp"
+  },
+  {
+    "name": "Taza UCM Negra 370ml",
+    "description": "Taza de 370ml en negro con escudo UCM en blanco.",
     "price": 10,
+    "stock": 60,
+    "category": "Accesorios",
+    "imageUrl": "/products/taza/370ml/negra/main.webp"
+  },
+  {
+    "name": "Taza UCM Roja 370ml",
+    "description": "Taza de 370ml en rojo con marca UCM en contraste.",
+    "price": 10,
+    "stock": 60,
+    "category": "Accesorios",
+    "imageUrl": "/products/taza/370ml/roja/main.webp"
+  },
+  {
+    "name": "Botella Termica UCM Negra 790ml",
+    "description": "Botella termica de 790ml en negro con grabado UCM.",
+    "price": 20,
+    "stock": 30,
+    "category": "Accesorios",
+    "imageUrl": "/products/botella/790ml/negra/main.webp"
+  },
+  {
+    "name": "Botella Termica UCM Roja 790ml",
+    "description": "Botella termica roja de 790ml con marcaje UCM.",
+    "price": 20,
+    "stock": 30,
+    "category": "Accesorios",
+    "imageUrl": "/products/botella/790ml/roja/main.webp"
+  },
+  {
+    "name": "Totebag Algodon Reciclado UCM Gris",
+    "description": "Bolsa de algodon reciclado en gris con logo UCM.",
+    "price": 9,
     "stock": 50,
     "category": "Accesorios",
-    "imageUrl": "/images/shop/taza.png"
+    "imageUrl": "/products/totebag/algodon-reciclado/gris/main.webp"
   },
   {
-    "name": "Botella térmica UCM",
-    "description": "Botella de acero inoxidable de 500ml. Mantiene la temperatura 12 horas.",
-    "price": 20,
-    "stock": 25,
+    "name": "Totebag Algodon Reciclado UCM Roja",
+    "description": "Bolsa de algodon reciclado en tono rojo con escudo UCM.",
+    "price": 9,
+    "stock": 50,
     "category": "Accesorios",
-    "imageUrl": "/images/shop/botella.png"
+    "imageUrl": "/products/totebag/algodon-reciclado/roja/main.webp"
   },
   {
-    "name": "Tote bag UCM",
-    "description": "Bolsa de tela de algodón orgánico con el logo de la Complutense.",
-    "price": 8,
+    "name": "USB 16GB UCM Blanco",
+    "description": "Memoria USB 16GB giratoria en blanco con grabado UCM.",
+    "price": 14,
     "stock": 45,
-    "category": "Accesorios",
-    "imageUrl": "/images/shop/totebag.png"
+    "category": "Tecnologia",
+    "imageUrl": "/products/usb/16gb/blanco/main.webp"
   },
   {
-    "name": "Llavero UCM",
-    "description": "Llavero metálico con el escudo de la UCM esmaltado en colores.",
-    "price": 5,
-    "stock": 80,
-    "category": "Accesorios",
-    "imageUrl": "/images/shop/llavero.png"
-  },
-  {
-    "name": "Paraguas UCM",
-    "description": "Paraguas plegable automático con funda. Azul marino con logo blanco.",
-    "price": 18,
-    "stock": 20,
-    "category": "Accesorios",
-    "imageUrl": "/images/shop/paraguas.png"
-  },
-  {
-    "name": "USB 32GB UCM",
-    "description": "Memoria USB 3.0 de 32GB con forma del escudo de la Complutense.",
-    "price": 15,
-    "stock": 40,
-    "category": "Tecnología",
-    "imageUrl": "/images/shop/usb.png"
-  },
-  {
-    "name": "Alfombrilla de ratón UCM",
-    "description": "Alfombrilla con base antideslizante y diseño del campus de la UCM.",
-    "price": 10,
-    "stock": 30,
-    "category": "Tecnología",
-    "imageUrl": "/images/shop/alfombrilla.png"
-  },
-  {
-    "name": "Pin UCM",
-    "description": "Pin esmaltado con el escudo oficial. Cierre de mariposa.",
-    "price": 3,
-    "stock": 100,
-    "category": "Accesorios",
-    "imageUrl": "/images/shop/pin.png"
-  },
-  {
-    "name": "Mochila UCM",
-    "description": "Mochila con compartimento para portátil de hasta 15.6\". Azul marino con bordado UCM.",
-    "price": 35,
-    "stock": 15,
-    "category": "Accesorios",
-    "imageUrl": "/images/shop/mochila.png"
+    "name": "USB 16GB UCM Negro",
+    "description": "Memoria USB 16GB giratoria en negro con grabado UCM.",
+    "price": 14,
+    "stock": 45,
+    "category": "Tecnologia",
+    "imageUrl": "/products/usb/16gb/negro/main.webp"
   }
 ]

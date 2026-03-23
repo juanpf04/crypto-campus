@@ -1,0 +1,157 @@
+{
+  "version": 2,
+  "updatedAt": "2026-03-24",
+  "basePath": "/products",
+  "products": [
+    {
+      "slug": "camiseta-basica",
+      "displayName": "Camiseta Basica",
+      "type": "tshirt",
+      "variants": [
+        { "colorSlug": "aventura", "colorName": "Aventura", "main": "/products/camiseta/basica/aventura/main.webp" },
+        { "colorSlug": "blanca", "colorName": "Blanca", "main": "/products/camiseta/basica/blanca/main.webp" },
+        { "colorSlug": "gris-vigore", "colorName": "Gris Vigore", "main": "/products/camiseta/basica/gris-vigore/main.webp" },
+        { "colorSlug": "negra", "colorName": "Negra", "main": "/products/camiseta/basica/negra/main.webp" },
+        { "colorSlug": "purpura", "colorName": "Purpura", "main": "/products/camiseta/basica/purpura/main.webp" },
+        { "colorSlug": "roja", "colorName": "Roja", "main": "/products/camiseta/basica/roja/main.webp" }
+      ]
+    },
+    {
+      "slug": "camiseta-complutense",
+      "displayName": "Camiseta Complutense",
+      "type": "tshirt",
+      "variants": [
+        { "colorSlug": "granate", "colorName": "Granate", "main": "/products/camiseta/complutense/granate/main.webp" },
+        { "colorSlug": "nogal", "colorName": "Nogal", "main": "/products/camiseta/complutense/nogal/main.webp" },
+        { "colorSlug": "plomo", "colorName": "Plomo", "main": "/products/camiseta/complutense/plomo/main.webp" }
+      ]
+    },
+    {
+      "slug": "camiseta-new",
+      "displayName": "Camiseta New",
+      "type": "tshirt",
+      "variants": [
+        { "colorSlug": "azul", "colorName": "Azul", "main": "/products/camiseta/new/azul/main.webp" },
+        { "colorSlug": "roja", "colorName": "Roja", "main": "/products/camiseta/new/roja/main.webp" }
+      ]
+    },
+    {
+      "slug": "polo",
+      "displayName": "Polo",
+      "type": "polo",
+      "variants": [
+        { "colorSlug": "blanco", "colorName": "Blanco", "main": "/products/polo/blanco/main.webp" },
+        { "colorSlug": "negro", "colorName": "Negro", "main": "/products/polo/negro/main.webp" },
+        { "colorSlug": "rojo", "colorName": "Rojo", "main": "/products/polo/rojo/main.webp" }
+      ]
+    },
+    {
+      "slug": "sudadera-capucha",
+      "displayName": "Sudadera con Capucha",
+      "type": "hoodie",
+      "variants": [
+        { "colorSlug": "azul-marino", "colorName": "Azul Marino", "main": "/products/sudadera/capucha/azul-marino/main.webp" },
+        { "colorSlug": "blanca", "colorName": "Blanca", "main": "/products/sudadera/capucha/blanca/main.webp" },
+        { "colorSlug": "gris", "colorName": "Gris", "main": "/products/sudadera/capucha/gris/main.webp" },
+        { "colorSlug": "gris-vigore", "colorName": "Gris Vigore", "main": "/products/sudadera/capucha/gris-vigore/main.webp" },
+        { "colorSlug": "negra", "colorName": "Negra", "main": "/products/sudadera/capucha/negra/main.webp" },
+        { "colorSlug": "roja", "colorName": "Roja", "main": "/products/sudadera/capucha/roja/main.webp" }
+      ]
+    },
+    {
+      "slug": "sudadera-basica",
+      "displayName": "Sudadera Basica",
+      "type": "sweatshirt",
+      "variants": [
+        { "colorSlug": "gris", "colorName": "Gris", "main": "/products/sudadera/basica/gris/main.webp" },
+        { "colorSlug": "negra", "colorName": "Negra", "main": "/products/sudadera/basica/negra/main.webp" },
+        { "colorSlug": "rosa", "colorName": "Rosa", "main": "/products/sudadera/basica/rosa/main.webp" },
+        { "colorSlug": "ucm-blanca", "colorName": "UCM Blanca", "main": "/products/sudadera/basica/ucm-blanca/main.webp" }
+      ]
+    },
+    {
+      "slug": "boligrafo-clip-engomado",
+      "displayName": "Boligrafo Clip Engomado",
+      "type": "pen",
+      "variants": [
+        { "colorSlug": "azul", "colorName": "Azul", "main": "/products/boligrafo/clip-engomado/azul/main.webp" },
+        { "colorSlug": "blanco", "colorName": "Blanco", "main": "/products/boligrafo/clip-engomado/blanco/main.webp" },
+        { "colorSlug": "dorado", "colorName": "Dorado", "main": "/products/boligrafo/clip-engomado/dorado/main.webp" },
+        { "colorSlug": "negro", "colorName": "Negro", "main": "/products/boligrafo/clip-engomado/negro/main.webp" },
+        { "colorSlug": "rojo", "colorName": "Rojo", "main": "/products/boligrafo/clip-engomado/rojo/main.webp" }
+      ]
+    },
+    {
+      "slug": "boligrafo-metalico",
+      "displayName": "Boligrafo Metalico",
+      "type": "pen",
+      "variants": [
+        { "colorSlug": "blanco", "colorName": "Blanco", "main": "/products/boligrafo/metalico/blanco/main.webp" },
+        { "colorSlug": "negro", "colorName": "Negro", "main": "/products/boligrafo/metalico/negro/main.webp" },
+        { "colorSlug": "rojo", "colorName": "Rojo", "main": "/products/boligrafo/metalico/rojo/main.webp" }
+      ]
+    },
+    {
+      "slug": "libreta-a5",
+      "displayName": "Libreta A5",
+      "type": "notebook",
+      "variants": [
+        { "colorSlug": "azul", "colorName": "Azul", "main": "/products/libreta/a5/azul/main.webp" },
+        { "colorSlug": "cisne-trazo", "colorName": "Cisne Trazo", "main": "/products/libreta/a5/cisne-trazo/main.webp" },
+        { "colorSlug": "letras", "colorName": "Letras", "main": "/products/libreta/a5/letras/main.webp" },
+        { "colorSlug": "nature-blanca", "colorName": "Nature Blanca", "main": "/products/libreta/a5/nature-blanca/main.webp" },
+        { "colorSlug": "roja", "colorName": "Roja", "main": "/products/libreta/a5/roja/main.webp" },
+        { "colorSlug": "verde", "colorName": "Verde", "main": "/products/libreta/a5/verde/main.webp" }
+      ]
+    },
+    {
+      "slug": "carpeta-a4-pvc",
+      "displayName": "Carpeta A4 PVC",
+      "type": "folder",
+      "variants": [
+        { "colorSlug": "azul", "colorName": "Azul", "main": "/products/carpeta/a4-pvc/azul/main.webp" },
+        { "colorSlug": "negra", "colorName": "Negra", "main": "/products/carpeta/a4-pvc/negra/main.webp" },
+        { "colorSlug": "roja", "colorName": "Roja", "main": "/products/carpeta/a4-pvc/roja/main.webp" }
+      ]
+    },
+    {
+      "slug": "taza-370ml",
+      "displayName": "Taza 370ml",
+      "type": "mug",
+      "variants": [
+        { "colorSlug": "negra", "colorName": "Negra", "main": "/products/taza/370ml/negra/main.webp" },
+        { "colorSlug": "roja", "colorName": "Roja", "main": "/products/taza/370ml/roja/main.webp" }
+      ]
+    },
+    {
+      "slug": "botella-790ml",
+      "displayName": "Botella 790ml",
+      "type": "bottle",
+      "variants": [
+        { "colorSlug": "negra", "colorName": "Negra", "main": "/products/botella/790ml/negra/main.webp" },
+        { "colorSlug": "roja", "colorName": "Roja", "main": "/products/botella/790ml/roja/main.webp" }
+      ]
+    },
+    {
+      "slug": "totebag-algodon-reciclado",
+      "displayName": "Totebag Algodon Reciclado",
+      "type": "totebag",
+      "variants": [
+        { "colorSlug": "blanca", "colorName": "Blanca", "main": "/products/totebag/algodon-reciclado/blanca/main.webp" },
+        { "colorSlug": "gris", "colorName": "Gris", "main": "/products/totebag/algodon-reciclado/gris/main.webp" },
+        { "colorSlug": "roja", "colorName": "Roja", "main": "/products/totebag/algodon-reciclado/roja/main.webp" }
+      ]
+    },
+    {
+      "slug": "usb-16gb",
+      "displayName": "USB 16GB",
+      "type": "usb",
+      "variants": [
+        { "colorSlug": "blanco", "colorName": "Blanco", "main": "/products/usb/16gb/blanco/main.webp" },
+        { "colorSlug": "negro", "colorName": "Negro", "main": "/products/usb/16gb/negro/main.webp" },
+        { "colorSlug": "rojo", "colorName": "Rojo", "main": "/products/usb/16gb/rojo/main.webp" },
+        { "colorSlug": "rosa", "colorName": "Rosa", "main": "/products/usb/16gb/rosa/main.webp" }
+      ]
+    }
+  ]
+}
