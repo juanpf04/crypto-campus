@@ -11,7 +11,8 @@ import { CampusRoles } from "./CampusRoles.sol";
 import { LibraryToken } from "./LibraryToken.sol";
 
 /// @title LibraryManager
-/// @author CryptoCampus Team
+/// @author Juan Pablo Fernández <juanpf04@ucm.es>
+/// @author Arturo Gómez <argome04@ucm.es>
 /// @notice Gestiona catalogo de libros y flujo de prestamos
 /// @dev Cada token ID representa un titulo; el contrato custodia copias disponibles.
 contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuard, Pausable {

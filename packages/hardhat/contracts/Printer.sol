@@ -5,7 +5,8 @@ import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 import { CampusRoles } from "./CampusRoles.sol";
 
 /// @title Printer
-/// @author CryptoCampus Team
+/// @author Juan Pablo Fernández <juanpf04@ucm.es>
+/// @author Arturo Gómez <argome04@ucm.es>
 /// @notice Contrato para gestionar creditos de impresion de estudiantes.
 /// @dev 1 credito = 1 pagina. Cada estudiante inicia con creditos por defecto.
 contract Printer is Pausable {

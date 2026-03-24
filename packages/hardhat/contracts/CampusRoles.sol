@@ -5,6 +5,8 @@ import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol"
 import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 
 /// @title CampusRoles
+/// @author Juan Pablo Fernández <juanpf04@ucm.es>
+/// @author Arturo Gómez <argome04@ucm.es>
 /// @notice Gestion centralizada de roles para el ecosistema CryptoCampus
 /// @dev Cada usuario tiene un unico rol funcional no acumulable.
 ///      Usa un ADMIN_ROLE custom en vez de DEFAULT_ADMIN_ROLE para evitar

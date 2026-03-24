@@ -58,7 +58,8 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 
 /// @title Example
-/// @author CryptoCampus Team
+/// @author Juan Pablo Fernández <juanpf04@ucm.es>
+/// @author Arturo Gómez <argome04@ucm.es>
 /// @notice Contrato de ejemplo que demuestra las convenciones de estilo
 /// @dev Usar como referencia al crear nuevos contratos en el proyecto
 contract Example is Ownable {

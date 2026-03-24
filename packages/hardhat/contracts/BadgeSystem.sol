@@ -8,7 +8,8 @@ import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 import { CampusRoles } from "./CampusRoles.sol";
 
 /// @title BadgeSystem
-/// @author CryptoCampus Team
+/// @author Juan Pablo Fernández <juanpf04@ucm.es>
+/// @author Arturo Gómez <argome04@ucm.es>
 /// @notice Sistema de insignias academicas soulbound no transferibles
 /// @dev Profesores crean insignias/tareas/recompensas y estudiantes las canjean.
 contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {

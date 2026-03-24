@@ -6,7 +6,15 @@ import { Test } from "forge-std/Test.sol";
 import { CampusRoles } from "../contracts/CampusRoles.sol";
 import { BadgeSystem } from "../contracts/BadgeSystem.sol";
 
+/// @title BadgeSystemTest
+/// @author Juan Pablo Fernández <juanpf04@ucm.es>
+/// @author Arturo Gómez <argome04@ucm.es>
+/// @notice Pruebas de comportamiento y reverts para BadgeSystem.
+/// @dev Usa cheatcodes de Foundry para validar roles, canjes y restricciones soulbound.
 contract BadgeSystemTest is Test {
+    
+    // ── Variables de estado ──────────────────────────────────────────────
+
     CampusRoles campusRoles;
     BadgeSystem badgeSystem;
 
@@ -14,6 +22,8 @@ contract BadgeSystemTest is Test {
     address professor2;
     address student;
     address student2;
+
+    // ── Setup ────────────────────────────────────────────────────────────
 
     function setUp() public {
         campusRoles = new CampusRoles();
@@ -29,6 +39,8 @@ contract BadgeSystemTest is Test {
         campusRoles.registerUser(student, "Student", campusRoles.STUDENT_ROLE());
         campusRoles.registerUser(student2, "Student2", campusRoles.STUDENT_ROLE());
     }
+
+    // ── Tests ────────────────────────────────────────────────────────────
 
     function test_CreateAwardAndRedeemReward() public {
         vm.startPrank(professor);
@@ -171,28 +183,28 @@ contract BadgeSystemTest is Test {
     }
 
     function test_RevertRedeemRewardOutOfSupply() public {
-        // Create badge type, task with rewardAmount=3, reward with cost=3 and supply=1
+        // Crear tipo de insignia, tareas con rewardAmount=3 y recompensa con coste=3 y supply=1.
         vm.startPrank(professor);
         badgeSystem.createBadgeType();
-        badgeSystem.createTask(1, 3);  // task 1: awards 3 badges
-        badgeSystem.createTask(1, 3);  // task 2: awards 3 badges
-        badgeSystem.createReward(1, 3, 1); // reward 1: costs 3 badges, supply=1
-        badgeSystem.awardBadge(1, student);  // student gets 3 badges from task 1
-        badgeSystem.awardBadge(2, student2); // student2 gets 3 badges from task 2
+        badgeSystem.createTask(1, 3); // tarea 1: otorga 3 insignias
+        badgeSystem.createTask(1, 3); // tarea 2: otorga 3 insignias
+        badgeSystem.createReward(1, 3, 1); // recompensa 1: cuesta 3 insignias, supply=1
+        badgeSystem.awardBadge(1, student); // student obtiene 3 insignias de la tarea 1
+        badgeSystem.awardBadge(2, student2); // student2 obtiene 3 insignias de la tarea 2
         vm.stopPrank();
 
-        // First redeem succeeds (supply goes from 1 to 0)
+        // El primer canje tiene exito (supply pasa de 1 a 0).
         vm.prank(student);
         badgeSystem.redeemReward(1);
 
-        // Second redeem fails (supply is 0)
+        // El segundo canje falla (supply ya esta en 0).
         vm.prank(student2);
         vm.expectRevert(abi.encodeWithSelector(BadgeSystem.RewardOutOfSupply.selector, 1));
         badgeSystem.redeemReward(1);
     }
 
     function test_CancelUseRequest() public {
-        // Setup: create badge, task, reward, award, redeem to get reward token
+        // Setup: crear badge, tarea, recompensa, otorgar y canjear para obtener token de recompensa.
         vm.startPrank(professor);
         badgeSystem.createBadgeType();
         badgeSystem.createTask(1, 5);
@@ -203,7 +215,7 @@ contract BadgeSystemTest is Test {
         vm.prank(student);
         badgeSystem.redeemReward(1);
 
-        // Request use then cancel
+        // Solicitar uso y despues cancelar.
         vm.prank(student);
         badgeSystem.requestUseReward(1);
 
@@ -215,7 +227,7 @@ contract BadgeSystemTest is Test {
     }
 
     function test_RejectUseRequest() public {
-        // Setup: create badge, task, reward, award, redeem to get reward token
+        // Setup: crear badge, tarea, recompensa, otorgar y canjear para obtener token de recompensa.
         vm.startPrank(professor);
         badgeSystem.createBadgeType();
         badgeSystem.createTask(1, 5);
@@ -237,22 +249,22 @@ contract BadgeSystemTest is Test {
     }
 
     function test_PauseAndUnpause() public {
-        // Setup: professor creates badge type before pausing
+        // Setup: el profesor crea un tipo de insignia antes de pausar.
         vm.prank(professor);
         badgeSystem.createBadgeType();
 
-        // Admin pauses the contract
+        // Admin pausa el contrato.
         badgeSystem.pause();
 
-        // Creating a badge type reverts while paused
+        // Crear un tipo de insignia revierte mientras esta pausado.
         vm.prank(professor);
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
         badgeSystem.createBadgeType();
 
-        // Admin unpauses
+        // Admin reanuda el contrato.
         badgeSystem.unpause();
 
-        // Now it works again
+        // Ahora vuelve a funcionar.
         vm.prank(professor);
         badgeSystem.createBadgeType();
     }

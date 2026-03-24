@@ -7,7 +7,8 @@ import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 import { CampusRoles } from "./CampusRoles.sol";
 
 /// @title ShopToken
-/// @author CryptoCampus Team
+/// @author Juan Pablo Fernández <juanpf04@ucm.es>
+/// @author Arturo Gómez <argome04@ucm.es>
 /// @notice Token ERC-20 de pago para la tienda del campus
 /// @dev Se gana por actividades del campus y se usa en CampusShop.
 contract ShopToken is ERC20, Pausable {

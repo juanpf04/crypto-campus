@@ -6,12 +6,22 @@ import { Test } from "forge-std/Test.sol";
 import { CampusRoles } from "../contracts/CampusRoles.sol";
 import { ShopToken } from "../contracts/ShopToken.sol";
 
+/// @title ShopTokenTest
+/// @author Juan Pablo Fernández <juanpf04@ucm.es>
+/// @author Arturo Gómez <argome04@ucm.es>
+/// @notice Pruebas de comportamiento y reverts para la logica administrativa y de allowance en ShopToken.
+/// @dev Valida la semantica del trusted spender, el pausado y las validaciones de argumentos.
 contract ShopTokenTest is Test {
+    
+    // ── Variables de estado ──────────────────────────────────────────────
+
     CampusRoles campusRoles;
     ShopToken shopToken;
 
     address user;
     address spender;
+
+    // ── Setup ────────────────────────────────────────────────────────────
 
     function setUp() public {
         campusRoles = new CampusRoles();
@@ -20,6 +30,8 @@ contract ShopTokenTest is Test {
         user = makeAddr("user");
         spender = makeAddr("spender");
     }
+
+    // ── Tests ────────────────────────────────────────────────────────────
 
     function test_MintAndBurnAsAdmin() public {
         shopToken.mint(user, 100);
@@ -92,17 +104,17 @@ contract ShopTokenTest is Test {
     }
 
     function test_PauseAndUnpause() public {
-        // Admin pauses the contract
+        // Admin pausa el contrato.
         shopToken.pause();
 
-        // Minting reverts while paused
+        // Mint revierte mientras esta pausado.
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
         shopToken.mint(user, 100);
 
-        // Admin unpauses
+        // Admin reanuda el contrato.
         shopToken.unpause();
 
-        // Now it works again
+        // Ahora vuelve a funcionar.
         shopToken.mint(user, 100);
         assertEq(shopToken.balanceOf(user), 100);
     }

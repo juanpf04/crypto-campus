@@ -7,13 +7,23 @@ import { CampusRoles } from "../contracts/CampusRoles.sol";
 import { ShopToken } from "../contracts/ShopToken.sol";
 import { CampusShop } from "../contracts/CampusShop.sol";
 
+/// @title CampusShopTest
+/// @author Juan Pablo Fernández <juanpf04@ucm.es>
+/// @author Arturo Gómez <argome04@ucm.es>
+/// @notice Pruebas de comportamiento y reverts para flujos de compra y devolucion en CampusShop.
+/// @dev Cubre rutas de administrador y estudiante, incluyendo pausado y validaciones de existencias.
 contract CampusShopTest is Test {
+    
+    // ── Variables de estado ──────────────────────────────────────────────
+
     CampusRoles campusRoles;
     ShopToken shopToken;
     CampusShop campusShop;
 
     address student;
     address outsider;
+
+    // ── Setup ────────────────────────────────────────────────────────────
 
     function setUp() public {
         campusRoles = new CampusRoles();
@@ -30,6 +40,8 @@ contract CampusShopTest is Test {
 
         campusShop.addProduct(50, 10);
     }
+
+    // ── Tests ────────────────────────────────────────────────────────────
 
     function test_PurchaseAndAdminReturn() public {
         vm.prank(student);
@@ -114,15 +126,15 @@ contract CampusShopTest is Test {
     }
 
     function test_RevertPurchaseOutOfStock() public {
-        // Add a product with stock=1
+        // Anadir un producto con existencias=1.
         campusShop.addProduct(10, 1); // productId = 2
 
         vm.prank(student);
-        campusShop.purchase(2); // first purchase succeeds
+        campusShop.purchase(2); // primera compra con exito
 
         vm.prank(student);
         vm.expectRevert(abi.encodeWithSelector(CampusShop.ProductOutOfStock.selector, 2));
-        campusShop.purchase(2); // second purchase fails
+        campusShop.purchase(2); // segunda compra falla
     }
 
     function test_RevertPurchaseNonStudent() public {
@@ -155,18 +167,18 @@ contract CampusShopTest is Test {
     }
 
     function test_PauseAndUnpause() public {
-        // Admin pauses the contract
+        // Admin pausa el contrato.
         campusShop.pause();
 
-        // Purchasing reverts while paused
+        // Comprar revierte mientras esta pausado.
         vm.prank(student);
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
         campusShop.purchase(1);
 
-        // Admin unpauses
+        // Admin reanuda el contrato.
         campusShop.unpause();
 
-        // Now it works again
+        // Ahora vuelve a funcionar.
         vm.prank(student);
         campusShop.purchase(1);
         assertEq(campusShop.balanceOf(student, 1), 1);

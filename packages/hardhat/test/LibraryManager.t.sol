@@ -7,7 +7,15 @@ import { CampusRoles } from "../contracts/CampusRoles.sol";
 import { LibraryToken } from "../contracts/LibraryToken.sol";
 import { LibraryManager } from "../contracts/LibraryManager.sol";
 
+/// @title LibraryManagerTest
+/// @author Juan Pablo Fernández <juanpf04@ucm.es>
+/// @author Arturo Gómez <argome04@ucm.es>
+/// @notice Pruebas de comportamiento y reverts para el ciclo de vida de prestamos en LibraryManager.
+/// @dev Cubre solicitud, aprobacion, devolucion, devolucion forzada y validaciones de disponibilidad.
 contract LibraryManagerTest is Test {
+    
+    // ── Variables de estado ──────────────────────────────────────────────
+
     CampusRoles campusRoles;
     LibraryToken libraryToken;
     LibraryManager libraryManager;
@@ -15,6 +23,8 @@ contract LibraryManagerTest is Test {
     address librarian;
     address student;
     address outsider;
+
+    // ── Setup ────────────────────────────────────────────────────────────
 
     function setUp() public {
         campusRoles = new CampusRoles();
@@ -34,6 +44,8 @@ contract LibraryManagerTest is Test {
         vm.prank(librarian);
         libraryManager.addBook(2);
     }
+
+    // ── Tests ────────────────────────────────────────────────────────────
 
     function test_RequestApproveAndConfirmReturn() public {
         vm.prank(student);
@@ -146,23 +158,23 @@ contract LibraryManagerTest is Test {
         libraryManager.cancelLoanRequest(1);
 
         LibraryManager.Loan memory loan = libraryManager.getLoanInfo(1);
-        // cancelLoanRequest sets status to Rejected (reused for cancellations)
+        // cancelLoanRequest deja el estado en Rejected (reutilizado para cancelaciones).
         assertEq(uint256(loan.status), uint256(LibraryManager.LoanStatus.Rejected));
     }
 
     function test_PauseAndUnpause() public {
-        // Admin pauses the contract
+        // Admin pausa el contrato.
         libraryManager.pause();
 
-        // Adding a book reverts while paused
+        // Anadir libro revierte mientras esta pausado.
         vm.prank(librarian);
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
         libraryManager.addBook(1);
 
-        // Admin unpauses
+        // Admin reanuda el contrato.
         libraryManager.unpause();
 
-        // Now it works again
+        // Ahora vuelve a funcionar.
         vm.prank(librarian);
         libraryManager.addBook(1);
     }
@@ -176,7 +188,7 @@ contract LibraryManagerTest is Test {
 
         assertFalse(libraryManager.isOverdue(1));
 
-        // Warp past the due date (DEFAULT_LOAN_DURATION = 21 days)
+        // Avanzar mas alla de la fecha limite (DEFAULT_LOAN_DURATION = 21 days).
         vm.warp(block.timestamp + 22 days);
 
         assertTrue(libraryManager.isOverdue(1));

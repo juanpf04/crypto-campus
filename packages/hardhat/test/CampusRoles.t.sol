@@ -5,6 +5,10 @@ import { Test } from "forge-std/Test.sol";
 
 import { CampusRoles } from "../contracts/CampusRoles.sol";
 
+/// @title CampusRolesCaller
+/// @author Juan Pablo Fernández <juanpf04@ucm.es>
+/// @author Arturo Gómez <argome04@ucm.es>
+/// @notice Contrato auxiliar para ejercitar llamadas no administrativas en pruebas de CampusRoles.
 contract CampusRolesCaller {
 	function registerUser(
 		CampusRoles campusRoles,
@@ -16,8 +20,15 @@ contract CampusRolesCaller {
 	}
 }
 
-/// @notice Basic behavioral tests for CampusRoles.
+/// @title CampusRolesTest
+/// @author Juan Pablo Fernández <juanpf04@ucm.es>
+/// @author Arturo Gómez <argome04@ucm.es>
+/// @notice Pruebas de comportamiento y reverts para CampusRoles.
+/// @dev Incluye ciclo de vida de roles y casos limite de control de acceso.
 contract CampusRolesTest is Test {
+	
+	// ── Variables de estado ──────────────────────────────────────────────
+
 	CampusRoles campusRoles;
 
 	address admin;
@@ -25,6 +36,8 @@ contract CampusRolesTest is Test {
 	address librarian;
 	address outsider;
 	CampusRolesCaller caller;
+
+	// ── Setup ────────────────────────────────────────────────────────────
 
 	function setUp() public {
 		admin = address(this);
@@ -35,6 +48,8 @@ contract CampusRolesTest is Test {
 		campusRoles = new CampusRoles();
 		caller = new CampusRolesCaller();
 	}
+
+	// ── Tests ────────────────────────────────────────────────────────────
 
 	function test_DeployerHasDefaultAdminRole() public view {
 		assertTrue(campusRoles.hasRole(campusRoles.ADMIN_ROLE(), admin));
@@ -135,9 +150,9 @@ contract CampusRolesTest is Test {
 		campusRoles.removeUser(outsider);
 	}
 
-	// Note: address(0) tests for registerUser and changeRole are covered
-	// in the TypeScript test suite (CampusRoles.test.ts) since Hardhat EDR
-	// has quirks with vm.expectRevert + address(0) modifier checks.
+	// Nota: las pruebas de address(0) para registerUser y changeRole se cubren
+	// en la suite TypeScript (CampusRoles.test.ts) porque Hardhat EDR tiene
+	// particularidades con vm.expectRevert y verificaciones en modificadores.
 
 	function test_RevertChangeRoleInvalidRole() public {
 		campusRoles.registerUser(student, "Alice", campusRoles.STUDENT_ROLE());
@@ -191,9 +206,9 @@ contract CampusRolesTest is Test {
 		assertEq(campusRoles.getRoleAdmin(campusRoles.LIBRARIAN_ROLE()), campusRoles.ADMIN_ROLE());
 	}
 
-	// Note: Pausable + grantRole/revokeRole blocking tests are covered
-	// in the TypeScript test suite (CampusRoles.test.ts) since Hardhat EDR
-	// has quirks with vm.expectRevert for pure overrides and pause mechanics.
+	// Nota: las pruebas de Pausable y bloqueo de grantRole/revokeRole se cubren
+	// en la suite TypeScript (CampusRoles.test.ts) porque Hardhat EDR tiene
+	// particularidades con vm.expectRevert en overrides puros y pausado.
 
 	function test_RevertPauseByNonAdmin() public {
 		vm.prank(outsider);

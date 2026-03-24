@@ -7,7 +7,8 @@ import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 import { CampusRoles } from "./CampusRoles.sol";
 
 /// @title LibraryToken
-/// @author CryptoCampus Team
+/// @author Juan Pablo Fernández <juanpf04@ucm.es>
+/// @author Arturo Gómez <argome04@ucm.es>
 /// @notice Token ERC-20 de capacidad de prestamo bibliotecario
 /// @dev 1 token equivale a 1 slot de prestamo simultaneo.
 contract LibraryToken is ERC20, Pausable {

@@ -6,12 +6,22 @@ import { Test } from "forge-std/Test.sol";
 import { CampusRoles } from "../contracts/CampusRoles.sol";
 import { LibraryToken } from "../contracts/LibraryToken.sol";
 
+/// @title LibraryTokenTest
+/// @author Juan Pablo Fernández <juanpf04@ucm.es>
+/// @author Arturo Gómez <argome04@ucm.es>
+/// @notice Pruebas de comportamiento y reverts para la logica administrativa y de allowance en LibraryToken.
+/// @dev Valida el trusted spender, el pausado y las validaciones de entrada.
 contract LibraryTokenTest is Test {
+    
+    // ── Variables de estado ──────────────────────────────────────────────
+
     CampusRoles campusRoles;
     LibraryToken libraryToken;
 
     address user;
     address spender;
+
+    // ── Setup ────────────────────────────────────────────────────────────
 
     function setUp() public {
         campusRoles = new CampusRoles();
@@ -20,6 +30,8 @@ contract LibraryTokenTest is Test {
         user = makeAddr("user");
         spender = makeAddr("spender");
     }
+
+    // ── Tests ────────────────────────────────────────────────────────────
 
     function test_MintAndBurnAsAdmin() public {
         libraryToken.mint(user, 10);
@@ -96,17 +108,17 @@ contract LibraryTokenTest is Test {
     }
 
     function test_PauseAndUnpause() public {
-        // Admin pauses the contract
+        // Admin pausa el contrato.
         libraryToken.pause();
 
-        // Minting reverts while paused
+        // Mint revierte mientras esta pausado.
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
         libraryToken.mint(user, 10);
 
-        // Admin unpauses
+        // Admin reanuda el contrato.
         libraryToken.unpause();
 
-        // Now it works again
+        // Ahora vuelve a funcionar.
         libraryToken.mint(user, 10);
         assertEq(libraryToken.balanceOf(user), 10);
     }

@@ -9,7 +9,8 @@ import { CampusRoles } from "./CampusRoles.sol";
 import { ShopToken } from "./ShopToken.sol";
 
 /// @title CampusShop
-/// @author CryptoCampus Team
+/// @author Juan Pablo Fernández <juanpf04@ucm.es>
+/// @author Arturo Gómez <argome04@ucm.es>
 /// @notice Tienda del campus con flujo de compra y devolucion
 /// @dev Productos y recibos modelados como ERC-1155; pagos con ShopToken.
 contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard, Pausable {

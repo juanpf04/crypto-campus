@@ -5,16 +5,25 @@ import { Test } from "forge-std/Test.sol";
 import { CampusRoles } from "../contracts/CampusRoles.sol";
 import { Printer } from "../contracts/Printer.sol";
 
-/// @notice Basic behavioral tests for Printer.
+/// @title PrinterTest
+/// @author Juan Pablo Fernández <juanpf04@ucm.es>
+/// @author Arturo Gómez <argome04@ucm.es>
+/// @notice Pruebas de comportamiento y reverts para la gestion de creditos en Printer.
+/// @dev Se enfoca en permisos administrativos, emision de eventos y reglas de consumo de creditos.
 contract PrinterTest is Test {
+    
+    // ── Variables de estado ──────────────────────────────────────────────
+
     CampusRoles campusRoles;
     Printer printer;
 
     address student;
     address outsider;
 
+    // ── Setup ────────────────────────────────────────────────────────────
+
     function setUp() public {
-        // Deploy contracts and register a baseline student for test scenarios.
+        // Desplegar contratos y registrar un estudiante base para los escenarios de prueba.
         campusRoles = new CampusRoles();
         printer = new Printer(address(campusRoles));
 
@@ -24,18 +33,20 @@ contract PrinterTest is Test {
         campusRoles.registerUser(student, "Alice", campusRoles.STUDENT_ROLE());
     }
 
+    // ── Tests ────────────────────────────────────────────────────────────
+
     function test_InitialCreditsForRegisteredStudent() public view {
-        // Assert default credits for a registered student.
+        // Verificar creditos por defecto para un estudiante registrado.
         assertEq(printer.getCredits(student), int256(200));
     }
 
     function test_GetCreditsReturnsMinusOneForNonStudent() public view {
-        // Non-student addresses should return sentinel value -1.
+        // Direcciones no estudiante deben devolver el valor centinela -1.
         assertEq(printer.getCredits(outsider), int256(-1));
     }
 
     function test_SetCreditsUpdatesStudentBalanceAndEmitsEvent() public {
-        // Expect event before state-changing call.
+        // Esperar evento antes de la llamada que cambia estado.
         vm.expectEmit();
         emit Printer.CreditsSet(student, 120);
 
@@ -45,7 +56,7 @@ contract PrinterTest is Test {
     }
 
     function test_PrintConsumesCreditsAndEmitsEvent() public {
-        // Arrange explicit credits to verify deterministic remaining balance.
+        // Fijar creditos explicitos para verificar saldo restante determinista.
         printer.setCredits(student, 50);
 
         vm.expectEmit();
@@ -57,7 +68,7 @@ contract PrinterTest is Test {
     }
 
     function test_RevertWhenPrintExceedsAvailableCredits() public {
-        // Printing more pages than available credits must revert.
+        // Imprimir mas paginas que creditos disponibles debe revertir.
         printer.setCredits(student, 10);
 
         vm.expectRevert(abi.encodeWithSelector(Printer.InsufficientCredits.selector, 10, 20));
@@ -65,7 +76,7 @@ contract PrinterTest is Test {
     }
 
     function test_RevertWhenNonAdminSetsCredits() public {
-        // Any non-admin caller should be rejected.
+        // Cualquier llamador no administrador debe ser rechazado.
         vm.prank(student);
         vm.expectRevert(Printer.NotAdmin.selector);
         printer.setCredits(student, 100);
@@ -93,7 +104,7 @@ contract PrinterTest is Test {
     }
 
     function test_PrintWithDefaultCredits() public {
-        // Print without calling setCredits first; should use INITIAL_CREDITS (200).
+        // Imprimir sin llamar a setCredits; debe usar INITIAL_CREDITS (200).
         printer.print(student, 30);
         assertEq(printer.getCredits(student), int256(170));
     }
@@ -117,17 +128,17 @@ contract PrinterTest is Test {
     }
 
     function test_PauseAndUnpause() public {
-        // Admin pauses the contract
+        // Admin pausa el contrato.
         printer.pause();
 
-        // Printing reverts while paused
+        // Imprimir revierte mientras esta pausado.
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
         printer.print(student, 10);
 
-        // Admin unpauses
+        // Admin reanuda el contrato.
         printer.unpause();
 
-        // Now it works again
+        // Ahora vuelve a funcionar.
         printer.print(student, 10);
         assertEq(printer.getCredits(student), int256(190));
     }
