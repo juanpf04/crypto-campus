@@ -107,7 +107,7 @@ export function ProductCard({ groupKey, name, minPrice, maxPrice, totalStock, ca
                   }}
                   aria-label={`Color ${variant.color}`}
                   title={variant.variantLabel ?? variant.color}
-                  className={`h-5 w-5 rounded-full border ${selected ? "border-text" : "border-border-default"}`}
+                  className={`h-5 w-5 rounded-full border transition-all ${selected ? "border-text ring-2 ring-offset-1 ring-primary" : "border-border-default"}`}
                   style={{ backgroundColor: colorToSwatch(variant.color) }}
                 />
               );
