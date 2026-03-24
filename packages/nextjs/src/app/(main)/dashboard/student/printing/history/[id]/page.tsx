@@ -19,6 +19,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { Badge } from "@/components/ui/Badge";
 import { DocumentPreview } from "@/components/shared/DocumentPreview";
 import { DetailField } from "@/components/shared/DetailField";
+import { formatDateTime, formatBytes } from "@/lib/formatters";
 
 interface PrintLogDetail {
   id: string;
@@ -42,23 +43,6 @@ interface PrintLogDetail {
   printer: { id: string; name: string; location: string; floor: string | null };
 }
 
-/** Formatea bytes a cadena legible */
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-/** Formatea fecha+hora */
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("es-ES", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 /** Extrae solo el nombre del archivo del filePath (UUID.ext) */
 function extractFilename(filePath: string | null): string | null {

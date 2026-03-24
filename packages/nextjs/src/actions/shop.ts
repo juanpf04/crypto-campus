@@ -247,6 +247,14 @@ export async function addProduct(input: {
 		const price = ensurePositiveInt(input.price, "El precio");
 		const stock = ensureNonNegativeInt(input.stock, "El stock");
 
+		// Leer nextProductId ANTES de crear para saber qué ID se asignará
+		const nextProductId = await publicClient.readContract({
+			address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
+			abi: CAMPUS_SHOP_ABI,
+			functionName: "nextProductId",
+		}) as bigint;
+		const productId = Number(nextProductId);
+
 		// 1. Registrar on-chain
 		const hash = await adminWalletClient.writeContract({
 			address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
@@ -259,13 +267,6 @@ export async function addProduct(input: {
 		if (receipt.status !== "success") {
 			throw new Error("La transacción de creación de producto fue revertida");
 		}
-
-		// Obtener productId del evento ProductAdded (topics[1] = productId indexado)
-		const productAddedLog = receipt.logs.find((l) => l.topics.length > 1);
-		if (!productAddedLog) {
-			throw new Error("No se pudo obtener el productId del evento");
-		}
-		const productId = Number(BigInt(productAddedLog.topics[1]!));
 
 		// 2. Guardar metadatos en Prisma
 		const product = await prisma.product.create({
@@ -534,6 +535,14 @@ export async function purchaseProduct(productPrismaId: string) {
 			throw new Error(`Saldo insuficiente. Tienes ${Number(balance)} SHPT y el producto cuesta ${product.price} SHPT`);
 		}
 
+		// Leer el nextOrderId ANTES de la compra para saber qué orderId se asignará
+		const nextOrderId = await publicClient.readContract({
+			address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
+			abi: CAMPUS_SHOP_ABI,
+			functionName: "nextOrderId",
+		}) as bigint;
+		const orderId = Number(nextOrderId);
+
 		// Ejecutar compra on-chain (firmada por el estudiante)
 		const hash = await walletClient.writeContract({
 			address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
@@ -546,15 +555,6 @@ export async function purchaseProduct(productPrismaId: string) {
 		if (receipt.status !== "success") {
 			throw new Error("La transacción de compra fue revertida");
 		}
-
-		// Obtener orderId del evento OrderCreated (topics[1] = orderId indexado)
-		const orderCreatedLog = receipt.logs.find(
-			(l) => l.topics.length > 1 && l.address.toLowerCase() === (CONTRACT_ADDRESSES.campusShop as string).toLowerCase()
-		);
-		if (!orderCreatedLog) {
-			throw new Error("No se pudo obtener el orderId del evento");
-		}
-		const orderId = Number(BigInt(orderCreatedLog.topics[1]!));
 
 		// Actualizar stock en Prisma
 		await prisma.product.update({

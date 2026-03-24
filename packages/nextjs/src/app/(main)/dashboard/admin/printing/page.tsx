@@ -14,60 +14,9 @@ import { useAuthUser } from "@/hooks/useAuthUser";
 import { DashboardGreeting } from "@/components/shared/DashboardGreeting";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { StatCard } from "@/components/shared/StatCard";
+import { ActionRow } from "@/components/shared/ActionRow";
 import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
-import type { ReactNode } from "react";
-
-/** Fila clicable de la tabla de acciones rápidas */
-function ActionRow({
-  href,
-  icon,
-  title,
-  description,
-  stat,
-  isLast,
-}: {
-  href: string;
-  icon: ReactNode;
-  title: string;
-  description: string;
-  stat: string | number;
-  isLast?: boolean;
-}) {
-  return (
-    <Link href={href} className="group">
-      <div
-        className={`flex items-center gap-4 px-5 py-4 transition-colors hover:bg-primary/5 ${
-          !isLast ? "border-b border-border-default" : ""
-        }`}
-      >
-        {/* Icono */}
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-colors">
-          {icon}
-        </div>
-
-        {/* Título + descripción */}
-        <div className="flex-1 min-w-0">
-          <p className="font-medium text-text">{title}</p>
-          <p className="text-sm text-text-muted">{description}</p>
-        </div>
-
-        {/* Stat rápido */}
-        <span className="text-sm font-medium text-text-muted shrink-0">
-          {stat}
-        </span>
-
-        {/* Flecha ↗ */}
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-            <line x1="7" y1="17" x2="17" y2="7" />
-            <polyline points="7 7 17 7 17 17" />
-          </svg>
-        </span>
-      </div>
-    </Link>
-  );
-}
 
 export default function AdminPrintingPage() {
   const { user, loading: authLoading } = useAuthUser();

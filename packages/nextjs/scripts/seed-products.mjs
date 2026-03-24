@@ -106,7 +106,15 @@ async function main() {
     log(`Cargando ${productsJson.length} producto(s) en la tienda...`);
 
     for (const product of productsJson) {
-      // 1. Registrar producto on-chain → obtener productId
+      // Leer nextProductId ANTES de crear para saber qué ID se asignará
+      const nextProductId = await publicClient.readContract({
+        address: CAMPUS_SHOP_ADDRESS,
+        abi: CAMPUS_SHOP_ABI,
+        functionName: "nextProductId",
+      });
+      const productId = Number(nextProductId);
+
+      // 1. Registrar producto on-chain
       const hash = await adminWalletClient.writeContract({
         address: CAMPUS_SHOP_ADDRESS,
         abi: CAMPUS_SHOP_ABI,
@@ -115,15 +123,8 @@ async function main() {
       });
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
-      // Obtener el productId del evento ProductAdded
-      const productAddedLog = receipt.logs.find((l) => l.topics.length > 0);
-      // El productId es el primer topic indexado (topics[1])
-      const productId = productAddedLog
-        ? Number(BigInt(productAddedLog.topics[1]))
-        : null;
-
-      if (!productId) {
-        log(yellow(`  ✗ No se pudo obtener productId para "${product.name}"`));
+      if (receipt.status !== "success") {
+        log(yellow(`  ✗ Transacción revertida para "${product.name}"`));
         continue;
       }
 

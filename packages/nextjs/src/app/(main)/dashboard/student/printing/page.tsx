@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { icons } from "@/components/ui/icons";
+import { LinkArrow } from "@/components/shared/LinkArrow";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { CreditsBanner } from "@/components/shared/CreditsBanner";
 import { PrintingOverlay } from "@/components/shared/PrintingOverlay";
@@ -153,22 +154,7 @@ export default function StudentPrintingPage() {
               <p className="text-xs text-text-muted mt-0.5">Ver historial completo</p>
             </div>
 
-            {/* Flecha ↗ indicando que es clicable */}
-            <div className="absolute top-4 right-4 grid h-8 w-8 place-items-center rounded-md bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-colors">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2.5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-4 w-4"
-              >
-                <line x1="7" y1="17" x2="17" y2="7" />
-                <polyline points="7 7 17 7 17 17" />
-              </svg>
-            </div>
+            <LinkArrow />
           </Card>
         </Link>
       </section>

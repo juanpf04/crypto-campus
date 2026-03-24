@@ -19,6 +19,7 @@ import { SectionTitle } from "@/components/shared/SectionTitle";
 import { CompoundCard } from "@/components/shared/CompoundCard";
 import { DashboardGreeting } from "@/components/shared/DashboardGreeting";
 import { Spinner } from "@/components/ui/Spinner";
+import { LinkArrow } from "@/components/shared/LinkArrow";
 
 export default function StudentDashboard() {
   const { user, loading } = useAuthUser();
@@ -26,6 +27,10 @@ export default function StudentDashboard() {
   // Datos reales de impresión
   const [printCredits, setPrintCredits] = useState<number | string>("—");
   const [printCount, setPrintCount] = useState<number | string>("—");
+
+  // Datos reales de la tienda
+  const [shopBalance, setShopBalance] = useState<number | string>("—");
+  const [orderCount, setOrderCount] = useState<number | string>("—");
 
   useEffect(() => {
     if (!user) return;
@@ -40,6 +45,18 @@ export default function StudentDashboard() {
     fetch("/api/printer/logs?limit=100&offset=0")
       .then((r) => r.json())
       .then((data) => setPrintCount(Array.isArray(data) ? data.length : "—"))
+      .catch(() => {});
+
+    // Balance de ShopTokens
+    fetch("/api/shop/balance")
+      .then((r) => r.json())
+      .then((data) => setShopBalance(data.balance ?? "—"))
+      .catch(() => {});
+
+    // Total de pedidos
+    fetch("/api/shop/orders?limit=1&offset=0")
+      .then((r) => r.json())
+      .then((data) => setOrderCount(data.total ?? "—"))
       .catch(() => {});
   }, [user]);
 
@@ -70,9 +87,7 @@ export default function StudentDashboard() {
               icon={icons.print}
               className="h-full transition-colors group-hover:border-primary/50"
             />
-            <div className="pointer-events-none absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-white">
-              {icons.externalArrow}
-            </div>
+            <LinkArrow />
           </Link>
           <Link href="/dashboard/student/printing/history" className="group relative block">
             <StatCard
@@ -82,9 +97,7 @@ export default function StudentDashboard() {
               icon={icons.orders}
               className="h-full transition-colors group-hover:border-primary/50"
             />
-            <div className="pointer-events-none absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-white">
-              {icons.externalArrow}
-            </div>
+            <LinkArrow />
           </Link>
         </div>
       </section>
@@ -142,12 +155,26 @@ export default function StudentDashboard() {
       <section className="space-y-4">
         <SectionTitle icon={icons.shop}>Tienda</SectionTitle>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard
-            title="Tokens SHOP"
-            value="—"
-            subtitle="Balance actual"
-            icon={icons.shop}
-          />
+          <Link href="/dashboard/student/shop" className="group relative block">
+            <StatCard
+              title="ShopTokens"
+              value={shopBalance}
+              subtitle="Balance actual"
+              icon={icons.shop}
+              className="h-full transition-colors group-hover:border-primary/50"
+            />
+            <LinkArrow />
+          </Link>
+          <Link href="/dashboard/student/shop/orders" className="group relative block">
+            <StatCard
+              title="Pedidos realizados"
+              value={orderCount}
+              subtitle="Total acumulado"
+              icon={icons.orders}
+              className="h-full transition-colors group-hover:border-primary/50"
+            />
+            <LinkArrow />
+          </Link>
         </div>
       </section>
     </div>

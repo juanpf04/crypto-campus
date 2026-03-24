@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 
-type BadgeVariant = "success" | "warning" | "danger" | "info" | "neutral";
+export type BadgeVariant = "success" | "warning" | "danger" | "info" | "neutral";
 
 interface BadgeProps {
   variant?: BadgeVariant;
