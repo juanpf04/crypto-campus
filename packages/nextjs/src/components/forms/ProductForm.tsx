@@ -99,7 +99,7 @@ export function ProductForm({ onSubmit, initialValues, isEdit }: ProductFormProp
       />
       <Input
         label="URL de imagen (opcional)"
-        placeholder="/images/shop/camiseta.png"
+        placeholder="/products/camiseta/basica/blanca/main.webp"
         value={fields.imageUrl}
         onChange={setField("imageUrl")}
       />

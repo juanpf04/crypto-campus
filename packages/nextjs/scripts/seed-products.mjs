@@ -91,60 +91,182 @@ async function main() {
   const prisma = new PrismaClient({ adapter });
 
   try {
-    // Comprobar si ya hay productos (idempotencia)
-    const existingCount = await prisma.product.count();
-    if (existingCount > 0) {
-      log(green(`Ya existen ${existingCount} producto(s) en la BD. Saltando seed.`));
-      return;
-    }
-
     // Cargar JSON de productos
     const productsJson = JSON.parse(
       readFileSync(resolve(__dirname, "../prisma/seed-products.json"), "utf-8")
     );
 
-    log(`Cargando ${productsJson.length} producto(s) en la tienda...`);
+    log(`Sincronizando ${productsJson.length} producto(s) de catálogo...`);
+
+    // 0. Migrar rutas legacy para evitar 404 por cambios de estructura
+    const legacyPrefixMap = [
+      ["/products/sudadera-basica/", "/products/sudadera/basica/"],
+      ["/products/sudadera-capucha/", "/products/sudadera/capucha/"],
+      ["/products/camiseta-basica/", "/products/camiseta/basica/"],
+      ["/products/camiseta-complutense/", "/products/camiseta/complutense/"],
+      ["/products/camiseta-new/", "/products/camiseta/new/"],
+    ];
+
+    const allProductsBefore = await prisma.product.findMany({
+      select: { id: true, imageUrl: true },
+    });
+
+    for (const p of allProductsBefore) {
+      if (!p.imageUrl) continue;
+      let migrated = p.imageUrl;
+      for (const [fromPrefix, toPrefix] of legacyPrefixMap) {
+        if (migrated.startsWith(fromPrefix)) {
+          migrated = migrated.replace(fromPrefix, toPrefix);
+        }
+      }
+
+      if (migrated !== p.imageUrl) {
+        await prisma.product.update({
+          where: { id: p.id },
+          data: { imageUrl: migrated },
+        });
+      }
+    }
+
+    const existingProducts = await prisma.product.findMany({
+      select: {
+        id: true,
+        name: true,
+        imageUrl: true,
+        productId: true,
+        active: true,
+      },
+    });
+
+    const byImageUrl = new Map(
+      existingProducts
+        .filter((p) => p.imageUrl)
+        .map((p) => [p.imageUrl, p])
+    );
+
+    const byName = new Map(
+      existingProducts.map((p) => [p.name.trim().toLowerCase(), p])
+    );
+
+    const syncedIds = new Set();
+
+    let created = 0;
+    let updated = 0;
+    let skippedCreate = 0;
 
     for (const product of productsJson) {
-      // Leer nextProductId ANTES de crear para saber qué ID se asignará
-      const nextProductId = await publicClient.readContract({
-        address: CAMPUS_SHOP_ADDRESS,
-        abi: CAMPUS_SHOP_ABI,
-        functionName: "nextProductId",
-      });
-      const productId = Number(nextProductId);
+      const existing = byImageUrl.get(product.imageUrl) || byName.get(product.name.trim().toLowerCase());
 
-      // 1. Registrar producto on-chain
-      const hash = await adminWalletClient.writeContract({
-        address: CAMPUS_SHOP_ADDRESS,
-        abi: CAMPUS_SHOP_ABI,
-        functionName: "addProduct",
-        args: [BigInt(product.price), BigInt(product.stock)],
-      });
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (existing) {
+        await prisma.product.update({
+          where: { id: existing.id },
+          data: {
+            name: product.name,
+            description: product.description || null,
+            price: product.price,
+            stock: product.stock,
+            category: product.category || null,
+            imageUrl: product.imageUrl || null,
+            active: true,
+          },
+        });
 
-      if (receipt.status !== "success") {
-        log(yellow(`  ✗ Transacción revertida para "${product.name}"`));
+        syncedIds.add(existing.id);
+        updated += 1;
+        log(green(`  ↺ Actualizado #${existing.productId} ${product.name}`));
         continue;
       }
 
-      // 2. Guardar metadatos en Prisma
-      await prisma.product.create({
-        data: {
-          productId,
-          name: product.name,
-          description: product.description || null,
-          price: product.price,
-          stock: product.stock,
-          category: product.category || null,
-          imageUrl: product.imageUrl || null,
-        },
-      });
+      // Crear faltantes: on-chain + Prisma
+      let productId;
+      try {
+        const nextProductId = await publicClient.readContract({
+          address: CAMPUS_SHOP_ADDRESS,
+          abi: CAMPUS_SHOP_ABI,
+          functionName: "nextProductId",
+        });
+        productId = Number(nextProductId);
 
-      log(green(`  ✓ #${productId} ${product.name} — ${product.price} SHPT (stock: ${product.stock})`));
+        const hash = await adminWalletClient.writeContract({
+          address: CAMPUS_SHOP_ADDRESS,
+          abi: CAMPUS_SHOP_ABI,
+          functionName: "addProduct",
+          args: [BigInt(product.price), BigInt(product.stock)],
+        });
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+
+        if (receipt.status !== "success") {
+          skippedCreate += 1;
+          log(yellow(`  ⚠ No creado on-chain (tx revertida): ${product.name}`));
+          continue;
+        }
+      } catch {
+        skippedCreate += 1;
+        log(yellow(`  ⚠ No creado on-chain (nodo no disponible): ${product.name}`));
+        continue;
+      }
+
+      let createdProduct;
+      try {
+        createdProduct = await prisma.product.create({
+          data: {
+            productId,
+            name: product.name,
+            description: product.description || null,
+            price: product.price,
+            stock: product.stock,
+            category: product.category || null,
+            imageUrl: product.imageUrl || null,
+            active: true,
+          },
+        });
+      } catch (error) {
+        // Si la chain local se ha reiniciado, productId on-chain puede colisionar
+        // con IDs persistidos en Prisma. Reasignamos un ID libre en BD para no
+        // bloquear el sincronizado del catálogo visual.
+        if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
+          const maxProductId = await prisma.product.aggregate({
+            _max: { productId: true },
+          });
+          const fallbackProductId = (maxProductId._max.productId ?? 0) + 1;
+
+          createdProduct = await prisma.product.create({
+            data: {
+              productId: fallbackProductId,
+              name: product.name,
+              description: product.description || null,
+              price: product.price,
+              stock: product.stock,
+              category: product.category || null,
+              imageUrl: product.imageUrl || null,
+              active: true,
+            },
+          });
+
+          log(yellow(`  ⚠ Colisión productId on-chain (${productId}) para ${product.name}; asignado productId BD ${fallbackProductId}`));
+        } else {
+          throw error;
+        }
+      }
+
+      syncedIds.add(createdProduct.id);
+      created += 1;
+      log(green(`  + Creado #${productId} ${product.name}`));
     }
 
-    log(green(`Seed completado: ${productsJson.length} productos cargados.`));
+    // Desactivar productos que no estén en el catálogo JSON
+    const staleIds = existingProducts
+      .map((p) => p.id)
+      .filter((id) => !syncedIds.has(id));
+
+    if (staleIds.length > 0) {
+      await prisma.product.updateMany({
+        where: { id: { in: staleIds } },
+        data: { active: false },
+      });
+    }
+
+    log(green(`Sync completado. Actualizados: ${updated}, creados: ${created}, desactivados: ${staleIds.length}, no creados on-chain: ${skippedCreate}`));
   } finally {
     await prisma.$disconnect();
   }
