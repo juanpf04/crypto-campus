@@ -11,12 +11,12 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { listActiveProducts, addProduct } from "@/actions/shop";
+import { listGroupedProducts, addProduct } from "@/actions/shop";
 
 export async function GET(req: NextRequest) {
 	try {
 		const category = req.nextUrl.searchParams.get("category") || undefined;
-		const products = await listActiveProducts(category);
+		const products = await listGroupedProducts(category);
 		return NextResponse.json(products);
 	} catch (error) {
 		console.error("[GET /api/shop/products]", error);

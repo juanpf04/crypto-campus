@@ -37,7 +37,155 @@ import {
 
 type Role = "STUDENT" | "PROFESSOR" | "LIBRARIAN" | "ADMIN";
 
+type ProductVariantSummary = {
+	id: string;
+	productId: number;
+	name: string;
+	price: number;
+	stock: number;
+	category: string | null;
+	imageUrl: string | null;
+	color: string;
+	variantLabel: string | null;
+};
+
+type ProductGroupSummary = {
+	groupKey: string;
+	name: string;
+	category: string | null;
+	description: string | null;
+	minPrice: number;
+	maxPrice: number;
+	totalStock: number;
+	defaultVariantId: string;
+	variants: ProductVariantSummary[];
+};
+
+type SimulatedCardInput = {
+	cardNumber: string;
+	expiryMonth: number;
+	expiryYear: number;
+	cvv: string;
+	amount: number;
+};
+
 // ── Helpers internos ─────────────────────────────────────────────────────
+
+function slugify(value: string): string {
+	return value
+		.toLowerCase()
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "");
+}
+
+function normalizeColor(color: string | null | undefined): string {
+	return (color ?? "default").trim().toLowerCase() || "default";
+}
+
+function toDisplayColor(raw: string): string {
+	const normalized = normalizeColor(raw);
+	return normalized
+		.split("-")
+		.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+		.join(" ");
+}
+
+function deriveBaseKeyFromImageUrl(imageUrl: string | null): string | null {
+	if (!imageUrl) return null;
+	const parts = imageUrl.split("/").filter(Boolean);
+	if (parts.length < 4) return null;
+	const baseParts = parts.slice(1, -2);
+	if (baseParts.length === 0) return null;
+	return slugify(baseParts.join("-"));
+}
+
+function deriveBaseName(name: string, color: string): string {
+	const displayColor = toDisplayColor(color);
+	const variants = [displayColor, displayColor.toLowerCase(), displayColor.toUpperCase()];
+
+	for (const candidate of variants) {
+		const suffix = ` ${candidate}`;
+		if (name.endsWith(suffix)) {
+			return name.slice(0, -suffix.length).trim();
+		}
+	}
+
+	return name;
+}
+
+function deriveColorFromImageUrl(imageUrl: string | null): string {
+	if (!imageUrl) return "default";
+	const parts = imageUrl.split("/").filter(Boolean);
+	if (parts.length < 2) return "default";
+	const candidate = parts[parts.length - 2];
+	return normalizeColor(candidate);
+}
+
+function luhnCheck(cardNumber: string): boolean {
+	const digits = cardNumber.replace(/\s+/g, "");
+	if (!/^\d{13,19}$/.test(digits)) return false;
+
+	let sum = 0;
+	let shouldDouble = false;
+	for (let i = digits.length - 1; i >= 0; i -= 1) {
+		let value = Number(digits[i]);
+		if (shouldDouble) {
+			value *= 2;
+			if (value > 9) value -= 9;
+		}
+		sum += value;
+		shouldDouble = !shouldDouble;
+	}
+
+	return sum % 10 === 0;
+}
+
+function getCardBrand(cardNumber: string): string {
+	const digits = cardNumber.replace(/\s+/g, "");
+	if (/^4\d{12}(\d{3})?(\d{3})?$/.test(digits)) return "VISA";
+	if (/^(5[1-5]\d{14}|2[2-7]\d{14})$/.test(digits)) return "MASTERCARD";
+	if (/^3[47]\d{13}$/.test(digits)) return "AMEX";
+	return "OTHER";
+}
+
+function validateSimulatedCardInput(input: SimulatedCardInput) {
+	const amount = ensurePositiveInt(input.amount, "La cantidad");
+	if (amount > 1000) {
+		throw new Error("La recarga maxima por operacion es de 1000 SHPT");
+	}
+
+	const cardNumber = input.cardNumber.replace(/\s+/g, "");
+	if (!luhnCheck(cardNumber)) {
+		throw new Error("Tarjeta simulada invalida");
+	}
+
+	if (!/^\d{3,4}$/.test(input.cvv)) {
+		throw new Error("CVV invalido");
+	}
+
+	const month = ensurePositiveInt(input.expiryMonth, "El mes de expiracion");
+	if (month < 1 || month > 12) {
+		throw new Error("Mes de expiracion invalido");
+	}
+
+	const year = ensurePositiveInt(input.expiryYear, "El anio de expiracion");
+	const now = new Date();
+	const expiryBoundary = new Date(year, month, 0, 23, 59, 59, 999);
+	if (expiryBoundary < now) {
+		throw new Error("La tarjeta simulada esta expirada");
+	}
+
+	return {
+		amount,
+		cardNumber,
+		expiryMonth: month,
+		expiryYear: year,
+		cardLast4: cardNumber.slice(-4),
+		cardBrand: getCardBrand(cardNumber),
+	};
+}
 
 /**
  * Obtiene la sesión del usuario actual desde la cookie cifrada.
@@ -160,6 +308,83 @@ export async function listActiveProducts(category?: string) {
 		});
 	} catch (error) {
 		throw new Error(`Error al listar productos: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
+}
+
+/**
+ * Lista el catalogo agrupado por producto base con variantes de color.
+ * Acceso: cualquier usuario autenticado.
+ */
+export async function listGroupedProducts(category?: string): Promise<ProductGroupSummary[]> {
+	const session = await getSession();
+	ensureRole(session, ["STUDENT", "PROFESSOR", "LIBRARIAN", "ADMIN"]);
+
+	try {
+		const where: Record<string, unknown> = { active: true };
+		if (category) where.category = category;
+
+		const products = await prisma.product.findMany({
+			where,
+			include: {
+				base: {
+					select: { slug: true, name: true, description: true, category: true },
+				},
+			},
+			orderBy: [
+				{ category: "asc" },
+				{ baseId: "asc" },
+				{ sortOrder: "asc" },
+				{ name: "asc" },
+			],
+		});
+
+		const groups = new Map<string, ProductGroupSummary>();
+
+		for (const product of products) {
+			const color = normalizeColor(product.color ?? deriveColorFromImageUrl(product.imageUrl));
+			const fallbackBaseKey = deriveBaseKeyFromImageUrl(product.imageUrl) ?? slugify(product.name);
+			const baseName = product.base?.name ?? deriveBaseName(product.name, color);
+			const baseKey = product.base?.slug ?? fallbackBaseKey;
+			const variant: ProductVariantSummary = {
+				id: product.id,
+				productId: product.productId,
+				name: product.name,
+				price: product.price,
+				stock: product.stock,
+				category: product.category,
+				imageUrl: product.imageUrl,
+				color,
+				variantLabel: product.variantLabel,
+			};
+
+			if (!groups.has(baseKey)) {
+				groups.set(baseKey, {
+					groupKey: baseKey,
+					name: baseName,
+					category: product.base?.category ?? product.category,
+					description: product.base?.description ?? product.description,
+					minPrice: product.price,
+					maxPrice: product.price,
+					totalStock: Math.max(product.stock, 0),
+					defaultVariantId: product.id,
+					variants: [variant],
+				});
+				continue;
+			}
+
+			const current = groups.get(baseKey)!;
+			current.minPrice = Math.min(current.minPrice, product.price);
+			current.maxPrice = Math.max(current.maxPrice, product.price);
+			current.totalStock += Math.max(product.stock, 0);
+			current.variants.push(variant);
+		}
+
+		return [...groups.values()].map((group) => ({
+			...group,
+			variants: group.variants.sort((a, b) => a.color.localeCompare(b.color)),
+		}));
+	} catch (error) {
+		throw new Error(`Error al listar catalogo agrupado: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
 
@@ -461,6 +686,31 @@ export async function getStudentShopBalance(userId: string) {
 	}
 }
 
+async function mintShopTokensInternal(userId: string, amount: number) {
+	const normalizedAmount = ensurePositiveInt(amount, "La cantidad");
+	const address = await getUserAddressById(userId);
+
+	const hash = await adminWalletClient.writeContract({
+		address: CONTRACT_ADDRESSES.shopToken as `0x${string}`,
+		abi: SHOP_TOKEN_ABI,
+		functionName: "mint",
+		args: [address, BigInt(normalizedAmount)],
+	});
+	const receipt = await publicClient.waitForTransactionReceipt({ hash });
+	if (receipt.status !== "success") {
+		throw new Error("La transaccion de minteo fue revertida");
+	}
+
+	const updatedBalance = await readShopBalance(address);
+
+	return {
+		txHash: hash,
+		userId,
+		userAddress: address,
+		balance: Number(updatedBalance),
+	};
+}
+
 /**
  * Mintea ShopTokens a un usuario (admin).
  * Acceso: solo admin.
@@ -470,31 +720,112 @@ export async function mintShopTokens(userId: string, amount: number) {
 	ensureRole(session, ["ADMIN"]);
 
 	try {
-		const normalizedAmount = ensurePositiveInt(amount, "La cantidad");
-		const address = await getUserAddressById(userId);
-
-		const hash = await adminWalletClient.writeContract({
-			address: CONTRACT_ADDRESSES.shopToken as `0x${string}`,
-			abi: SHOP_TOKEN_ABI,
-			functionName: "mint",
-			args: [address, BigInt(normalizedAmount)],
-		});
-		const receipt = await publicClient.waitForTransactionReceipt({ hash });
-		if (receipt.status !== "success") {
-			throw new Error("La transacción de minteo fue revertida");
-		}
-
-		const updatedBalance = await readShopBalance(address);
-
-		return {
-			txHash: hash,
-			userId,
-			userAddress: address,
-			balance: Number(updatedBalance),
-		};
+		return await mintShopTokensInternal(userId, amount);
 	} catch (error) {
 		if (error instanceof Error && error.message === "No autorizado") throw error;
 		throw new Error(`Error al mintear tokens: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
+}
+
+/**
+ * Recarga simulada por tarjeta para el usuario autenticado.
+ * Seguridad: nunca persiste PAN completo ni CVV.
+ */
+export async function topupWithSimulatedCard(input: SimulatedCardInput) {
+	const session = await getSession();
+	ensureRole(session, ["STUDENT", "PROFESSOR"]);
+
+	const validated = validateSimulatedCardInput(input);
+	const now = new Date();
+	const oneDayAgo = new Date(now.getTime() - (24 * 60 * 60 * 1000));
+	const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+	const [dailyOps, monthlyAmount] = await Promise.all([
+		prisma.cardTopupSimulation.count({
+			where: {
+				userId: session.userId!,
+				createdAt: { gte: oneDayAgo },
+			},
+		}),
+		prisma.cardTopupSimulation.aggregate({
+			where: {
+				userId: session.userId!,
+				status: "SUCCESS",
+				createdAt: { gte: monthStart },
+			},
+			_sum: { amount: true },
+		}),
+	]);
+
+	if (dailyOps >= 10) {
+		throw new Error("Has alcanzado el limite diario de recargas simuladas");
+	}
+
+	if ((monthlyAmount._sum.amount ?? 0) + validated.amount > 5000) {
+		throw new Error("Has alcanzado el limite mensual de recargas simuladas");
+	}
+
+	const simulation = await prisma.cardTopupSimulation.create({
+		data: {
+			userId: session.userId!,
+			amount: validated.amount,
+			cardBrand: validated.cardBrand,
+			cardLast4: validated.cardLast4,
+			expiryMonth: validated.expiryMonth,
+			expiryYear: validated.expiryYear,
+			status: "PENDING",
+		},
+	});
+
+	try {
+		const mintResult = await mintShopTokensInternal(session.userId!, validated.amount);
+
+		await prisma.$transaction([
+			prisma.cardTopupSimulation.update({
+				where: { id: simulation.id },
+				data: { status: "SUCCESS", txHash: mintResult.txHash },
+			}),
+			prisma.paymentSimulationLog.create({
+				data: {
+					userId: session.userId!,
+					method: "SIMULATED_CARD",
+					amount: validated.amount,
+					result: "SUCCESS",
+					cardLast4: validated.cardLast4,
+					txHash: mintResult.txHash,
+				},
+			}),
+		]);
+
+		return {
+			simulationId: simulation.id,
+			txHash: mintResult.txHash,
+			newBalance: mintResult.balance,
+			amount: validated.amount,
+			cardBrand: validated.cardBrand,
+			cardLast4: validated.cardLast4,
+		};
+	} catch (error) {
+		const reason = error instanceof Error ? error.message : "error_desconocido";
+
+		await prisma.$transaction([
+			prisma.cardTopupSimulation.update({
+				where: { id: simulation.id },
+				data: { status: "FAILED", errorReason: reason },
+			}),
+			prisma.paymentSimulationLog.create({
+				data: {
+					userId: session.userId!,
+					method: "SIMULATED_CARD",
+					amount: validated.amount,
+					result: "FAILED",
+					cardLast4: validated.cardLast4,
+					errorReason: reason,
+				},
+			}),
+		]);
+
+		throw new Error(`Error al recargar saldo: ${reason}`);
 	}
 }
 
@@ -589,6 +920,180 @@ export async function purchaseProduct(productPrismaId: string) {
 		)) throw error;
 		throw new Error(`Error al realizar la compra: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
+}
+
+async function getOrCreateCart(userId: string) {
+	const existing = await prisma.cart.findUnique({
+		where: { userId },
+		include: {
+			items: {
+				include: {
+					product: {
+						select: {
+							id: true,
+							name: true,
+							price: true,
+							stock: true,
+							imageUrl: true,
+							category: true,
+							color: true,
+							variantLabel: true,
+							active: true,
+						},
+					},
+				},
+				orderBy: { createdAt: "asc" },
+			},
+		},
+	});
+
+	if (existing) return existing;
+
+	return prisma.cart.create({
+		data: { userId },
+		include: {
+			items: {
+				include: {
+					product: {
+						select: {
+							id: true,
+							name: true,
+							price: true,
+							stock: true,
+							imageUrl: true,
+							category: true,
+							color: true,
+							variantLabel: true,
+							active: true,
+						},
+					},
+				},
+				orderBy: { createdAt: "asc" },
+			},
+		},
+	});
+}
+
+function buildCartSummary(cart: Awaited<ReturnType<typeof getOrCreateCart>>) {
+	const items = cart.items.map((item) => ({
+		id: item.id,
+		productId: item.productId,
+		name: item.product.name,
+		price: item.product.price,
+		quantity: item.quantity,
+		stock: item.product.stock,
+		imageUrl: item.product.imageUrl,
+		category: item.product.category,
+		color: item.product.color,
+		variantLabel: item.product.variantLabel,
+		subtotal: item.product.price * item.quantity,
+	}));
+
+	const total = items.reduce((acc, item) => acc + item.subtotal, 0);
+
+	return {
+		id: cart.id,
+		userId: cart.userId,
+		items,
+		total,
+	};
+}
+
+/**
+ * Obtiene el carrito del usuario autenticado.
+ */
+export async function getMyCart() {
+	const session = await getSession();
+	ensureRole(session, ["STUDENT", "PROFESSOR"]);
+
+	const cart = await getOrCreateCart(session.userId!);
+	return buildCartSummary(cart);
+}
+
+/**
+ * Agrega una variante al carrito.
+ */
+export async function addToCart(productId: string, quantity = 1) {
+	const session = await getSession();
+	ensureRole(session, ["STUDENT", "PROFESSOR"]);
+
+	const normalizedQuantity = ensurePositiveInt(quantity, "La cantidad");
+	const product = await prisma.product.findUnique({ where: { id: productId } });
+	if (!product || !product.active) throw new Error("Producto no disponible");
+	if (product.stock < normalizedQuantity) throw new Error("Stock insuficiente");
+
+	const cart = await getOrCreateCart(session.userId!);
+	const existingItem = cart.items.find((item) => item.productId === productId);
+
+	if (existingItem) {
+		const nextQuantity = existingItem.quantity + normalizedQuantity;
+		if (nextQuantity > product.stock) throw new Error("Stock insuficiente");
+		await prisma.cartItem.update({
+			where: { id: existingItem.id },
+			data: { quantity: nextQuantity },
+		});
+	} else {
+		await prisma.cartItem.create({
+			data: {
+				cartId: cart.id,
+				productId,
+				quantity: normalizedQuantity,
+			},
+		});
+	}
+
+	return getMyCart();
+}
+
+/**
+ * Actualiza la cantidad de un item del carrito.
+ */
+export async function updateCartItemQuantity(itemId: string, quantity: number) {
+	const session = await getSession();
+	ensureRole(session, ["STUDENT", "PROFESSOR"]);
+
+	const normalizedQuantity = ensurePositiveInt(quantity, "La cantidad");
+	const cart = await getOrCreateCart(session.userId!);
+	const item = cart.items.find((entry) => entry.id === itemId);
+	if (!item) throw new Error("Item de carrito no encontrado");
+
+	if (!item.product.active || item.product.stock < normalizedQuantity) {
+		throw new Error("Stock insuficiente");
+	}
+
+	await prisma.cartItem.update({
+		where: { id: itemId },
+		data: { quantity: normalizedQuantity },
+	});
+
+	return getMyCart();
+}
+
+/**
+ * Elimina un item del carrito.
+ */
+export async function removeCartItem(itemId: string) {
+	const session = await getSession();
+	ensureRole(session, ["STUDENT", "PROFESSOR"]);
+
+	const cart = await getOrCreateCart(session.userId!);
+	const item = cart.items.find((entry) => entry.id === itemId);
+	if (!item) throw new Error("Item de carrito no encontrado");
+
+	await prisma.cartItem.delete({ where: { id: itemId } });
+	return getMyCart();
+}
+
+/**
+ * Vacia el carrito del usuario autenticado.
+ */
+export async function clearMyCart() {
+	const session = await getSession();
+	ensureRole(session, ["STUDENT", "PROFESSOR"]);
+
+	const cart = await getOrCreateCart(session.userId!);
+	await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
+	return getMyCart();
 }
 
 // ── Pedidos: Lectura ─────────────────────────────────────────────────────

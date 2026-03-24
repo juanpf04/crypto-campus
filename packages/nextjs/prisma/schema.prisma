@@ -34,6 +34,9 @@ model User {
   printLogs         PrintLog[]
   loans             Loan[]
   orders            Order[]
+  cart              Cart?
+  topupSimulations  CardTopupSimulation[]
+  paymentLogs       PaymentSimulationLog[]
   badgeAwards       BadgeAward[]
   awardedBadgesTo   BadgeAward[]     @relation("AwardedBy")
   badgeTypesCreated BadgeType[]      @relation("BadgeTypeCreator")
@@ -295,16 +298,39 @@ enum OrderStatus {
 model Product {
   id          String   @id @default(cuid())
   productId   Int      @unique  // ID en el contrato CampusShop
+  baseId      String?
   name        String
+  color       String?
+  variantLabel String?
+  attributes  Json?
   description String?
   price       Int               // en ShopTokens
   stock       Int
   imageUrl    String?
   category    String?
+  sortOrder   Int      @default(0)
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
+  base  ProductBase? @relation(fields: [baseId], references: [id])
   orders Order[]
+  cartItems CartItem[]
+
+  @@index([baseId])
+}
+
+model ProductBase {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  category    String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  variants Product[]
 }
 
 // Pedido. orderId = ID en CampusShop.
@@ -323,4 +349,63 @@ model Order {
 
   user    User    @relation(fields: [userId], references: [id])
   product Product @relation(fields: [productId], references: [id])
+}
+
+model Cart {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user  User       @relation(fields: [userId], references: [id])
+  items CartItem[]
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  cartId    String
+  productId String
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([cartId, productId])
+  @@index([cartId])
+}
+
+model CardTopupSimulation {
+  id          String   @id @default(cuid())
+  userId      String
+  amount      Int
+  cardBrand   String?
+  cardLast4   String
+  expiryMonth Int
+  expiryYear  Int
+  status      String
+  txHash      String?
+  errorReason String?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+}
+
+model PaymentSimulationLog {
+  id          String   @id @default(cuid())
+  userId      String
+  method      String
+  amount      Int
+  result      String
+  cardLast4   String?
+  txHash      String?
+  errorReason String?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
 }

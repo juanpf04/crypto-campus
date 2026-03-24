@@ -22,13 +22,27 @@ import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 
-interface Product {
+interface ProductVariant {
   id: string;
   name: string;
+  color: string;
+  variantLabel: string | null;
   price: number;
   stock: number;
   category: string | null;
   imageUrl: string | null;
+}
+
+interface ProductGroup {
+  groupKey: string;
+  name: string;
+  category: string | null;
+  description: string | null;
+  minPrice: number;
+  maxPrice: number;
+  totalStock: number;
+  defaultVariantId: string;
+  variants: ProductVariant[];
 }
 
 export default function StudentShopPage() {
@@ -37,7 +51,8 @@ export default function StudentShopPage() {
   const [balance, setBalance] = useState<number | null>(null);
   const [totalOrders, setTotalOrders] = useState(0);
   const [categories, setCategories] = useState<string[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<ProductGroup[]>([]);
+  const [cartItemsCount, setCartItemsCount] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -48,12 +63,14 @@ export default function StudentShopPage() {
       fetch("/api/shop/categories").then((r) => r.json()),
       fetch("/api/shop/products").then((r) => r.json()),
       fetch("/api/shop/orders?limit=1&offset=0").then((r) => r.json()),
+      fetch("/api/shop/cart").then((r) => r.json()),
     ])
-      .then(([balanceData, categoriesData, productsData, ordersData]) => {
+      .then(([balanceData, categoriesData, productsData, ordersData, cartData]) => {
         setBalance(balanceData.balance ?? 0);
         setCategories(Array.isArray(categoriesData) ? categoriesData : []);
         setProducts(Array.isArray(productsData) ? productsData : []);
         setTotalOrders(ordersData.total ?? 0);
+        setCartItemsCount(Array.isArray(cartData.items) ? cartData.items.length : 0);
       })
       .catch(() => addToast("Error al cargar la tienda", "danger"))
       .finally(() => setLoading(false));
@@ -75,7 +92,7 @@ export default function StudentShopPage() {
   return (
     <div className="space-y-10">
       {/* ── 1. Fila superior: Balance (50%) + Pedidos (50%) ── */}
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-4">
         {/* Balance de ShopTokens */}
         <CreditsBanner
           icon={icons.shop}
@@ -94,6 +111,36 @@ export default function StudentShopPage() {
               <p className="text-sm text-text-muted">Mis pedidos</p>
               <p className="text-3xl font-bold text-text">{totalOrders}</p>
               <p className="text-xs text-text-muted mt-0.5">Ver historial de compras</p>
+            </div>
+            <LinkArrow />
+          </Card>
+        </Link>
+
+        {/* Card clicable de carrito */}
+        <Link href="/dashboard/student/shop/cart" className="group">
+          <Card className="flex items-center gap-4 h-full relative hover:border-primary/50 transition-colors">
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+              {icons.shop}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-text-muted">Carrito</p>
+              <p className="text-3xl font-bold text-text">{cartItemsCount}</p>
+              <p className="text-xs text-text-muted mt-0.5">Ver y editar carrito</p>
+            </div>
+            <LinkArrow />
+          </Card>
+        </Link>
+
+        {/* Card clicable de recarga simulada */}
+        <Link href="/dashboard/student/shop/topup" className="group">
+          <Card className="flex items-center gap-4 h-full relative hover:border-primary/50 transition-colors">
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+              {icons.token}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-text-muted">Recargar saldo</p>
+              <p className="text-lg font-bold text-text">Tarjeta simulada</p>
+              <p className="text-xs text-text-muted mt-0.5">Anadir ShopTokens</p>
             </div>
             <LinkArrow />
           </Card>
@@ -127,13 +174,14 @@ export default function StudentShopPage() {
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {filteredProducts.map((product) => (
               <ProductCard
-                key={product.id}
-                id={product.id}
+                key={product.groupKey}
+                groupKey={product.groupKey}
                 name={product.name}
-                price={product.price}
-                stock={product.stock}
+                minPrice={product.minPrice}
+                maxPrice={product.maxPrice}
+                totalStock={product.totalStock}
                 category={product.category}
-                imageUrl={product.imageUrl}
+                variants={product.variants}
               />
             ))}
           </div>

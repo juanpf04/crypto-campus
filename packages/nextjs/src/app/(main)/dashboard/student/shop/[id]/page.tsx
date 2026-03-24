@@ -88,6 +88,29 @@ export default function StudentProductDetailPage() {
     setPurchaseState({ active: true, promise: purchasePromise });
   }
 
+  async function handleAddToCart() {
+    if (!product) return;
+
+    try {
+      const res = await fetch("/api/shop/cart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: product.id, quantity: 1 }),
+      });
+
+      const body = await res.json();
+      if (!res.ok) {
+        addToast(body.error ?? "No se pudo agregar al carrito", "danger");
+        return;
+      }
+
+      addToast("Producto agregado al carrito", "success");
+      router.push("/dashboard/student/shop/cart");
+    } catch {
+      addToast("No se pudo agregar al carrito", "danger");
+    }
+  }
+
   // Cuando termina la compra
   const handlePurchaseComplete = useCallback((orderId: string | null) => {
     setPurchaseState({ active: false, promise: null });
@@ -193,17 +216,28 @@ export default function StudentProductDetailPage() {
           <div className="border-t border-border-default" />
 
           {/* Botón de compra */}
-          <Button
-            onClick={handlePurchase}
-            disabled={!canBuy}
-            className="w-full"
-          >
-            {product.stock <= 0
-              ? "Sin stock"
-              : insufficientBalance
-                ? `Saldo insuficiente (necesitas ${product.price} SHPT)`
-                : `Comprar por ${product.price} SHPT`}
-          </Button>
+          <div className="space-y-3">
+            <Button
+              onClick={handleAddToCart}
+              disabled={product.stock <= 0 || !product.active}
+              className="w-full"
+              variant="secondary"
+            >
+              {product.stock <= 0 ? "Sin stock" : "Agregar al carrito"}
+            </Button>
+
+            <Button
+              onClick={handlePurchase}
+              disabled={!canBuy}
+              className="w-full"
+            >
+              {product.stock <= 0
+                ? "Sin stock"
+                : insufficientBalance
+                  ? `Saldo insuficiente (necesitas ${product.price} SHPT)`
+                  : `Comprar por ${product.price} SHPT`}
+            </Button>
+          </div>
         </Card>
       </div>
     </div>
