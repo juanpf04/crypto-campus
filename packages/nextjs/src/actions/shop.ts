@@ -931,6 +931,7 @@ async function getOrCreateCart(userId: string) {
 					product: {
 						select: {
 							id: true,
+							productId: true,
 							name: true,
 							price: true,
 							stock: true,
@@ -1094,6 +1095,177 @@ export async function clearMyCart() {
 	const cart = await getOrCreateCart(session.userId!);
 	await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
 	return getMyCart();
+}
+
+/**
+ * Procesa el pago de todos los items en el carrito del usuario.
+ * Ejecuta una compra on-chain por cada item, crea registros de orden,
+ * actualiza stocks y limpia el carrito al completar.
+ * Acceso: estudiantes y profesores autenticados.
+ */
+export async function checkoutCart() {
+	const session = await getSession();
+	ensureRole(session, ["STUDENT", "PROFESSOR"]);
+
+	try {
+		// 1. Obtener carrito con todos los items
+		const cart = await getOrCreateCart(session.userId!);
+		if (!cart || cart.items.length === 0) {
+			throw new Error("El carrito está vacío");
+		}
+
+		// 2. Validar que todos los productos estén disponibles y activos
+		let totalPrice = 0;
+
+		for (const item of cart.items) {
+			if (!item.product.active) {
+				throw new Error(`El producto "${item.product.name}" no está disponible`);
+			}
+			if (item.product.stock < item.quantity) {
+				throw new Error(`Stock insuficiente de "${item.product.name}". Disponibles: ${item.product.stock}, solicitados: ${item.quantity}`);
+			}
+			totalPrice += item.product.price * item.quantity;
+		}
+
+		// 3. Obtener wallet del usuario y verificar balance
+		const { walletClient, address } = await getUserWalletClient(session.userId!);
+		const balance = await readShopBalance(address);
+
+		if (Number(balance) < totalPrice) {
+			throw new Error(`Saldo insuficiente. Tienes ${Number(balance)} SHPT y necesitas ${totalPrice} SHPT`);
+		}
+
+		// 3b. Verificar que el contrato tiene allowance para gastar tokens del usuario
+		// El contrato CampusShop intenta hacer transferFrom de ShopToken
+		const allowance = await publicClient.readContract({
+			address: CONTRACT_ADDRESSES.shopToken as `0x${string}`,
+			abi: SHOP_TOKEN_ABI,
+			functionName: "allowance",
+			args: [address, CONTRACT_ADDRESSES.campusShop as `0x${string}`],
+		}) as bigint;
+
+		if (Number(allowance) < totalPrice) {
+			throw new Error(
+				`El contrato CampusShop no tiene permiso para gastar tus tokens. ` +
+				`Allowance: ${Number(allowance)}, necesario: ${totalPrice}. ` +
+				`Esto puede ocurrir si los trustedSpender no está configurado correctamente.`
+			);
+		}
+
+		// 4. Ejecutar compras on-chain y crear órdenes
+		// Nota: purchase() en el contrato compra exactamente 1 unidad por transacción
+		// Si un item tiene quantity > 1, necesitamos hacer múltiples purchases
+		const createdOrders = [];
+
+		for (const item of cart.items) {
+			// Hacer una compra por cada unidad
+			for (let unitIndex = 0; unitIndex < item.quantity; unitIndex++) {
+				try {
+					// Verificar estado del producto on-chain ANTES de intentar compra
+					const [onChainPrice, onChainStock, onChainActive, onChainExists] = await publicClient.readContract({
+						address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
+						abi: CAMPUS_SHOP_ABI,
+						functionName: "getProduct",
+						args: [BigInt(item.product.productId)],
+					}) as [bigint, bigint, boolean, boolean];
+
+					if (!onChainExists) {
+						throw new Error(
+							`Producto NO EXISTE en el contrato (productId: ${item.product.productId}). ` +
+							`Esto puede ocurrir si el producto fue agregado a Prisma pero no al contrato.`
+						);
+					}
+
+					if (!onChainActive) {
+						throw new Error(
+							`Producto INACTIVO en el contrato (productId: ${item.product.productId}). ` +
+							`Admin debe reactivarlo on-chain.`
+						);
+					}
+
+					if (Number(onChainStock) === 0) {
+						throw new Error(
+							`SIN STOCK en el contrato (productId: ${item.product.productId}). ` +
+							`Stock on-chain: 0, Stock en Prisma: ${item.product.stock}. ` +
+							`Puede haber desincronización o stock agotado por otra compra.`
+						);
+					}
+
+					// Leer el nextOrderId ANTES de la compra
+					const nextOrderId = await publicClient.readContract({
+						address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
+						abi: CAMPUS_SHOP_ABI,
+						functionName: "nextOrderId",
+					}) as bigint;
+					const orderId = Number(nextOrderId);
+
+					// Ejecutar compra on-chain (1 unidad por transacción)
+					const hash = await walletClient.writeContract({
+						address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
+						abi: CAMPUS_SHOP_ABI,
+						functionName: "purchase",
+						args: [BigInt(item.product.productId)],
+					});
+					const receipt = await publicClient.waitForTransactionReceipt({ hash });
+
+					if (receipt.status !== "success") {
+						throw new Error(`La transacción de compra para "${item.product.name}" (unidad ${unitIndex + 1}/${item.quantity}) fue revertida`);
+					}
+
+					// Esperar un poco para que el estado se sincronice en el contrato
+					// Esto ayuda con race conditions cuando hay múltiples compras
+					if (unitIndex < item.quantity - 1) {
+						await new Promise(resolve => setTimeout(resolve, 500));
+					}
+
+					// Actualizar stock en Prisma (decrementa 1 por cada unidad comprada)
+					await prisma.product.update({
+						where: { id: item.product.id },
+						data: { stock: { decrement: 1 } },
+					});
+
+					// Crear registro de orden por cada unidad
+					const order = await prisma.order.create({
+						data: {
+							orderId,
+							userId: session.userId!,
+							productId: item.productId,
+							pricePaid: item.product.price,
+							status: "PAID",
+							txHash: hash,
+						},
+					});
+
+					createdOrders.push(order);
+				} catch (error) {
+					// Si una compra falla, propagar el error con contexto específico
+					const errorMsg = error instanceof Error ? error.message : "desconocido";
+					throw new Error(`Error al comprar "${item.product.name}" (unidad ${unitIndex + 1}/${item.quantity}): ${errorMsg}`);
+				}
+			}
+		}
+
+		// 5. Limpiar el carrito
+		await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
+
+		// Retornar resultado con órdenes creadas y nuevo balance
+		return {
+			success: true,
+			ordersCreated: createdOrders.length,
+			totalPaid: totalPrice,
+			newBalance: Number(balance) - totalPrice,
+			orders: createdOrders,
+		};
+	} catch (error) {
+		if (error instanceof Error && (
+			error.message === "No autorizado" ||
+			error.message.includes("El carrito está vacío") ||
+			error.message.includes("no está disponible") ||
+			error.message.includes("Stock insuficiente") ||
+			error.message.includes("Saldo insuficiente")
+		)) throw error;
+		throw new Error(`Error al procesar el pago: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
 }
 
 // ── Pedidos: Lectura ─────────────────────────────────────────────────────

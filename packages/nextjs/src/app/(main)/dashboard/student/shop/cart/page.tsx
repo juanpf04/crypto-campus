@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -30,8 +31,10 @@ interface CartPayload {
 }
 
 export default function StudentCartPage() {
+  const router = useRouter();
   const { addToast } = useToast();
   const [loading, setLoading] = useState(true);
+  const [checkingOut, setCheckingOut] = useState(false);
   const [cart, setCart] = useState<CartPayload | null>(null);
 
   const loadCart = useCallback(async () => {
@@ -94,6 +97,33 @@ export default function StudentCartPage() {
 
     setCart(body);
     addToast("Carrito vaciado", "success");
+  }
+
+  async function handleCheckout() {
+    setCheckingOut(true);
+    try {
+      const res = await fetch("/api/shop/checkout", { method: "POST" });
+      const body = await res.json();
+
+      if (!res.ok) {
+        addToast(body.error ?? "Error en el pago", "danger");
+        setCheckingOut(false);
+        return;
+      }
+
+      addToast(
+        `¡Compra realizada! ${body.ordersCreated} producto${body.ordersCreated > 1 ? "s" : ""} pagado${body.ordersCreated > 1 ? "s" : ""}. Nuevo saldo: ${body.newBalance} SHPT`,
+        "success"
+      );
+
+      // Redirigir a pedidos después de completar el checkout
+      setTimeout(() => {
+        router.push("/dashboard/student/shop/orders");
+      }, 1500);
+    } catch {
+      addToast("Error al procesar el pago", "danger");
+      setCheckingOut(false);
+    }
   }
 
   if (loading) {
@@ -168,9 +198,27 @@ export default function StudentCartPage() {
             </Card>
           ))}
 
-          <Card className="flex items-center justify-between">
-            <p className="text-lg font-semibold text-text">Total</p>
-            <p className="text-xl font-bold text-primary">{cart.total} SHPT</p>
+          <Card className="space-y-4">
+            <div className="flex items-center justify-between border-b border-border-default pb-4">
+              <p className="text-lg font-semibold text-text">Total</p>
+              <p className="text-xl font-bold text-primary">{cart.total} SHPT</p>
+            </div>
+
+            <Button
+              onClick={handleCheckout}
+              disabled={checkingOut}
+              className="w-full"
+              size="lg"
+            >
+              {checkingOut ? (
+                <>
+                  <Spinner size="sm" className="mr-2" />
+                  Procesando...
+                </>
+              ) : (
+                "Finalizar compra"
+              )}
+            </Button>
           </Card>
         </div>
       )}
