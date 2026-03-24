@@ -3,9 +3,11 @@
 /**
  * ProductCard — Card de producto para el grid del catálogo.
  *
- * Muestra imagen (o fallback por categoría), nombre, precio en SHPT,
- * stock restante y badge de categoría. Toda la card es clicable.
- * Incluye la flecha ↗ indicando que es navegable.
+ * Muestra imagen (o fallback por categoría), nombre del producto base,
+ * fila de variantes de color (ColorSwatchRow), precio en SHPT,
+ * stock y badge de categoría. Toda la card es clicable.
+ *
+ * Al cambiar de color, la imagen cambia a la variante seleccionada.
  */
 
 import Link from "next/link";
@@ -13,6 +15,7 @@ import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { ProductImage } from "@/components/shared/ProductImage";
+import { ColorSwatchRow } from "@/components/shared/ColorSwatchRow";
 import { LinkArrow } from "@/components/shared/LinkArrow";
 
 interface ProductVariant {
@@ -34,26 +37,6 @@ interface ProductCardProps {
   totalStock: number;
   category: string | null;
   variants: ProductVariant[];
-}
-
-function colorToSwatch(color: string): string {
-  const map: Record<string, string> = {
-    blanco: "#f3f4f6",
-    negra: "#111827",
-    negro: "#111827",
-    roja: "#dc2626",
-    rojo: "#dc2626",
-    azul: "#1d4ed8",
-    dorado: "#b45309",
-    purpura: "#7e22ce",
-    granate: "#7f1d1d",
-    gris: "#6b7280",
-    "gris-vigore": "#9ca3af",
-    aventura: "#4b5563",
-    default: "#9ca3af",
-  };
-
-  return map[color] ?? map.default;
 }
 
 export function ProductCard({ groupKey, name, minPrice, maxPrice, totalStock, category, variants }: ProductCardProps) {
@@ -93,26 +76,13 @@ export function ProductCard({ groupKey, name, minPrice, maxPrice, totalStock, ca
             {name}
           </h3>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {variants.map((variant) => {
-              const selected = variant.id === selectedVariant.id;
-              return (
-                <button
-                  key={`${groupKey}-${variant.id}`}
-                  type="button"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setSelectedVariantId(variant.id);
-                  }}
-                  aria-label={`Color ${variant.color}`}
-                  title={variant.variantLabel ?? variant.color}
-                  className={`h-5 w-5 rounded-full border transition-all ${selected ? "border-text ring-2 ring-offset-1 ring-primary" : "border-border-default"}`}
-                  style={{ backgroundColor: colorToSwatch(variant.color) }}
-                />
-              );
-            })}
-          </div>
+          {/* Variantes de color */}
+          <ColorSwatchRow
+            variants={variants}
+            selectedId={selectedVariant.id}
+            onSelect={setSelectedVariantId}
+            maxVisible={6}
+          />
 
           <div className="flex items-center justify-between">
             <span className="text-lg font-bold text-primary">{priceLabel}</span>

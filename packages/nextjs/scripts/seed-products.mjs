@@ -98,86 +98,20 @@ async function main() {
 
     log(`Sincronizando ${productsJson.length} producto(s) de catálogo...`);
 
-    // 0. Migrar rutas legacy para evitar 404 por cambios de estructura
-    const legacyPrefixMap = [
-      ["/products/sudadera-basica/", "/products/sudadera/basica/"],
-      ["/products/sudadera-capucha/", "/products/sudadera/capucha/"],
-      ["/products/camiseta-basica/", "/products/camiseta/basica/"],
-      ["/products/camiseta-complutense/", "/products/camiseta/complutense/"],
-      ["/products/camiseta-new/", "/products/camiseta/new/"],
-    ];
-
-    const allProductsBefore = await prisma.product.findMany({
-      select: { id: true, imageUrl: true },
-    });
-
-    for (const p of allProductsBefore) {
-      if (!p.imageUrl) continue;
-      let migrated = p.imageUrl;
-      for (const [fromPrefix, toPrefix] of legacyPrefixMap) {
-        if (migrated.startsWith(fromPrefix)) {
-          migrated = migrated.replace(fromPrefix, toPrefix);
-        }
-      }
-
-      if (migrated !== p.imageUrl) {
-        await prisma.product.update({
-          where: { id: p.id },
-          data: { imageUrl: migrated },
-        });
-      }
+    // 1. Limpiar productos y órdenes anteriores de Prisma.
+    //    Hasta que se implemente Anvil state persistence, la blockchain se reinicia
+    //    en cada pnpm dev, así que los productos viejos en Prisma son huérfanos.
+    const deleted = await prisma.order.deleteMany({});
+    const deletedProducts = await prisma.product.deleteMany({});
+    if (deletedProducts.count > 0) {
+      log(yellow(`  ⚠ Limpiados ${deletedProducts.count} producto(s) y ${deleted.count} orden(es) huérfanos de Prisma`));
     }
 
-    const existingProducts = await prisma.product.findMany({
-      select: {
-        id: true,
-        name: true,
-        imageUrl: true,
-        productId: true,
-        active: true,
-      },
-    });
-
-    const byImageUrl = new Map(
-      existingProducts
-        .filter((p) => p.imageUrl)
-        .map((p) => [p.imageUrl, p])
-    );
-
-    const byName = new Map(
-      existingProducts.map((p) => [p.name.trim().toLowerCase(), p])
-    );
-
-    const syncedIds = new Set();
-
+    // 2. Crear cada producto on-chain + Prisma desde cero
     let created = 0;
-    let updated = 0;
     let skippedCreate = 0;
 
     for (const product of productsJson) {
-      const existing = byImageUrl.get(product.imageUrl) || byName.get(product.name.trim().toLowerCase());
-
-      if (existing) {
-        await prisma.product.update({
-          where: { id: existing.id },
-          data: {
-            name: product.name,
-            description: product.description || null,
-            price: product.price,
-            stock: product.stock,
-            category: product.category || null,
-            imageUrl: product.imageUrl || null,
-            active: true,
-          },
-        });
-
-        syncedIds.add(existing.id);
-        updated += 1;
-        log(green(`  ↺ Actualizado #${existing.productId} ${product.name}`));
-        continue;
-      }
-
-      // Crear faltantes: on-chain + Prisma
       let productId;
       try {
         const nextProductId = await publicClient.readContract({
@@ -206,67 +140,24 @@ async function main() {
         continue;
       }
 
-      let createdProduct;
-      try {
-        createdProduct = await prisma.product.create({
-          data: {
-            productId,
-            name: product.name,
-            description: product.description || null,
-            price: product.price,
-            stock: product.stock,
-            category: product.category || null,
-            imageUrl: product.imageUrl || null,
-            active: true,
-          },
-        });
-      } catch (error) {
-        // Si la chain local se ha reiniciado, productId on-chain puede colisionar
-        // con IDs persistidos en Prisma. Reasignamos un ID libre en BD para no
-        // bloquear el sincronizado del catálogo visual.
-        if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
-          const maxProductId = await prisma.product.aggregate({
-            _max: { productId: true },
-          });
-          const fallbackProductId = (maxProductId._max.productId ?? 0) + 1;
+      await prisma.product.create({
+        data: {
+          productId,
+          name: product.name,
+          description: product.description || null,
+          price: product.price,
+          stock: product.stock,
+          category: product.category || null,
+          imageUrl: product.imageUrl || null,
+          active: true,
+        },
+      });
 
-          createdProduct = await prisma.product.create({
-            data: {
-              productId: fallbackProductId,
-              name: product.name,
-              description: product.description || null,
-              price: product.price,
-              stock: product.stock,
-              category: product.category || null,
-              imageUrl: product.imageUrl || null,
-              active: true,
-            },
-          });
-
-          log(yellow(`  ⚠ Colisión productId on-chain (${productId}) para ${product.name}; asignado productId BD ${fallbackProductId}`));
-        } else {
-          throw error;
-        }
-      }
-
-      syncedIds.add(createdProduct.id);
       created += 1;
       log(green(`  + Creado #${productId} ${product.name}`));
     }
 
-    // Desactivar productos que no estén en el catálogo JSON
-    const staleIds = existingProducts
-      .map((p) => p.id)
-      .filter((id) => !syncedIds.has(id));
-
-    if (staleIds.length > 0) {
-      await prisma.product.updateMany({
-        where: { id: { in: staleIds } },
-        data: { active: false },
-      });
-    }
-
-    log(green(`Sync completado. Actualizados: ${updated}, creados: ${created}, desactivados: ${staleIds.length}, no creados on-chain: ${skippedCreate}`));
+    log(green(`Sync completado. Creados: ${created}, no creados on-chain: ${skippedCreate}`));
   } finally {
     await prisma.$disconnect();
   }

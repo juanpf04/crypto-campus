@@ -24,4 +24,5 @@ export { SearchInput } from "./SearchInput";
 export { FileDropZone } from "./FileDropZone";
 export { FilePreview } from "./FilePreview";
 export { ProgressSteps, type ProgressStep } from "./ProgressSteps";
+export { ColorDot, colorToHex } from "./ColorDot";
 export { icons } from "./icons";
