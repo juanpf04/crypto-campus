@@ -25,4 +25,6 @@ export { FileDropZone } from "./FileDropZone";
 export { FilePreview } from "./FilePreview";
 export { ProgressSteps, type ProgressStep } from "./ProgressSteps";
 export { ColorDot, colorToHex } from "./ColorDot";
+export { QuantitySelector } from "./QuantitySelector";
+export { Drawer } from "./Drawer";
 export { icons } from "./icons";

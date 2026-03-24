@@ -4,14 +4,16 @@
  * Catálogo de la tienda del estudiante.
  *
  * Layout:
- * - Fila superior (50/50): Banner de ShopTokens | Card clicable de pedidos
+ * - Fila superior: Balance | Pedidos | Carrito (abre drawer) | Recargar
  * - Filtro por categoría: pills horizontales
  * - Grid de productos: cards clickables
+ * - CartDrawer: panel lateral del carrito (slide-in derecha)
  */
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useToast } from "@/hooks/useToast";
+import { useCart } from "@/contexts/CartContext";
 import { icons } from "@/components/ui/icons";
 import { CreditsBanner } from "@/components/shared/CreditsBanner";
 import { ProductCard } from "@/components/shared/ProductCard";
@@ -47,16 +49,16 @@ interface ProductGroup {
 
 export default function StudentShopPage() {
   const { addToast } = useToast();
+  const { openCart, itemCount, setItemCount } = useCart();
 
   const [balance, setBalance] = useState<number | null>(null);
   const [totalOrders, setTotalOrders] = useState(0);
   const [categories, setCategories] = useState<string[]>([]);
   const [products, setProducts] = useState<ProductGroup[]>([]);
-  const [cartItemsCount, setCartItemsCount] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Carga inicial: balance + categorías + productos + total pedidos
+  // Carga inicial
   useEffect(() => {
     Promise.all([
       fetch("/api/shop/balance").then((r) => r.json()),
@@ -70,13 +72,13 @@ export default function StudentShopPage() {
         setCategories(Array.isArray(categoriesData) ? categoriesData : []);
         setProducts(Array.isArray(productsData) ? productsData : []);
         setTotalOrders(ordersData.total ?? 0);
-        setCartItemsCount(Array.isArray(cartData.items) ? cartData.items.length : 0);
+        setItemCount(Array.isArray(cartData.items) ? cartData.items.length : 0);
       })
       .catch(() => addToast("Error al cargar la tienda", "danger"))
       .finally(() => setLoading(false));
   }, []);
 
-  // Filtrar productos cuando cambia la categoría (sin fetch, filtro local)
+  // Filtrar productos por categoría (local, sin fetch)
   const filteredProducts = selectedCategory
     ? products.filter((p) => p.category === selectedCategory)
     : products;
@@ -91,9 +93,9 @@ export default function StudentShopPage() {
 
   return (
     <div className="space-y-10">
-      {/* ── 1. Fila superior: Balance (50%) + Pedidos (50%) ── */}
+      {/* ── 1. Fila superior ── */}
       <section className="grid grid-cols-1 gap-4 md:grid-cols-4">
-        {/* Balance de ShopTokens */}
+        {/* Balance */}
         <CreditsBanner
           icon={icons.shop}
           value={balance ?? "—"}
@@ -101,7 +103,7 @@ export default function StudentShopPage() {
           hint="Se usan para comprar en la tienda"
         />
 
-        {/* Card clicable de pedidos */}
+        {/* Pedidos */}
         <Link href="/dashboard/student/shop/orders" className="group">
           <Card className="flex items-center gap-4 h-full relative hover:border-primary/50 transition-colors">
             <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
@@ -116,22 +118,27 @@ export default function StudentShopPage() {
           </Card>
         </Link>
 
-        {/* Card clicable de carrito */}
-        <Link href="/dashboard/student/shop/cart" className="group">
+        {/* Carrito — abre drawer en vez de navegar */}
+        <button type="button" onClick={openCart} className="group text-left cursor-pointer">
           <Card className="flex items-center gap-4 h-full relative hover:border-primary/50 transition-colors">
             <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-              {icons.shop}
+              {/* Icono carrito */}
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                <circle cx="9" cy="21" r="1" />
+                <circle cx="20" cy="21" r="1" />
+                <path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6" />
+              </svg>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm text-text-muted">Carrito</p>
-              <p className="text-3xl font-bold text-text">{cartItemsCount}</p>
+              <p className="text-3xl font-bold text-text">{itemCount}</p>
               <p className="text-xs text-text-muted mt-0.5">Ver y editar carrito</p>
             </div>
             <LinkArrow />
           </Card>
-        </Link>
+        </button>
 
-        {/* Card clicable de recarga simulada */}
+        {/* Recargar */}
         <Link href="/dashboard/student/shop/topup" className="group">
           <Card className="flex items-center gap-4 h-full relative hover:border-primary/50 transition-colors">
             <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
@@ -151,7 +158,6 @@ export default function StudentShopPage() {
       <section className="space-y-4">
         <SectionTitle icon={icons.shop}>Catálogo</SectionTitle>
 
-        {/* Filtro por categoría */}
         {categories.length > 0 && (
           <CategoryFilter
             categories={categories}
@@ -160,7 +166,6 @@ export default function StudentShopPage() {
           />
         )}
 
-        {/* Grid de productos */}
         {filteredProducts.length === 0 ? (
           <EmptyState
             title="Sin productos"
@@ -187,6 +192,7 @@ export default function StudentShopPage() {
           </div>
         )}
       </section>
+
     </div>
   );
 }
