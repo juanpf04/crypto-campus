@@ -84,10 +84,10 @@ export function PurchaseConfirmModal({
               {/* Cantidad × precio */}
               <div className="shrink-0 text-right">
                 <p className="text-sm text-text">
-                  {item.quantity} &times; {item.unitPrice} SHPT
+                  {item.quantity} &times; {item.unitPrice} ShopTokens
                 </p>
                 <p className="text-sm font-semibold text-text">
-                  {item.unitPrice * item.quantity} SHPT
+                  {item.unitPrice * item.quantity} ShopTokens
                 </p>
               </div>
             </div>
@@ -104,13 +104,13 @@ export function PurchaseConfirmModal({
             <span className="text-text-muted">
               Total ({totalUnits} {totalUnits === 1 ? "unidad" : "unidades"})
             </span>
-            <span className="text-lg font-bold text-primary">{total} SHPT</span>
+            <span className="text-lg font-bold text-primary">{total} ShopTokens</span>
           </div>
 
           {/* Saldo actual */}
           <div className="flex items-center justify-between">
             <span className="text-text-muted">Tu saldo actual</span>
-            <span className="text-sm text-text">{balance} SHPT</span>
+            <span className="text-sm text-text">{balance} ShopTokens</span>
           </div>
 
           {/* Saldo restante */}
@@ -121,15 +121,15 @@ export function PurchaseConfirmModal({
                 insufficientBalance ? "text-danger" : "text-text"
               }`}
             >
-              {insufficientBalance ? "Insuficiente" : `${remainingBalance} SHPT`}
+              {insufficientBalance ? "Insuficiente" : `${remainingBalance} ShopTokens`}
             </span>
           </div>
 
           {/* Aviso de saldo insuficiente */}
           {insufficientBalance && (
             <p className="mt-2 rounded-lg bg-danger/10 p-3 text-sm text-danger">
-              No tienes suficientes ShopTokens. Necesitas {total} SHPT pero solo tienes {balance} SHPT.
-              Te faltan {Math.abs(remainingBalance)} SHPT.
+              No tienes suficientes ShopTokens. Necesitas {total} ShopTokens pero solo tienes {balance} ShopTokens.
+              Te faltan {Math.abs(remainingBalance)} ShopTokens.
             </p>
           )}
         </div>

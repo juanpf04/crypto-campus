@@ -48,6 +48,11 @@ export default function AdminDashboard() {
   const [userCounts, setUserCounts] = useState<UserCounts | null>(null);
   const [activePrinters, setActivePrinters] = useState<number | string>("—");
   const [totalPrintLogs, setTotalPrintLogs] = useState<number | string>("—");
+  const [shopStats, setShopStats] = useState<{ products: number | string; orders: number | string; tokensInCirculation: number | string }>({
+    products: "—",
+    orders: "—",
+    tokensInCirculation: "—",
+  });
 
   useEffect(() => {
     if (!user) return;
@@ -77,6 +82,18 @@ export default function AdminDashboard() {
     fetch("/api/printer/logs/admin?limit=200&offset=0")
       .then((r) => r.json())
       .then((data) => setTotalPrintLogs(Array.isArray(data) ? data.length : "—"))
+      .catch(() => {});
+
+    // Estadísticas de la tienda
+    fetch("/api/shop/stats")
+      .then((r) => r.json())
+      .then((data) => {
+        setShopStats({
+          products: data.activeProducts ?? "—",
+          orders: data.totalOrders ?? "—",
+          tokensInCirculation: data.tokensInCirculation ?? "—",
+        });
+      })
       .catch(() => {});
   }, [user]);
 
@@ -144,9 +161,53 @@ export default function AdminDashboard() {
       <section className="space-y-4">
         <SectionTitle icon={icons.shop}>Tienda</SectionTitle>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard title="Productos activos" value="—" subtitle="En el catálogo" icon={icons.shop} />
-          <StatCard title="Pedidos totales" value="—" subtitle="Realizados en la plataforma" icon={icons.orders} />
-          <StatCard title="Tokens SHOP en circulación" value="—" subtitle="Total emitidos" icon={icons.token} />
+          <Link href="/dashboard/admin/shop/products" className="group">
+            <Card className="relative h-full hover:border-primary/50 transition-colors">
+              <div className="flex items-center gap-4">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                  {icons.shop}
+                </div>
+                <div>
+                  <p className="text-sm text-text-muted">Productos activos</p>
+                  <p className="text-2xl font-bold text-text">{shopStats.products}</p>
+                  <p className="text-xs text-text-muted">En el catálogo</p>
+                </div>
+              </div>
+              <ClickableArrow />
+            </Card>
+          </Link>
+
+          <Link href="/dashboard/admin/shop/orders" className="group">
+            <Card className="relative h-full hover:border-primary/50 transition-colors">
+              <div className="flex items-center gap-4">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                  {icons.orders}
+                </div>
+                <div>
+                  <p className="text-sm text-text-muted">Pedidos totales</p>
+                  <p className="text-2xl font-bold text-text">{shopStats.orders}</p>
+                  <p className="text-xs text-text-muted">Realizados en la plataforma</p>
+                </div>
+              </div>
+              <ClickableArrow />
+            </Card>
+          </Link>
+
+          <Link href="/dashboard/admin/shop/transactions" className="group">
+            <Card className="relative h-full hover:border-primary/50 transition-colors">
+              <div className="flex items-center gap-4">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                  {icons.token}
+                </div>
+                <div>
+                  <p className="text-sm text-text-muted">ShopTokens en circulación</p>
+                  <p className="text-2xl font-bold text-text">{shopStats.tokensInCirculation}</p>
+                  <p className="text-xs text-text-muted">Ver log de transacciones</p>
+                </div>
+              </div>
+              <ClickableArrow />
+            </Card>
+          </Link>
         </div>
       </section>
 

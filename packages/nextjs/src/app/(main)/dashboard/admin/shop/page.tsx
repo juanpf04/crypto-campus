@@ -4,7 +4,7 @@
  * Panel de tienda del admin — Vista resumen.
  *
  * Mismo patrón que admin/printing:
- * - Zona superior: StatCards con estadísticas reales
+ * - Zona superior: StatCards con estadísticas reales (4 columnas)
  * - Zona inferior: ActionRows con accesos rápidos a gestión
  */
 
@@ -27,6 +27,7 @@ export default function AdminShopPage() {
     paidOrders: "—" as string | number,
     deliveredOrders: "—" as string | number,
     returnedOrders: "—" as string | number,
+    tokensInCirculation: "—" as string | number,
   });
   const [loading, setLoading] = useState(true);
 
@@ -41,6 +42,7 @@ export default function AdminShopPage() {
           paidOrders: data.PAID ?? 0,
           deliveredOrders: data.DELIVERED ?? 0,
           returnedOrders: data.RETURNED ?? 0,
+          tokensInCirculation: data.tokensInCirculation ?? "—",
         });
       })
       .catch(() => {})
@@ -65,7 +67,7 @@ export default function AdminShopPage() {
       {/* ── Estadísticas ── */}
       <section className="space-y-4">
         <SectionTitle icon={icons.shop}>Resumen</SectionTitle>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title="Productos activos"
             value={stats.activeProducts}
@@ -82,6 +84,12 @@ export default function AdminShopPage() {
             title="Entregas realizadas"
             value={stats.deliveredOrders}
             subtitle={`${stats.returnedOrders} devueltos`}
+            icon={icons.orders}
+          />
+          <StatCard
+            title="ShopTokens en circulación"
+            value={stats.tokensInCirculation}
+            subtitle="Total en manos de usuarios"
             icon={icons.token}
           />
         </div>
@@ -110,7 +118,14 @@ export default function AdminShopPage() {
             icon={icons.token}
             title="ShopTokens"
             description="Consultar y asignar tokens a estudiantes"
-            stat="100 iniciales"
+            stat={`${stats.tokensInCirculation} en circulación`}
+          />
+          <ActionRow
+            href="/dashboard/admin/shop/transactions"
+            icon={icons.pending}
+            title="Transacciones"
+            description="Historial de compras, recargas e ingresos de todos los usuarios"
+            stat="Log completo"
             isLast
           />
         </Card>

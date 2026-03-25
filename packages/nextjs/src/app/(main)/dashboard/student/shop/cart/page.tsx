@@ -148,7 +148,7 @@ export default function StudentCartPage() {
       }
 
       addToast(
-        `Compra realizada. ${body.ordersCreated} producto${body.ordersCreated > 1 ? "s" : ""} pagado${body.ordersCreated > 1 ? "s" : ""}. Nuevo saldo: ${body.newBalance} SHPT`,
+        `Compra realizada. ${body.ordersCreated} producto${body.ordersCreated > 1 ? "s" : ""} pagado${body.ordersCreated > 1 ? "s" : ""}. Nuevo saldo: ${body.newBalance} ShopTokens`,
         "success",
       );
 
@@ -227,7 +227,7 @@ export default function StudentCartPage() {
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-text line-clamp-2">{item.name}</p>
                 <p className="text-sm text-text-muted">
-                  {item.variantLabel ?? item.color ?? ""} · {item.price} SHPT/ud.
+                  {item.variantLabel ?? item.color ?? ""} · {item.price} ShopTokens/ud.
                 </p>
               </div>
 
@@ -242,7 +242,7 @@ export default function StudentCartPage() {
 
               {/* Subtotal */}
               <div className="w-24 text-right">
-                <p className="font-semibold text-text">{item.subtotal} SHPT</p>
+                <p className="font-semibold text-text">{item.subtotal} ShopTokens</p>
               </div>
 
               {/* Eliminar */}
@@ -265,7 +265,7 @@ export default function StudentCartPage() {
               <p className="text-lg font-semibold text-text">
                 Total ({cart.items.reduce((a, i) => a + i.quantity, 0)} {cart.items.reduce((a, i) => a + i.quantity, 0) === 1 ? "unidad" : "unidades"})
               </p>
-              <p className="text-xl font-bold text-primary">{cart.total} SHPT</p>
+              <p className="text-xl font-bold text-primary">{cart.total} ShopTokens</p>
             </div>
 
             <Button

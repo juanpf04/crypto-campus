@@ -3,7 +3,7 @@
 /**
  * Formulario para crear o editar un producto de la tienda.
  *
- * Campos: nombre, descripción, precio (SHPT), stock, categoría e imagen (URL).
+ * Campos: nombre, descripción, precio (ShopTokens), stock, categoría e imagen (URL).
  * Reutilizado en /admin/shop/products/new y .../[id]/edit.
  */
 
@@ -75,7 +75,7 @@ export function ProductForm({ onSubmit, initialValues, isEdit }: ProductFormProp
       />
       <div className="grid grid-cols-2 gap-4">
         <Input
-          label="Precio (SHPT)"
+          label="Precio (ShopTokens)"
           type="number"
           min="1"
           value={fields.price}

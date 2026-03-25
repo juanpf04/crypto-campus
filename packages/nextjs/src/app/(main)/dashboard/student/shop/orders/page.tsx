@@ -124,7 +124,7 @@ export default function StudentOrdersPage() {
                         {order.product.name}
                       </TableCell>
                       <TableCell>
-                        <span className="font-semibold text-primary">{order.pricePaid} SHPT</span>
+                        <span className="font-semibold text-primary">{order.pricePaid} ShopTokens</span>
                       </TableCell>
                       <TableCell>
                         <Badge variant={status.variant}>{status.label}</Badge>

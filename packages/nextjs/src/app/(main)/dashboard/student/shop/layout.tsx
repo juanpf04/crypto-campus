@@ -12,13 +12,15 @@
 import { type ReactNode } from "react";
 import { CartProvider, useCart } from "@/contexts/CartContext";
 import { CartDrawer } from "@/components/shared/CartDrawer";
+import { FloatingCartButton } from "@/components/ui/FloatingCartButton";
 
 function ShopLayoutInner({ children }: { children: ReactNode }) {
-  const { isCartOpen, closeCart, setItemCount } = useCart();
+  const { isCartOpen, openCart, closeCart, itemCount, setItemCount } = useCart();
 
   return (
     <>
       {children}
+      <FloatingCartButton itemCount={itemCount} onClick={openCart} />
       <CartDrawer
         open={isCartOpen}
         onClose={closeCart}

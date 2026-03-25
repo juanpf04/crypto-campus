@@ -169,7 +169,7 @@ export default function AdminShopTokensPage() {
                   </TableCell>
                   <TableCell>
                     <Badge variant={user.balance === 0 ? "danger" : "info"}>
-                      {user.balance ?? "—"} SHPT
+                      {user.balance ?? "—"} ShopTokens
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -198,7 +198,7 @@ export default function AdminShopTokensPage() {
       >
         <div className="space-y-4">
           <p className="text-sm text-text-muted">
-            Balance actual: <strong>{editingUser?.balance ?? "—"} SHPT</strong>.
+            Balance actual: <strong>{editingUser?.balance ?? "—"} ShopTokens</strong>.
             Los tokens se añaden al balance existente.
           </p>
           <Input

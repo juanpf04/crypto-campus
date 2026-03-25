@@ -1,15 +1,15 @@
 /**
  * GET /api/shop/products/admin
- * Lista TODOS los productos (activos e inactivos) para gestión del admin.
+ * Lista TODOS los productos agrupados (activos e inactivos) para gestión del admin.
  * Acceso: solo admin (validado en la Server Action).
  */
 
 import { NextResponse } from "next/server";
-import { listAllProducts } from "@/actions/shop";
+import { listAllGroupedProducts } from "@/actions/shop";
 
 export async function GET() {
 	try {
-		const products = await listAllProducts();
+		const products = await listAllGroupedProducts();
 		return NextResponse.json(products);
 	} catch (error) {
 		console.error("[GET /api/shop/products/admin]", error);

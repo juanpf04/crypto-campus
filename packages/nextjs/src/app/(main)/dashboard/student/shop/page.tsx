@@ -187,6 +187,7 @@ export default function StudentShopPage() {
                 totalStock={product.totalStock}
                 category={product.category}
                 variants={product.variants}
+                onAddToCart={() => openCart()}
               />
             ))}
           </div>

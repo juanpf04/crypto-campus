@@ -3,67 +3,144 @@
 /**
  * Gestión de productos de la tienda (admin).
  *
- * Tabla con todos los productos (activos e inactivos).
- * Acciones: editar, desactivar/reactivar.
- * Mismo patrón que admin/printing/printers.
+ * Grid de ProductCards con:
+ * - Filtro por categoría (pills)
+ * - Filtro por estado (Todos / Activos / Inactivos)
+ * - Botones editar / eliminar-reactivar por card (optimistic update)
+ * - Botón añadir producto
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import { CategoryFilter } from "@/components/ui/CategoryFilter";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
-import {
-  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
-} from "@/components/ui/Table";
+import { SectionTitle } from "@/components/shared/SectionTitle";
+import { ProductCard } from "@/components/shared/ProductCard";
+import { icons } from "@/components/ui/icons";
 
-interface Product {
+interface ProductVariant {
   id: string;
-  productId: number;
   name: string;
+  color: string;
+  variantLabel: string | null;
   price: number;
   stock: number;
   category: string | null;
-  active: boolean;
+  imageUrl: string | null;
 }
+
+interface ProductGroup {
+  groupKey: string;
+  name: string;
+  category: string | null;
+  description: string | null;
+  minPrice: number;
+  maxPrice: number;
+  totalStock: number;
+  active: boolean;
+  defaultVariantId: string;
+  variants: ProductVariant[];
+}
+
+type StatusFilter = "all" | "active" | "inactive";
 
 export default function AdminProductsPage() {
   const router = useRouter();
   const { addToast } = useToast();
-  const [products, setProducts] = useState<Product[]>([]);
+
+  const [products, setProducts] = useState<ProductGroup[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetch("/api/shop/products/admin")
-      .then((r) => r.json())
-      .then((data) => setProducts(Array.isArray(data) ? data : []))
-      .catch(() => addToast("Error al cargar productos", "danger"))
-      .finally(() => setLoading(false));
-  }, []);
+  // Filtros
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
-  async function toggleActive(product: Product) {
-    const method = product.active ? "DELETE" : "PATCH";
+  // Cargar productos (admin ve todos, activos + inactivos)
+  const loadProducts = useCallback(async () => {
     try {
-      const res = await fetch(`/api/shop/products/${product.id}`, { method });
-      if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.error ?? "Error al actualizar");
-      }
-      setProducts((prev) =>
-        prev.map((p) => (p.id === product.id ? { ...p, active: !p.active } : p)),
+      const [productsRes, categoriesRes] = await Promise.all([
+        fetch("/api/shop/products/admin"),
+        fetch("/api/shop/categories"),
+      ]);
+
+      const productsData = await productsRes.json();
+      const categoriesData = await categoriesRes.json();
+
+      setProducts(Array.isArray(productsData) ? productsData : []);
+      setCategories(Array.isArray(categoriesData) ? categoriesData : []);
+    } catch {
+      addToast("Error al cargar productos", "danger");
+    } finally {
+      setLoading(false);
+    }
+  }, [addToast]);
+
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
+
+  // Toggle activo/inactivo — optimistic update
+  async function handleToggleActive(variantId: string, currentlyActive: boolean) {
+    // Optimistic: cambiar en local inmediatamente
+    setProducts((prev) =>
+      prev.map((p) => {
+        const hasVariant = p.variants.some((v) => v.id === variantId);
+        if (!hasVariant) return p;
+        return { ...p, active: !currentlyActive };
+      }),
+    );
+
+    const method = currentlyActive ? "DELETE" : "PATCH";
+    try {
+      // Buscar el grupo para desactivar/reactivar TODAS sus variantes
+      const targetGroup = products.find((p) => p.variants.some((v) => v.id === variantId));
+      const variantIds = targetGroup ? targetGroup.variants.map((v) => v.id) : [variantId];
+
+      const results = await Promise.all(
+        variantIds.map((vid) => fetch(`/api/shop/products/${vid}`, { method })),
       );
+      const anyFailed = results.some((r) => !r.ok);
+      if (anyFailed) throw new Error("Algunas variantes no se pudieron actualizar");
+
       addToast(
-        product.active ? "Producto desactivado" : "Producto reactivado",
+        currentlyActive
+          ? `Producto desactivado (${variantIds.length} variantes)`
+          : `Producto reactivado (${variantIds.length} variantes)`,
         "success",
       );
     } catch (err) {
+      // Revertir optimistic update
+      setProducts((prev) =>
+        prev.map((p) => {
+          const hasVariant = p.variants.some((v) => v.id === variantId);
+          if (!hasVariant) return p;
+          return { ...p, active: currentlyActive };
+        }),
+      );
       addToast(err instanceof Error ? err.message : "Error", "danger");
     }
   }
+
+  function handleEdit(variantId: string) {
+    router.push(`/dashboard/admin/shop/products/${variantId}/edit?from=list`);
+  }
+
+  // Filtrar productos
+  const filteredProducts = products
+    .filter((p) => {
+      if (statusFilter === "active") return p.active;
+      if (statusFilter === "inactive") return !p.active;
+      return true;
+    })
+    .filter((p) => {
+      if (selectedCategory) return p.category === selectedCategory;
+      return true;
+    });
 
   if (loading) {
     return (
@@ -81,7 +158,7 @@ export default function AdminProductsPage() {
         <div>
           <h1 className="text-2xl font-bold text-text">Productos</h1>
           <p className="text-text-muted mt-1">
-            {products.length} producto(s) registrados.
+            {products.length} producto(s) registrados
           </p>
         </div>
         <Button onClick={() => router.push("/dashboard/admin/shop/products/new")}>
@@ -89,67 +166,73 @@ export default function AdminProductsPage() {
         </Button>
       </div>
 
-      {products.length === 0 ? (
+      {/* Filtros */}
+      <div className="space-y-3">
+        {/* Filtro por estado */}
+        <div className="flex gap-2">
+          {(["all", "active", "inactive"] as StatusFilter[]).map((status) => {
+            const labels: Record<StatusFilter, string> = {
+              all: "Todos",
+              active: "Activos",
+              inactive: "Inactivos",
+            };
+            return (
+              <button
+                key={status}
+                type="button"
+                onClick={() => setStatusFilter(status)}
+                className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors cursor-pointer ${
+                  statusFilter === status
+                    ? "bg-primary text-white"
+                    : "bg-card border border-border-default text-text-muted hover:text-text"
+                }`}
+              >
+                {labels[status]}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Filtro por categoría */}
+        {categories.length > 0 && (
+          <CategoryFilter
+            categories={categories}
+            selected={selectedCategory}
+            onSelect={setSelectedCategory}
+          />
+        )}
+      </div>
+
+      {/* Grid de productos */}
+      {filteredProducts.length === 0 ? (
         <EmptyState
           title="Sin productos"
-          description="Aún no hay productos en la tienda."
+          description={
+            statusFilter !== "all" || selectedCategory
+              ? "No hay productos con estos filtros."
+              : "Aún no hay productos en la tienda."
+          }
         />
       ) : (
-        <Card className="overflow-hidden p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Nombre</TableHead>
-                <TableHead>Categoría</TableHead>
-                <TableHead>Precio</TableHead>
-                <TableHead>Stock</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead>Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {products.map((product) => (
-                <TableRow key={product.id}>
-                  <TableCell className="text-text-muted text-sm">
-                    #{product.productId}
-                  </TableCell>
-                  <TableCell className="font-medium">{product.name}</TableCell>
-                  <TableCell className="text-text-muted">
-                    {product.category ?? "—"}
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-semibold text-primary">{product.price} SHPT</span>
-                  </TableCell>
-                  <TableCell>{product.stock}</TableCell>
-                  <TableCell>
-                    <Badge variant={product.active ? "success" : "neutral"}>
-                      {product.active ? "Activo" : "Inactivo"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => router.push(`/dashboard/admin/shop/products/${product.id}/edit`)}
-                      >
-                        Editar
-                      </Button>
-                      <Button
-                        variant={product.active ? "danger" : "primary"}
-                        size="sm"
-                        onClick={() => toggleActive(product)}
-                      >
-                        {product.active ? "Desactivar" : "Activar"}
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          {filteredProducts.map((product) => (
+            <ProductCard
+              key={product.groupKey}
+              groupKey={product.groupKey}
+              name={product.name}
+              minPrice={product.minPrice}
+              maxPrice={product.maxPrice}
+              totalStock={product.totalStock}
+              category={product.category}
+              variants={product.variants}
+              linkBase="/dashboard/admin/shop/products/"
+              adminMode
+              active={product.active}
+              onEdit={handleEdit}
+              onToggleActive={handleToggleActive}
+            />
+          ))}
+        </div>
       )}
     </div>
   );

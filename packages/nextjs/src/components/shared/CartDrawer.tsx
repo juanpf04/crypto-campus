@@ -161,7 +161,7 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
       }
 
       addToast(
-        `Compra realizada. Nuevo saldo: ${body.newBalance} SHPT`,
+        `Compra realizada. Nuevo saldo: ${body.newBalance} ShopTokens`,
         "success",
       );
       onClose();
@@ -194,7 +194,7 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
         <span className="text-text-muted">
           Total ({totalUnits} {totalUnits === 1 ? "ud." : "uds."})
         </span>
-        <span className="text-xl font-bold text-primary">{cart?.total ?? 0} SHPT</span>
+        <span className="text-xl font-bold text-primary">{cart?.total ?? 0} ShopTokens</span>
       </div>
 
       {/* Finalizar compra */}
@@ -310,7 +310,7 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
                     />
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-text">
-                        {item.subtotal} SHPT
+                        {item.subtotal} ShopTokens
                       </span>
                       <button
                         type="button"

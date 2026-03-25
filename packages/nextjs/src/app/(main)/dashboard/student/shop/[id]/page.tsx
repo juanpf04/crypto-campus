@@ -321,7 +321,7 @@ export default function StudentProductDetailPage() {
             <DetailField
               label="Precio unitario"
               value={
-                <span className="text-xl font-bold text-primary">{selectedVariant.price} SHPT</span>
+                <span className="text-xl font-bold text-primary">{selectedVariant.price} ShopTokens</span>
               }
             />
             <DetailField
@@ -352,7 +352,7 @@ export default function StudentProductDetailPage() {
                 />
                 {quantity > 1 && (
                   <span className="text-sm text-text-muted">
-                    Total: <span className="font-semibold text-primary">{totalPrice} SHPT</span>
+                    Total: <span className="font-semibold text-primary">{totalPrice} ShopTokens</span>
                   </span>
                 )}
               </div>

@@ -153,7 +153,7 @@ function getCardBrand(cardNumber: string): string {
 function validateSimulatedCardInput(input: SimulatedCardInput) {
 	const amount = ensurePositiveInt(input.amount, "La cantidad");
 	if (amount > 1000) {
-		throw new Error("La recarga maxima por operacion es de 1000 SHPT");
+		throw new Error("La recarga maxima por operacion es de 1000 ShopTokens");
 	}
 
 	const cardNumber = input.cardNumber.replace(/\s+/g, "");
@@ -390,7 +390,7 @@ export async function listGroupedProducts(category?: string): Promise<ProductGro
 
 /**
  * Lista TODOS los productos (activos e inactivos) para gestión del admin.
- * Acceso: solo admin.
+ * Acceso: solo admin. Devuelve productos individuales sin agrupar.
  */
 export async function listAllProducts() {
 	const session = await getSession();
@@ -402,6 +402,86 @@ export async function listAllProducts() {
 		});
 	} catch (error) {
 		throw new Error(`Error al listar productos: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
+}
+
+/**
+ * Lista todos los productos agrupados por base (activos + inactivos) para admin.
+ * Incluye campo `active` por grupo.
+ */
+export async function listAllGroupedProducts(category?: string) {
+	const session = await getSession();
+	ensureRole(session, ["ADMIN"]);
+
+	try {
+		const where: Record<string, unknown> = {};
+		if (category) where.category = category;
+
+		const products = await prisma.product.findMany({
+			where,
+			include: {
+				base: {
+					select: { slug: true, name: true, description: true, category: true },
+				},
+			},
+			orderBy: [
+				{ category: "asc" },
+				{ baseId: "asc" },
+				{ sortOrder: "asc" },
+				{ name: "asc" },
+			],
+		});
+
+		const groups = new Map<string, ProductGroupSummary & { active: boolean }>();
+
+		for (const product of products) {
+			const color = normalizeColor(product.color ?? deriveColorFromImageUrl(product.imageUrl));
+			const fallbackBaseKey = deriveBaseKeyFromImageUrl(product.imageUrl) ?? slugify(product.name);
+			const baseName = product.base?.name ?? deriveBaseName(product.name, color);
+			const baseKey = product.base?.slug ?? fallbackBaseKey;
+			const variant: ProductVariantSummary = {
+				id: product.id,
+				productId: product.productId,
+				name: product.name,
+				price: product.price,
+				stock: product.stock,
+				category: product.category,
+				imageUrl: product.imageUrl,
+				color,
+				variantLabel: product.variantLabel,
+			};
+
+			if (!groups.has(baseKey)) {
+				groups.set(baseKey, {
+					groupKey: baseKey,
+					name: baseName,
+					category: product.base?.category ?? product.category,
+					description: product.base?.description ?? product.description,
+					minPrice: product.price,
+					maxPrice: product.price,
+					totalStock: Math.max(product.stock, 0),
+					defaultVariantId: product.id,
+					active: product.active,
+					variants: [variant],
+				});
+				continue;
+			}
+
+			const current = groups.get(baseKey)!;
+			current.minPrice = Math.min(current.minPrice, product.price);
+			current.maxPrice = Math.max(current.maxPrice, product.price);
+			current.totalStock += Math.max(product.stock, 0);
+			// Si al menos una variante está activa, el grupo está activo
+			if (product.active) current.active = true;
+			current.variants.push(variant);
+		}
+
+		return [...groups.values()].map((group) => ({
+			...group,
+			variants: group.variants.sort((a, b) => a.color.localeCompare(b.color)),
+		}));
+	} catch (error) {
+		throw new Error(`Error al listar productos (admin): ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
 
@@ -863,7 +943,7 @@ export async function purchaseProduct(productPrismaId: string) {
 		// Verificar balance antes de intentar la compra
 		const balance = await readShopBalance(address);
 		if (Number(balance) < product.price) {
-			throw new Error(`Saldo insuficiente. Tienes ${Number(balance)} SHPT y el producto cuesta ${product.price} SHPT`);
+			throw new Error(`Saldo insuficiente. Tienes ${Number(balance)} ShopTokens y el producto cuesta ${product.price} ShopTokens`);
 		}
 
 		// Leer el nextOrderId ANTES de la compra para saber qué orderId se asignará
@@ -1132,7 +1212,7 @@ export async function checkoutCart() {
 		const balance = await readShopBalance(address);
 
 		if (Number(balance) < totalPrice) {
-			throw new Error(`Saldo insuficiente. Tienes ${Number(balance)} SHPT y necesitas ${totalPrice} SHPT`);
+			throw new Error(`Saldo insuficiente. Tienes ${Number(balance)} ShopTokens y necesitas ${totalPrice} ShopTokens`);
 		}
 
 		// 3b. Verificar que el contrato tiene allowance para gastar tokens del usuario
@@ -1565,6 +1645,7 @@ export async function getShopStats() {
 			activeProducts,
 			totalOrders,
 			ordersByStatus,
+			allUsers,
 		] = await Promise.all([
 			prisma.product.count(),
 			prisma.product.count({ where: { active: true } }),
@@ -1573,6 +1654,7 @@ export async function getShopStats() {
 				by: ["status"],
 				_count: { id: true },
 			}),
+			prisma.user.findMany({ select: { address: true } }),
 		]);
 
 		const statusCounts = {
@@ -1584,13 +1666,125 @@ export async function getShopStats() {
 			statusCounts[group.status] = group._count.id;
 		}
 
+		// Calcular tokens en circulación sumando balances on-chain
+		let tokensInCirculation = 0;
+		try {
+			const balances = await Promise.all(
+				allUsers
+					.filter((u) => u.address)
+					.map((u) => readShopBalance(u.address).catch(() => BigInt(0))),
+			);
+			tokensInCirculation = balances.reduce((sum, b) => sum + Number(b), 0);
+		} catch {
+			// Si falla la lectura on-chain, dejamos 0
+		}
+
 		return {
 			totalProducts,
 			activeProducts,
 			totalOrders,
+			tokensInCirculation,
 			...statusCounts,
 		};
 	} catch (error) {
 		throw new Error(`Error al obtener estadísticas: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
+}
+
+// ════════════════════════════════════════════════════
+// TRANSACCIONES (log unificado de compras + recargas)
+// ════════════════════════════════════════════════════
+
+/**
+ * Devuelve un log unificado de transacciones: compras (gasto) + recargas (ingreso).
+ * Solo admin. Paginado, filtrable por userId.
+ */
+export async function listAllTransactions(
+	limit = 10,
+	offset = 0,
+	userId?: string,
+) {
+	const session = await getSession();
+	ensureRole(session, ["ADMIN"]);
+
+	const safeLimit = Math.min(Math.max(limit, 1), 100);
+	const safeOffset = Math.max(offset, 0);
+
+	const userWhere = userId ? { userId } : {};
+
+	// Consultar compras y recargas en paralelo
+	const [orders, topups, totalOrders, totalTopups] = await Promise.all([
+		prisma.order.findMany({
+			where: userWhere,
+			include: {
+				user: { select: { name: true, email: true } },
+				product: { select: { name: true } },
+			},
+			orderBy: { purchaseDate: "desc" },
+			take: safeLimit * 2, // Traemos el doble para combinar
+			skip: 0,
+		}),
+		prisma.cardTopupSimulation.findMany({
+			where: { ...userWhere, status: "SUCCESS" },
+			include: {
+				user: { select: { name: true, email: true } },
+			},
+			orderBy: { createdAt: "desc" },
+			take: safeLimit * 2,
+			skip: 0,
+		}),
+		prisma.order.count({ where: userWhere }),
+		prisma.cardTopupSimulation.count({ where: { ...userWhere, status: "SUCCESS" } }),
+	]);
+
+	// Unificar en un formato común
+	type TransactionEntry = {
+		id: string;
+		type: "purchase" | "topup";
+		date: Date;
+		userName: string;
+		userEmail: string;
+		amount: number; // positivo = ingreso, negativo = gasto
+		description: string;
+		txHash: string | null;
+	};
+
+	const unified: TransactionEntry[] = [];
+
+	for (const order of orders) {
+		unified.push({
+			id: order.id,
+			type: "purchase",
+			date: order.purchaseDate,
+			userName: order.user.name,
+			userEmail: order.user.email,
+			amount: -(order.pricePaid * order.quantity),
+			description: `Compra: ${order.product.name} (x${order.quantity})`,
+			txHash: order.txHash,
+		});
+	}
+
+	for (const topup of topups) {
+		unified.push({
+			id: topup.id,
+			type: "topup",
+			date: topup.createdAt,
+			userName: topup.user.name,
+			userEmail: topup.user.email,
+			amount: topup.amount,
+			description: `Recarga: +${topup.amount} ShopTokens`,
+			txHash: topup.txHash,
+		});
+	}
+
+	// Ordenar por fecha descendente y paginar
+	unified.sort((a, b) => b.date.getTime() - a.date.getTime());
+	const paged = unified.slice(safeOffset, safeOffset + safeLimit);
+
+	return {
+		transactions: paged,
+		total: totalOrders + totalTopups,
+		limit: safeLimit,
+		offset: safeOffset,
+	};
 }

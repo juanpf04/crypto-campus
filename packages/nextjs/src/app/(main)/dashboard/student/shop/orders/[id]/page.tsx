@@ -157,7 +157,7 @@ export default function StudentOrderDetailPage() {
             />
             <DetailField
               label="Precio pagado"
-              value={<span className="font-bold text-primary">{order.pricePaid} SHPT</span>}
+              value={<span className="font-bold text-primary">{order.pricePaid} ShopTokens</span>}
             />
             <DetailField label="Fecha de compra" value={formatDateTime(order.purchaseDate)} />
             {order.deliveryDate && (
