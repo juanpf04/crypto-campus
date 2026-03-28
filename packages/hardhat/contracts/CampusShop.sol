@@ -45,6 +45,14 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard, Pausable {
         uint40 returnDate;
     }
 
+    /// @notice Datos de un pedido agrupado (batch)
+    struct Batch {
+        address buyer;
+        uint256[] orderIds;
+        uint256 totalPaid;
+        uint40 purchaseDate;
+    }
+
     // ── State variables ─────────────────────────────────────────────────
 
     uint256 public nextProductId = 1;
@@ -53,6 +61,11 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard, Pausable {
     uint256 public nextOrderId = 1;
     mapping(uint256 => Order) private _orders;
     mapping(address => uint256[]) private _studentOrders;
+
+    uint256 public nextBatchId = 1;
+    mapping(uint256 => Batch) private _batches;
+    mapping(uint256 => uint256) public orderToBatch;
+    mapping(address => uint256[]) private _studentBatches;
 
     uint256 public constant RETURN_WINDOW = 30 days;
     /// @dev Los recibos de compra usan token IDs 1..999999 (productId).
@@ -72,6 +85,7 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard, Pausable {
     error ReturnWindowExpired(uint256 orderId);
     error ZeroPrice();
     error ProductAlreadyInState(uint256 productId, bool active);
+    error EmptyBatch();
 
     // ── Events ──────────────────────────────────────────────────────────
 
@@ -83,6 +97,7 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard, Pausable {
     event OrderDelivered(uint256 indexed orderId);
     event OrderReturned(uint256 indexed orderId, address indexed buyer, uint256 refundAmount);
     event ReturnReceiptMinted(uint256 indexed orderId, address indexed buyer, uint256 returnTokenId);
+    event BatchPurchase(uint256 indexed batchId, address indexed buyer, uint256 totalPaid, uint256 itemCount);
 
     constructor(
         address _campusRoles,
@@ -214,6 +229,85 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard, Pausable {
         emit OrderCreated(orderId, msg.sender, productId, price);
     }
 
+    /**
+     * @dev Compra múltiples productos en una sola transacción atómica.
+     *      Si algún producto no tiene stock o no está activo, revierte toda la compra.
+     *      Crea un Batch que agrupa todos los orderIds individuales.
+     * @param productIds Array de IDs de producto (puede contener duplicados para múltiples unidades).
+     * @return batchId El ID del batch creado.
+     */
+    function purchaseBatch(
+        uint256[] calldata productIds
+    ) external onlyStudent whenNotPaused nonReentrant returns (uint256 batchId) {
+        uint256 len = productIds.length;
+        if (len == 0) revert EmptyBatch();
+
+        // 1. Calcular precio total y validar todos los productos
+        uint256 totalPrice = 0;
+        for (uint256 i = 0; i < len; ) {
+            Product storage product = _products[productIds[i]];
+            if (!product.exists) revert ProductNotFound(productIds[i]);
+            if (!product.active) revert ProductNotActive(productIds[i]);
+            if (product.stock == 0) revert ProductOutOfStock(productIds[i]);
+            totalPrice += product.price;
+            unchecked { ++i; }
+        }
+
+        // 2. Una sola transferencia de ShopTokens por el total
+        shopToken.transferFrom(msg.sender, address(this), totalPrice);
+
+        // 3. Crear batch
+        batchId = nextBatchId;
+        unchecked { ++nextBatchId; }
+
+        uint256[] memory orderIds = new uint256[](len);
+
+        // 4. Crear orders individuales + decrementar stock + mintear NFTs
+        for (uint256 i = 0; i < len; ) {
+            uint256 pid = productIds[i];
+            Product storage product = _products[pid];
+            uint256 price = product.price;
+
+            unchecked { product.stock -= 1; }
+
+            uint256 orderId = nextOrderId;
+            unchecked { ++nextOrderId; }
+
+            _orders[orderId] = Order({
+                productId: pid,
+                buyer: msg.sender,
+                pricePaid: price,
+                status: OrderStatus.Paid,
+                purchaseDate: uint40(block.timestamp),
+                deliveryDate: 0,
+                returnDate: 0
+            });
+
+            _studentOrders[msg.sender].push(orderId);
+            orderIds[i] = orderId;
+            orderToBatch[orderId] = batchId;
+
+            // Mintear NFT recibo
+            _mint(msg.sender, pid, 1, "");
+
+            emit OrderCreated(orderId, msg.sender, pid, price);
+
+            unchecked { ++i; }
+        }
+
+        // 5. Guardar batch
+        _batches[batchId] = Batch({
+            buyer: msg.sender,
+            orderIds: orderIds,
+            totalPaid: totalPrice,
+            purchaseDate: uint40(block.timestamp)
+        });
+
+        _studentBatches[msg.sender].push(batchId);
+
+        emit BatchPurchase(batchId, msg.sender, totalPrice, len);
+    }
+
     // ── Order management ────────────────────────────────────────────────
 
     /**
@@ -336,6 +430,20 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard, Pausable {
 
     function getStudentOrders(address student) external view returns (uint256[] memory) {
         return _studentOrders[student];
+    }
+
+    function getBatch(uint256 batchId) external view returns (
+        address buyer,
+        uint256[] memory orderIds,
+        uint256 totalPaid,
+        uint40 purchaseDate
+    ) {
+        Batch storage b = _batches[batchId];
+        return (b.buyer, b.orderIds, b.totalPaid, b.purchaseDate);
+    }
+
+    function getStudentBatches(address student) external view returns (uint256[] memory) {
+        return _studentBatches[student];
     }
 
     /// @dev Calcula el token ID del recibo de devolucion para un orderId dado.

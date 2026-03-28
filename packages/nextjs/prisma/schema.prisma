@@ -34,6 +34,7 @@ model User {
   printLogs         PrintLog[]
   loans             Loan[]
   orders            Order[]
+  orderBatches      OrderBatch[]
   cart              Cart?
   topupSimulations  CardTopupSimulation[]
   paymentLogs       PaymentSimulationLog[]
@@ -333,12 +334,28 @@ model ProductBase {
   variants Product[]
 }
 
-// Pedido. orderId = ID en CampusShop.
+// Pedido agrupado (batch). Un checkout del carrito = 1 batch con N artículos.
+model OrderBatch {
+  id           String   @id @default(cuid())
+  batchId      Int      @unique  // ID en el contrato CampusShop
+  userId       String
+  totalPaid    Int
+  txHash       String            // 1 solo txHash para toda la compra
+  purchaseDate DateTime @default(now())
+
+  user  User    @relation(fields: [userId], references: [id])
+  items Order[]                  // artículos individuales del pedido
+
+  @@index([userId, purchaseDate])
+}
+
+// Artículo individual de un pedido. orderId = ID en CampusShop.
 model Order {
   id           String      @id @default(cuid())
   orderId      Int         @unique  // ID en el contrato CampusShop
   userId       String
   productId    String
+  batchId      String?             // nullable: compras sueltas (purchase) no tienen batch
   quantity     Int         @default(1)
   pricePaid    Int
   status       OrderStatus @default(PAID)
@@ -347,8 +364,11 @@ model Order {
   deliveryDate DateTime?
   returnDate   DateTime?
 
-  user    User    @relation(fields: [userId], references: [id])
-  product Product @relation(fields: [productId], references: [id])
+  user    User        @relation(fields: [userId], references: [id])
+  product Product     @relation(fields: [productId], references: [id])
+  batch   OrderBatch? @relation(fields: [batchId], references: [id])
+
+  @@index([batchId])
 }
 
 model Cart {

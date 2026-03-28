@@ -723,6 +723,455 @@ export async function reactivateProduct(productPrismaId: string) {
 	}
 }
 
+// ── Gestión de grupos y variantes ────────────────────────────────────────
+
+/**
+ * Obtiene el detalle completo de un grupo de producto (base + todas sus variantes).
+ * Acceso: solo admin.
+ */
+export async function getProductGroup(groupKey: string) {
+	const session = await getSession();
+	ensureRole(session, ["ADMIN"]);
+
+	try {
+		// Buscar la ProductBase por slug
+		const base = await prisma.productBase.findUnique({
+			where: { slug: groupKey },
+			include: {
+				variants: {
+					orderBy: [{ sortOrder: "asc" }, { color: "asc" }],
+				},
+			},
+		});
+
+		if (!base) throw new Error("Grupo de producto no encontrado");
+
+		const activeVariants = base.variants.filter((v) => v.active);
+		const allPrices = base.variants.map((v) => v.price);
+		const totalStock = base.variants.reduce((sum, v) => sum + Math.max(v.stock, 0), 0);
+
+		return {
+			groupKey: base.slug,
+			name: base.name,
+			description: base.description,
+			category: base.category,
+			active: base.active,
+			totalStock,
+			minPrice: Math.min(...allPrices),
+			maxPrice: Math.max(...allPrices),
+			activeVariantsCount: activeVariants.length,
+			variants: base.variants.map((v) => ({
+				id: v.id,
+				productId: v.productId,
+				name: v.name,
+				price: v.price,
+				stock: v.stock,
+				imageUrl: v.imageUrl,
+				color: normalizeColor(v.color),
+				variantLabel: v.variantLabel,
+				active: v.active,
+				sortOrder: v.sortOrder,
+			})),
+		};
+	} catch (error) {
+		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Grupo de producto no encontrado")) throw error;
+		throw new Error(`Error al obtener grupo: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
+}
+
+/**
+ * Actualiza los campos compartidos de un grupo (nombre, descripción, categoría, precio).
+ * El precio se actualiza on-chain para TODAS las variantes del grupo.
+ * Acceso: solo admin.
+ */
+export async function updateProductGroup(
+	groupKey: string,
+	input: {
+		name?: string;
+		description?: string;
+		category?: string;
+		price?: number;
+	},
+) {
+	const session = await getSession();
+	ensureRole(session, ["ADMIN"]);
+
+	try {
+		const base = await prisma.productBase.findUnique({
+			where: { slug: groupKey },
+			include: { variants: true },
+		});
+		if (!base) throw new Error("Grupo de producto no encontrado");
+
+		const newName = input.name !== undefined ? cleanString(input.name, "El nombre") : undefined;
+		const newDescription = input.description !== undefined ? input.description.trim() || null : undefined;
+		const newCategory = input.category !== undefined ? input.category.trim() || null : undefined;
+		const newPrice = input.price !== undefined ? ensurePositiveInt(input.price, "El precio") : undefined;
+
+		// Si el precio cambió, actualizar on-chain cada variante
+		if (newPrice !== undefined) {
+			for (const variant of base.variants) {
+				if (variant.price !== newPrice) {
+					const hash = await adminWalletClient.writeContract({
+						address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
+						abi: CAMPUS_SHOP_ABI,
+						functionName: "updateProduct",
+						args: [BigInt(variant.productId), BigInt(newPrice), BigInt(variant.stock)],
+					});
+					await publicClient.waitForTransactionReceipt({ hash });
+				}
+			}
+		}
+
+		// Actualizar ProductBase en Prisma
+		await prisma.productBase.update({
+			where: { slug: groupKey },
+			data: {
+				...(newName !== undefined && { name: newName }),
+				...(newDescription !== undefined && { description: newDescription }),
+				...(newCategory !== undefined && { category: newCategory }),
+			},
+		});
+
+		// Actualizar variantes en Prisma (precio + categoría se sincronizan)
+		const variantUpdateData: Record<string, unknown> = {};
+		if (newPrice !== undefined) variantUpdateData.price = newPrice;
+		if (newCategory !== undefined) variantUpdateData.category = newCategory;
+
+		if (Object.keys(variantUpdateData).length > 0) {
+			await prisma.product.updateMany({
+				where: { baseId: base.id },
+				data: variantUpdateData,
+			});
+		}
+
+		return { success: true };
+	} catch (error) {
+		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Grupo de producto no encontrado")) throw error;
+		throw new Error(`Error al actualizar grupo: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
+}
+
+/**
+ * Actualiza una variante individual (nombre, color, stock, imagen).
+ * El stock se actualiza on-chain.
+ * Acceso: solo admin.
+ */
+export async function updateVariant(
+	variantPrismaId: string,
+	input: {
+		name?: string;
+		color?: string;
+		variantLabel?: string;
+		stock?: number;
+		imageUrl?: string;
+	},
+) {
+	const session = await getSession();
+	ensureRole(session, ["ADMIN"]);
+
+	try {
+		const variant = await prisma.product.findUnique({ where: { id: variantPrismaId } });
+		if (!variant) throw new Error("Variante no encontrada");
+
+		const newStock = input.stock !== undefined ? ensureNonNegativeInt(input.stock, "El stock") : undefined;
+
+		// Actualizar on-chain si stock cambió
+		if (newStock !== undefined && newStock !== variant.stock) {
+			const hash = await adminWalletClient.writeContract({
+				address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
+				abi: CAMPUS_SHOP_ABI,
+				functionName: "updateProduct",
+				args: [BigInt(variant.productId), BigInt(variant.price), BigInt(newStock)],
+			});
+			await publicClient.waitForTransactionReceipt({ hash });
+		}
+
+		// Actualizar en Prisma
+		return await prisma.product.update({
+			where: { id: variantPrismaId },
+			data: {
+				...(input.name !== undefined && { name: cleanString(input.name, "El nombre") }),
+				...(input.color !== undefined && { color: input.color.trim() || null }),
+				...(input.variantLabel !== undefined && { variantLabel: input.variantLabel.trim() || null }),
+				...(newStock !== undefined && { stock: newStock }),
+				...(input.imageUrl !== undefined && { imageUrl: input.imageUrl.trim() || null }),
+			},
+		});
+	} catch (error) {
+		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Variante no encontrada")) throw error;
+		throw new Error(`Error al actualizar variante: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
+}
+
+/**
+ * Añade una nueva variante a un grupo existente.
+ * Crea el producto on-chain (con el precio del grupo) y en Prisma.
+ * Acceso: solo admin.
+ */
+export async function addVariantToGroup(
+	groupKey: string,
+	input: {
+		color: string;
+		variantLabel?: string;
+		stock: number;
+		imageUrl?: string;
+	},
+) {
+	const session = await getSession();
+	ensureRole(session, ["ADMIN"]);
+
+	try {
+		const base = await prisma.productBase.findUnique({
+			where: { slug: groupKey },
+			include: { variants: { take: 1, orderBy: { createdAt: "asc" } } },
+		});
+		if (!base) throw new Error("Grupo de producto no encontrado");
+		if (base.variants.length === 0) throw new Error("El grupo no tiene variantes de referencia");
+
+		const referenceVariant = base.variants[0];
+		const price = referenceVariant.price;
+		const stock = ensureNonNegativeInt(input.stock, "El stock");
+		const color = normalizeColor(input.color);
+		const displayColor = toDisplayColor(color);
+		const variantName = `${base.name} ${displayColor}`;
+
+		// Leer nextProductId
+		const nextProductId = await publicClient.readContract({
+			address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
+			abi: CAMPUS_SHOP_ABI,
+			functionName: "nextProductId",
+		}) as bigint;
+		const productId = Number(nextProductId);
+
+		// Crear on-chain
+		const hash = await adminWalletClient.writeContract({
+			address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
+			abi: CAMPUS_SHOP_ABI,
+			functionName: "addProduct",
+			args: [BigInt(price), BigInt(stock)],
+		});
+		const receipt = await publicClient.waitForTransactionReceipt({ hash });
+		if (receipt.status !== "success") {
+			throw new Error("La transacción de creación fue revertida");
+		}
+
+		// Crear en Prisma
+		const newVariant = await prisma.product.create({
+			data: {
+				productId,
+				baseId: base.id,
+				name: variantName,
+				color,
+				variantLabel: input.variantLabel?.trim() || null,
+				price,
+				stock,
+				category: base.category,
+				imageUrl: input.imageUrl?.trim() || null,
+				sortOrder: base.variants.length,
+			},
+		});
+
+		return { ...newVariant, txHash: hash };
+	} catch (error) {
+		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Grupo de producto no encontrado")) throw error;
+		throw new Error(`Error al añadir variante: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
+}
+
+/**
+ * Crea un nuevo producto (grupo + primera variante).
+ * Crea la ProductBase, el producto on-chain y el registro en Prisma.
+ * Acceso: solo admin.
+ */
+export async function createProductGroup(input: {
+	name: string;
+	description?: string;
+	category?: string;
+	price: number;
+	stock: number;
+	color: string;
+	imageUrl?: string;
+}) {
+	const session = await getSession();
+	ensureRole(session, ["ADMIN"]);
+
+	try {
+		const name = cleanString(input.name, "El nombre");
+		const price = ensurePositiveInt(input.price, "El precio");
+		const stock = ensureNonNegativeInt(input.stock, "El stock");
+		const color = normalizeColor(input.color);
+		const displayColor = toDisplayColor(color);
+		const slug = slugify(name);
+		const variantName = `${name} ${displayColor}`;
+
+		// Verificar que no exista ya un grupo con el mismo slug
+		const existing = await prisma.productBase.findUnique({ where: { slug } });
+		if (existing) throw new Error(`Ya existe un grupo de producto con el nombre "${name}"`);
+
+		// Leer nextProductId
+		const nextProductId = await publicClient.readContract({
+			address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
+			abi: CAMPUS_SHOP_ABI,
+			functionName: "nextProductId",
+		}) as bigint;
+		const productId = Number(nextProductId);
+
+		// Crear on-chain
+		const hash = await adminWalletClient.writeContract({
+			address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
+			abi: CAMPUS_SHOP_ABI,
+			functionName: "addProduct",
+			args: [BigInt(price), BigInt(stock)],
+		});
+		const receipt = await publicClient.waitForTransactionReceipt({ hash });
+		if (receipt.status !== "success") {
+			throw new Error("La transacción de creación fue revertida");
+		}
+
+		// Crear ProductBase
+		const base = await prisma.productBase.create({
+			data: {
+				slug,
+				name,
+				description: input.description?.trim() || null,
+				category: input.category?.trim() || null,
+			},
+		});
+
+		// Crear primera variante
+		const variant = await prisma.product.create({
+			data: {
+				productId,
+				baseId: base.id,
+				name: variantName,
+				color,
+				price,
+				stock,
+				category: input.category?.trim() || null,
+				imageUrl: input.imageUrl?.trim() || null,
+				sortOrder: 0,
+			},
+		});
+
+		return { groupKey: slug, variant, txHash: hash };
+	} catch (error) {
+		if (error instanceof Error && (error.message === "No autorizado" || error.message.startsWith("Ya existe"))) throw error;
+		throw new Error(`Error al crear producto: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
+}
+
+/**
+ * Desactiva/reactiva un grupo entero (todas sus variantes).
+ * Acceso: solo admin.
+ */
+export async function toggleGroupActive(groupKey: string, active: boolean) {
+	const session = await getSession();
+	ensureRole(session, ["ADMIN"]);
+
+	try {
+		const base = await prisma.productBase.findUnique({
+			where: { slug: groupKey },
+			include: { variants: true },
+		});
+		if (!base) throw new Error("Grupo de producto no encontrado");
+
+		// Actualizar cada variante on-chain
+		for (const variant of base.variants) {
+			const fn = active ? "reactivateProduct" : "deactivateProduct";
+			// Solo cambiar si el estado actual es diferente
+			if (variant.active !== active) {
+				const hash = await adminWalletClient.writeContract({
+					address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
+					abi: CAMPUS_SHOP_ABI,
+					functionName: fn,
+					args: [BigInt(variant.productId)],
+				});
+				await publicClient.waitForTransactionReceipt({ hash });
+			}
+		}
+
+		// Actualizar ProductBase
+		await prisma.productBase.update({
+			where: { slug: groupKey },
+			data: { active },
+		});
+
+		// Actualizar todas las variantes en Prisma
+		await prisma.product.updateMany({
+			where: { baseId: base.id },
+			data: { active },
+		});
+
+		return { success: true };
+	} catch (error) {
+		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Grupo de producto no encontrado")) throw error;
+		throw new Error(`Error al cambiar estado del grupo: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
+}
+
+/**
+ * Desactiva/reactiva una variante individual.
+ * Si es la última activa del grupo, desactiva también el grupo.
+ * Acceso: solo admin.
+ */
+export async function toggleVariantActive(variantPrismaId: string, active: boolean) {
+	const session = await getSession();
+	ensureRole(session, ["ADMIN"]);
+
+	try {
+		const variant = await prisma.product.findUnique({
+			where: { id: variantPrismaId },
+			include: { base: { include: { variants: true } } },
+		});
+		if (!variant) throw new Error("Variante no encontrada");
+
+		// Actualizar on-chain
+		const fn = active ? "reactivateProduct" : "deactivateProduct";
+		if (variant.active !== active) {
+			const hash = await adminWalletClient.writeContract({
+				address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
+				abi: CAMPUS_SHOP_ABI,
+				functionName: fn,
+				args: [BigInt(variant.productId)],
+			});
+			await publicClient.waitForTransactionReceipt({ hash });
+		}
+
+		// Actualizar variante en Prisma
+		await prisma.product.update({
+			where: { id: variantPrismaId },
+			data: { active },
+		});
+
+		// Si desactivamos y es la última activa, desactivar el grupo
+		if (!active && variant.base) {
+			const otherActive = variant.base.variants.filter(
+				(v) => v.id !== variantPrismaId && v.active,
+			);
+			if (otherActive.length === 0) {
+				await prisma.productBase.update({
+					where: { id: variant.base.id },
+					data: { active: false },
+				});
+			}
+		}
+
+		// Si reactivamos, asegurarnos de que el grupo esté activo
+		if (active && variant.base) {
+			await prisma.productBase.update({
+				where: { id: variant.base.id },
+				data: { active: true },
+			});
+		}
+
+		return { success: true };
+	} catch (error) {
+		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Variante no encontrada")) throw error;
+		throw new Error(`Error al cambiar estado de variante: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
+}
+
 // ── Balance de ShopTokens ────────────────────────────────────────────────
 
 /**
@@ -1194,8 +1643,10 @@ export async function checkoutCart() {
 			throw new Error("El carrito está vacío");
 		}
 
-		// 2. Validar que todos los productos estén disponibles y activos
+		// 2. Validar productos y calcular precio total
 		let totalPrice = 0;
+		// Expandir items con quantity > 1 en array plano de productIds on-chain
+		const productIdsOnChain: bigint[] = [];
 
 		for (const item of cart.items) {
 			if (!item.product.active) {
@@ -1205,6 +1656,10 @@ export async function checkoutCart() {
 				throw new Error(`Stock insuficiente de "${item.product.name}". Disponibles: ${item.product.stock}, solicitados: ${item.quantity}`);
 			}
 			totalPrice += item.product.price * item.quantity;
+			// Duplicar el productId tantas veces como quantity
+			for (let i = 0; i < item.quantity; i++) {
+				productIdsOnChain.push(BigInt(item.product.productId));
+			}
 		}
 
 		// 3. Obtener wallet del usuario y verificar balance
@@ -1215,126 +1670,87 @@ export async function checkoutCart() {
 			throw new Error(`Saldo insuficiente. Tienes ${Number(balance)} ShopTokens y necesitas ${totalPrice} ShopTokens`);
 		}
 
-		// 3b. Verificar que el contrato tiene allowance para gastar tokens del usuario
-		// El contrato CampusShop intenta hacer transferFrom de ShopToken
-		const allowance = await publicClient.readContract({
-			address: CONTRACT_ADDRESSES.shopToken as `0x${string}`,
-			abi: SHOP_TOKEN_ABI,
-			functionName: "allowance",
-			args: [address, CONTRACT_ADDRESSES.campusShop as `0x${string}`],
-		}) as bigint;
+		// 4. Leer nextOrderId y nextBatchId ANTES de la compra
+		const [nextOrderIdRaw, nextBatchIdRaw] = await Promise.all([
+			publicClient.readContract({
+				address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
+				abi: CAMPUS_SHOP_ABI,
+				functionName: "nextOrderId",
+			}) as Promise<bigint>,
+			publicClient.readContract({
+				address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
+				abi: CAMPUS_SHOP_ABI,
+				functionName: "nextBatchId",
+			}) as Promise<bigint>,
+		]);
 
-		if (Number(allowance) < totalPrice) {
-			throw new Error(
-				`El contrato CampusShop no tiene permiso para gastar tus tokens. ` +
-				`Allowance: ${Number(allowance)}, necesario: ${totalPrice}. ` +
-				`Esto puede ocurrir si los trustedSpender no está configurado correctamente.`
-			);
+		const firstOrderId = Number(nextOrderIdRaw);
+		const batchId = Number(nextBatchIdRaw);
+
+		// 5. UNA SOLA transacción on-chain: purchaseBatch
+		const hash = await walletClient.writeContract({
+			address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
+			abi: CAMPUS_SHOP_ABI,
+			functionName: "purchaseBatch",
+			args: [productIdsOnChain],
+		});
+		const receipt = await publicClient.waitForTransactionReceipt({ hash });
+
+		if (receipt.status !== "success") {
+			throw new Error("La transacción de compra fue revertida");
 		}
 
-		// 4. Ejecutar compras on-chain y crear órdenes
-		// Nota: purchase() en el contrato compra exactamente 1 unidad por transacción
-		// Si un item tiene quantity > 1, necesitamos hacer múltiples purchases
+		// 6. Crear OrderBatch en Prisma
+		const orderBatch = await prisma.orderBatch.create({
+			data: {
+				batchId,
+				userId: session.userId!,
+				totalPaid: totalPrice,
+				txHash: hash,
+			},
+		});
+
+		// 7. Crear Orders individuales vinculados al batch
 		const createdOrders = [];
+		let orderIdCounter = firstOrderId;
 
 		for (const item of cart.items) {
-			// Hacer una compra por cada unidad
-			for (let unitIndex = 0; unitIndex < item.quantity; unitIndex++) {
-				try {
-					// Verificar estado del producto on-chain ANTES de intentar compra
-					const [onChainPrice, onChainStock, onChainActive, onChainExists] = await publicClient.readContract({
-						address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
-						abi: CAMPUS_SHOP_ABI,
-						functionName: "getProduct",
-						args: [BigInt(item.product.productId)],
-					}) as [bigint, bigint, boolean, boolean];
-
-					if (!onChainExists) {
-						throw new Error(
-							`Producto NO EXISTE en el contrato (productId: ${item.product.productId}). ` +
-							`Esto puede ocurrir si el producto fue agregado a Prisma pero no al contrato.`
-						);
-					}
-
-					if (!onChainActive) {
-						throw new Error(
-							`Producto INACTIVO en el contrato (productId: ${item.product.productId}). ` +
-							`Admin debe reactivarlo on-chain.`
-						);
-					}
-
-					if (Number(onChainStock) === 0) {
-						throw new Error(
-							`SIN STOCK en el contrato (productId: ${item.product.productId}). ` +
-							`Stock on-chain: 0, Stock en Prisma: ${item.product.stock}. ` +
-							`Puede haber desincronización o stock agotado por otra compra.`
-						);
-					}
-
-					// Leer el nextOrderId ANTES de la compra
-					const nextOrderId = await publicClient.readContract({
-						address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
-						abi: CAMPUS_SHOP_ABI,
-						functionName: "nextOrderId",
-					}) as bigint;
-					const orderId = Number(nextOrderId);
-
-					// Ejecutar compra on-chain (1 unidad por transacción)
-					const hash = await walletClient.writeContract({
-						address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
-						abi: CAMPUS_SHOP_ABI,
-						functionName: "purchase",
-						args: [BigInt(item.product.productId)],
-					});
-					const receipt = await publicClient.waitForTransactionReceipt({ hash });
-
-					if (receipt.status !== "success") {
-						throw new Error(`La transacción de compra para "${item.product.name}" (unidad ${unitIndex + 1}/${item.quantity}) fue revertida`);
-					}
-
-					// Esperar un poco para que el estado se sincronice en el contrato
-					// Esto ayuda con race conditions cuando hay múltiples compras
-					if (unitIndex < item.quantity - 1) {
-						await new Promise(resolve => setTimeout(resolve, 500));
-					}
-
-					// Actualizar stock en Prisma (decrementa 1 por cada unidad comprada)
-					await prisma.product.update({
-						where: { id: item.product.id },
-						data: { stock: { decrement: 1 } },
-					});
-
-					// Crear registro de orden por cada unidad
-					const order = await prisma.order.create({
-						data: {
-							orderId,
-							userId: session.userId!,
-							productId: item.productId,
-							pricePaid: item.product.price,
-							status: "PAID",
-							txHash: hash,
-						},
-					});
-
-					createdOrders.push(order);
-				} catch (error) {
-					// Si una compra falla, propagar el error con contexto específico
-					const errorMsg = error instanceof Error ? error.message : "desconocido";
-					throw new Error(`Error al comprar "${item.product.name}" (unidad ${unitIndex + 1}/${item.quantity}): ${errorMsg}`);
-				}
+			for (let i = 0; i < item.quantity; i++) {
+				const order = await prisma.order.create({
+					data: {
+						orderId: orderIdCounter,
+						userId: session.userId!,
+						productId: item.productId,
+						batchId: orderBatch.id,
+						pricePaid: item.product.price,
+						status: "PAID",
+						txHash: hash,
+					},
+				});
+				createdOrders.push(order);
+				orderIdCounter++;
 			}
+
+			// Actualizar stock en Prisma
+			await prisma.product.update({
+				where: { id: item.product.id },
+				data: { stock: { decrement: item.quantity } },
+			});
 		}
 
-		// 5. Limpiar el carrito
+		// 8. Limpiar el carrito
 		await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
 
-		// Retornar resultado con órdenes creadas y nuevo balance
+		const newBalance = await readShopBalance(address);
+
 		return {
 			success: true,
+			batchId: orderBatch.id,
+			batchIdOnChain: batchId,
 			ordersCreated: createdOrders.length,
 			totalPaid: totalPrice,
-			newBalance: Number(balance) - totalPrice,
-			orders: createdOrders,
+			newBalance: Number(newBalance),
+			txHash: hash,
 		};
 	} catch (error) {
 		if (error instanceof Error && (
@@ -1626,6 +2042,233 @@ export async function requestReturn(orderPrismaId: string) {
 			error.message === "El plazo de devolución de 30 días ha expirado"
 		)) throw error;
 		throw new Error(`Error al solicitar devolución: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
+}
+
+// ── Pedidos agrupados (batches) ──────────────────────────────────────────
+
+/**
+ * Lista los pedidos agrupados (batches) del usuario logueado.
+ * Cada batch contiene N artículos de una sola compra.
+ * Acceso: estudiantes y profesores.
+ */
+export async function listMyBatches(limit = 20, offset = 0) {
+	const safeLimit = Math.min(Math.max(limit, 1), 100);
+	const safeOffset = Math.max(offset, 0);
+
+	const session = await getSession();
+	ensureRole(session, ["STUDENT", "PROFESSOR"]);
+
+	try {
+		const [batches, total] = await Promise.all([
+			prisma.orderBatch.findMany({
+				where: { userId: session.userId },
+				include: {
+					items: {
+						include: {
+							product: {
+								select: { name: true, imageUrl: true, category: true, color: true, variantLabel: true },
+							},
+						},
+						orderBy: { purchaseDate: "asc" },
+					},
+				},
+				orderBy: { purchaseDate: "desc" },
+				take: safeLimit,
+				skip: safeOffset,
+			}),
+			prisma.orderBatch.count({ where: { userId: session.userId } }),
+		]);
+
+		// Calcular estado general de cada batch
+		const batchesWithStatus = batches.map((batch) => {
+			const statuses = batch.items.map((i) => i.status);
+			let generalStatus: string;
+
+			if (statuses.every((s) => s === "RETURNED")) {
+				generalStatus = "RETURNED";
+			} else if (statuses.some((s) => s === "RETURNED")) {
+				generalStatus = "PARTIALLY_RETURNED";
+			} else if (statuses.every((s) => s === "DELIVERED")) {
+				generalStatus = "DELIVERED";
+			} else if (statuses.some((s) => s === "DELIVERED")) {
+				generalStatus = "PARTIALLY_DELIVERED";
+			} else {
+				generalStatus = "PAID";
+			}
+
+			return { ...batch, generalStatus };
+		});
+
+		return { batches: batchesWithStatus, total };
+	} catch (error) {
+		throw new Error(`Error al listar pedidos: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
+}
+
+/**
+ * Obtiene el detalle de un pedido agrupado (batch) por su ID de Prisma.
+ * Incluye todos los artículos con su producto y estado individual.
+ * Acceso: propietario o admin.
+ */
+export async function getBatchDetail(batchPrismaId: string) {
+	const session = await getSession();
+	ensureRole(session, ["STUDENT", "PROFESSOR", "ADMIN"]);
+
+	try {
+		const batch = await prisma.orderBatch.findUnique({
+			where: { id: batchPrismaId },
+			include: {
+				user: { select: { name: true, email: true } },
+				items: {
+					include: {
+						product: {
+							select: { name: true, imageUrl: true, category: true, color: true, variantLabel: true, price: true },
+						},
+					},
+					orderBy: { purchaseDate: "asc" },
+				},
+			},
+		});
+
+		if (!batch) throw new Error("Pedido no encontrado");
+
+		// Solo el propietario o admin pueden ver el detalle
+		if (session.role !== "ADMIN" && batch.userId !== session.userId) {
+			throw new Error("No autorizado");
+		}
+
+		// Estado general
+		const statuses = batch.items.map((i) => i.status);
+		let generalStatus: string;
+
+		if (statuses.every((s) => s === "RETURNED")) {
+			generalStatus = "RETURNED";
+		} else if (statuses.some((s) => s === "RETURNED")) {
+			generalStatus = "PARTIALLY_RETURNED";
+		} else if (statuses.every((s) => s === "DELIVERED")) {
+			generalStatus = "DELIVERED";
+		} else if (statuses.some((s) => s === "DELIVERED")) {
+			generalStatus = "PARTIALLY_DELIVERED";
+		} else {
+			generalStatus = "PAID";
+		}
+
+		return { ...batch, generalStatus };
+	} catch (error) {
+		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Pedido no encontrado")) throw error;
+		throw new Error(`Error al obtener detalle del pedido: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
+}
+
+/**
+ * Lista todos los pedidos agrupados (batches) para el admin.
+ * Soporta filtro por userId y paginación.
+ * Acceso: solo admin.
+ */
+export async function listAllBatches(limit = 20, offset = 0, userId?: string) {
+	const safeLimit = Math.min(Math.max(limit, 1), 200);
+	const safeOffset = Math.max(offset, 0);
+
+	const session = await getSession();
+	ensureRole(session, ["ADMIN"]);
+
+	try {
+		const where: Record<string, unknown> = {};
+		if (userId) where.userId = userId;
+
+		const [batches, total] = await Promise.all([
+			prisma.orderBatch.findMany({
+				where,
+				include: {
+					user: { select: { name: true, email: true } },
+					items: {
+						include: {
+							product: {
+								select: { name: true, imageUrl: true, category: true },
+							},
+						},
+						orderBy: { purchaseDate: "asc" },
+					},
+				},
+				orderBy: { purchaseDate: "desc" },
+				take: safeLimit,
+				skip: safeOffset,
+			}),
+			prisma.orderBatch.count({ where }),
+		]);
+
+		const batchesWithStatus = batches.map((batch) => {
+			const statuses = batch.items.map((i) => i.status);
+			let generalStatus: string;
+
+			if (statuses.every((s) => s === "RETURNED")) {
+				generalStatus = "RETURNED";
+			} else if (statuses.some((s) => s === "RETURNED")) {
+				generalStatus = "PARTIALLY_RETURNED";
+			} else if (statuses.every((s) => s === "DELIVERED")) {
+				generalStatus = "DELIVERED";
+			} else if (statuses.some((s) => s === "DELIVERED")) {
+				generalStatus = "PARTIALLY_DELIVERED";
+			} else {
+				generalStatus = "PAID";
+			}
+
+			return { ...batch, generalStatus };
+		});
+
+		return { batches: batchesWithStatus, total };
+	} catch (error) {
+		throw new Error(`Error al listar pedidos (admin): ${error instanceof Error ? error.message : "desconocido"}`);
+	}
+}
+
+/**
+ * Marca todos los artículos de un batch como entregados.
+ * Acceso: solo admin.
+ */
+export async function markBatchDelivered(batchPrismaId: string) {
+	const session = await getSession();
+	ensureRole(session, ["ADMIN"]);
+
+	try {
+		const batch = await prisma.orderBatch.findUnique({
+			where: { id: batchPrismaId },
+			include: { items: true },
+		});
+		if (!batch) throw new Error("Pedido no encontrado");
+
+		const paidItems = batch.items.filter((i) => i.status === "PAID");
+		if (paidItems.length === 0) {
+			throw new Error("No hay artículos pendientes de entrega en este pedido");
+		}
+
+		// Marcar cada artículo como entregado on-chain
+		for (const item of paidItems) {
+			const hash = await adminWalletClient.writeContract({
+				address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
+				abi: CAMPUS_SHOP_ABI,
+				functionName: "markDelivered",
+				args: [BigInt(item.orderId)],
+			});
+			await publicClient.waitForTransactionReceipt({ hash });
+		}
+
+		// Actualizar en Prisma
+		await prisma.order.updateMany({
+			where: {
+				id: { in: paidItems.map((i) => i.id) },
+			},
+			data: {
+				status: "DELIVERED",
+				deliveryDate: new Date(),
+			},
+		});
+
+		return { success: true, deliveredCount: paidItems.length };
+	} catch (error) {
+		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Pedido no encontrado")) throw error;
+		throw new Error(`Error al marcar como entregado: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
 

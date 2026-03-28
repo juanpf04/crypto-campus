@@ -6,3 +6,7 @@ export { TokenBalance } from "./TokenBalance";
 export { PasswordRequirements } from "./PasswordRequirements";
 export { NavGroup } from "./NavGroup";
 export { UserMenu } from "./UserMenu";
+export { InactiveAlert } from "./InactiveAlert";
+export { VariantGridItem } from "./VariantGridItem";
+export { BatchStatusBadge } from "./BatchStatusBadge";
+export { OrderItemRow } from "./OrderItemRow";

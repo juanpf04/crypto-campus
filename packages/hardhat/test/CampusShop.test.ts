@@ -374,6 +374,190 @@ describe("CampusShop", async function () {
         });
     });
 
+    describe("purchaseBatch", function () {
+        it("Should purchase a single item as batch", async function () {
+            const { campusShop, shopToken, student1 } = await deploySystem();
+            await campusShop.write.addProduct([50n, 20n]);
+
+            await campusShop.write.purchaseBatch([[1n]], { account: student1.account });
+
+            // Balance reduced by 50
+            assert.equal(await shopToken.read.balanceOf([student1.account.address]), 150n);
+            // NFT minted
+            assert.equal(await campusShop.read.balanceOf([student1.account.address, 1n]), 1n);
+            // Batch created
+            const [buyer, orderIds, totalPaid] = await campusShop.read.getBatch([1n]);
+            assert.equal(getAddress(buyer), getAddress(student1.account.address));
+            assert.equal(orderIds.length, 1);
+            assert.equal(totalPaid, 50n);
+            // orderToBatch mapping
+            assert.equal(await campusShop.read.orderToBatch([orderIds[0]]), 1n);
+        });
+
+        it("Should purchase multiple different products as batch", async function () {
+            const { campusShop, shopToken, student1 } = await deploySystem();
+            await campusShop.write.addProduct([30n, 10n]); // product 1
+            await campusShop.write.addProduct([20n, 5n]);  // product 2
+            await campusShop.write.addProduct([10n, 50n]); // product 3
+
+            // Buy 1 of product1 + 1 of product2 + 1 of product3 = 60 total
+            await campusShop.write.purchaseBatch([[1n, 2n, 3n]], { account: student1.account });
+
+            assert.equal(await shopToken.read.balanceOf([student1.account.address]), 140n); // 200 - 60
+            assert.equal(await campusShop.read.balanceOf([student1.account.address, 1n]), 1n);
+            assert.equal(await campusShop.read.balanceOf([student1.account.address, 2n]), 1n);
+            assert.equal(await campusShop.read.balanceOf([student1.account.address, 3n]), 1n);
+
+            const [, orderIds, totalPaid] = await campusShop.read.getBatch([1n]);
+            assert.equal(orderIds.length, 3);
+            assert.equal(totalPaid, 60n);
+
+            // Stock decremented
+            const [, stock1] = await campusShop.read.getProduct([1n]);
+            const [, stock2] = await campusShop.read.getProduct([2n]);
+            const [, stock3] = await campusShop.read.getProduct([3n]);
+            assert.equal(stock1, 9n);
+            assert.equal(stock2, 4n);
+            assert.equal(stock3, 49n);
+        });
+
+        it("Should purchase duplicate products (2 units of same product)", async function () {
+            const { campusShop, shopToken, student1 } = await deploySystem();
+            await campusShop.write.addProduct([25n, 10n]);
+
+            // Buy 2 units of product 1
+            await campusShop.write.purchaseBatch([[1n, 1n]], { account: student1.account });
+
+            assert.equal(await shopToken.read.balanceOf([student1.account.address]), 150n); // 200 - 50
+            assert.equal(await campusShop.read.balanceOf([student1.account.address, 1n]), 2n); // 2 NFTs
+
+            const [, orderIds, totalPaid] = await campusShop.read.getBatch([1n]);
+            assert.equal(orderIds.length, 2);
+            assert.equal(totalPaid, 50n);
+
+            // Stock decremented by 2
+            const [, stock] = await campusShop.read.getProduct([1n]);
+            assert.equal(stock, 8n);
+
+            // Each order maps to the same batch
+            assert.equal(await campusShop.read.orderToBatch([orderIds[0]]), 1n);
+            assert.equal(await campusShop.read.orderToBatch([orderIds[1]]), 1n);
+        });
+
+        it("Should revert entire batch if any product has no stock", async function () {
+            const { campusShop, shopToken, student1 } = await deploySystem();
+            await campusShop.write.addProduct([10n, 5n]);  // product 1: 5 stock
+            await campusShop.write.addProduct([10n, 0n]);  // product 2: 0 stock
+
+            const balanceBefore = await shopToken.read.balanceOf([student1.account.address]);
+
+            await assert.rejects(async () => {
+                await campusShop.write.purchaseBatch([[1n, 2n]], { account: student1.account });
+            });
+
+            // No tokens deducted (atomic revert)
+            assert.equal(await shopToken.read.balanceOf([student1.account.address]), balanceBefore);
+            // No stock changed
+            const [, stock1] = await campusShop.read.getProduct([1n]);
+            assert.equal(stock1, 5n);
+        });
+
+        it("Should revert entire batch if any product is inactive", async function () {
+            const { campusShop, student1 } = await deploySystem();
+            await campusShop.write.addProduct([10n, 5n]);
+            await campusShop.write.addProduct([10n, 5n]);
+            await campusShop.write.deactivateProduct([2n]);
+
+            await assert.rejects(async () => {
+                await campusShop.write.purchaseBatch([[1n, 2n]], { account: student1.account });
+            });
+        });
+
+        it("Should revert batch if insufficient balance for total", async function () {
+            const { campusShop, student1 } = await deploySystem();
+            // student1 has 200 tokens
+            await campusShop.write.addProduct([150n, 10n]);
+            await campusShop.write.addProduct([100n, 10n]);
+
+            // Total = 250, balance = 200 → revert
+            await assert.rejects(async () => {
+                await campusShop.write.purchaseBatch([[1n, 2n]], { account: student1.account });
+            });
+        });
+
+        it("Should revert on empty batch", async function () {
+            const { campusShop, student1 } = await deploySystem();
+
+            await assert.rejects(async () => {
+                await campusShop.write.purchaseBatch([[]], { account: student1.account });
+            });
+        });
+
+        it("Should allow returning individual item from a batch", async function () {
+            const { campusShop, shopToken, student1 } = await deploySystem();
+            await campusShop.write.addProduct([30n, 10n]);
+            await campusShop.write.addProduct([20n, 10n]);
+
+            // Buy batch of product1 + product2
+            await campusShop.write.purchaseBatch([[1n, 2n]], { account: student1.account });
+            assert.equal(await shopToken.read.balanceOf([student1.account.address]), 150n); // 200 - 50
+
+            const [, orderIds] = await campusShop.read.getBatch([1n]);
+
+            // Mark both delivered, then return only the second one
+            await campusShop.write.markDelivered([orderIds[0]]);
+            await campusShop.write.markDelivered([orderIds[1]]);
+
+            await campusShop.write.requestReturn([orderIds[1]], { account: student1.account });
+
+            // Refunded 20 for the second item only
+            assert.equal(await shopToken.read.balanceOf([student1.account.address]), 170n); // 150 + 20
+
+            // First order still delivered, second returned
+            const order1 = await campusShop.read.getOrder([orderIds[0]]);
+            const order2 = await campusShop.read.getOrder([orderIds[1]]);
+            assert.equal(order1.status, 2); // Delivered
+            assert.equal(order2.status, 3); // Returned
+        });
+
+        it("Should track batches per student correctly", async function () {
+            const { campusShop, student1, student2 } = await deploySystem();
+            await campusShop.write.addProduct([10n, 50n]);
+
+            // Student1 makes 2 batches
+            await campusShop.write.purchaseBatch([[1n]], { account: student1.account });
+            await campusShop.write.purchaseBatch([[1n, 1n]], { account: student1.account });
+
+            // Student2 makes 1 batch
+            await campusShop.write.purchaseBatch([[1n]], { account: student2.account });
+
+            const s1Batches = await campusShop.read.getStudentBatches([student1.account.address]);
+            const s2Batches = await campusShop.read.getStudentBatches([student2.account.address]);
+
+            assert.equal(s1Batches.length, 2);
+            assert.equal(s2Batches.length, 1);
+        });
+
+        it("Should revert purchaseBatch when paused", async function () {
+            const { campusShop, student1 } = await deploySystem();
+            await campusShop.write.addProduct([10n, 10n]);
+            await campusShop.write.pause();
+
+            await assert.rejects(async () => {
+                await campusShop.write.purchaseBatch([[1n]], { account: student1.account });
+            });
+        });
+
+        it("Should revert purchaseBatch for non-student", async function () {
+            const { campusShop, outsider } = await deploySystem();
+            await campusShop.write.addProduct([10n, 10n]);
+
+            await assert.rejects(async () => {
+                await campusShop.write.purchaseBatch([[1n]], { account: outsider.account });
+            });
+        });
+    });
+
     describe("Pausable", function () {
         it("Should allow admin to pause", async function () {
             const { campusShop } = await deploySystem();

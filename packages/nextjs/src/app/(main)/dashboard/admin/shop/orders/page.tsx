@@ -3,9 +3,12 @@
 /**
  * Gestión de pedidos de la tienda (admin).
  *
- * Tabla paginada con filtros por usuario y estado.
- * Acciones: marcar entregado, procesar devolución.
- * Mismo patrón que admin/printing/logs.
+ * Dos pestañas: "Pedidos" (batches) + "Artículos" (orders sueltos).
+ * Filtro por usuario en ambas. Paginación.
+ * Acciones: marcar entregado (individual/batch), procesar devolución.
+ *
+ * Compone: BackLink, Card, Select, Spinner, Tabs, Pagination, Badge (atómicos) +
+ *          BatchStatusBadge, LinkArrow (intermedios) + Table (atómico).
  */
 
 import { useEffect, useState, useCallback } from "react";
@@ -19,14 +22,18 @@ import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
+import { Tabs } from "@/components/ui/Tabs";
 import { LinkArrow } from "@/components/shared/LinkArrow";
+import { BatchStatusBadge } from "@/components/shared/BatchStatusBadge";
 import { ORDER_STATUS_MAP } from "@/lib/shop-constants";
 import { formatShortDate } from "@/lib/formatters";
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "@/components/ui/Table";
 
-interface Order {
+// ── Tipos ──
+
+interface OrderItem {
   id: string;
   orderId: number;
   pricePaid: number;
@@ -34,7 +41,29 @@ interface Order {
   txHash: string;
   purchaseDate: string;
   product: { name: string };
-  user: { id: string; name: string; email: string };
+  user: { name: string; email: string };
+}
+
+interface BatchItem {
+  id: string;
+  status: string;
+  product: { name: string };
+}
+
+interface Batch {
+  id: string;
+  batchId: number;
+  totalPaid: number;
+  txHash: string;
+  purchaseDate: string;
+  generalStatus: string;
+  user: { name: string; email: string };
+  items: BatchItem[];
+}
+
+interface UserOption {
+  value: string;
+  label: string;
 }
 
 const PAGE_SIZE = 20;
@@ -50,179 +79,343 @@ export default function AdminOrdersPage() {
   const router = useRouter();
   const { addToast } = useToast();
 
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [total, setTotal] = useState(0);
-  const [offset, setOffset] = useState(0);
-  const [filterStatus, setFilterStatus] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [tab, setTab] = useState("batches");
+  const [userFilter, setUserFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [users, setUsers] = useState<UserOption[]>([]);
 
-  const fetchOrders = useCallback(async () => {
-    setRefreshing(true);
+  // Batches
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [batchTotal, setBatchTotal] = useState(0);
+  const [batchOffset, setBatchOffset] = useState(0);
+  const [batchLoading, setBatchLoading] = useState(true);
+  const [batchRefreshing, setBatchRefreshing] = useState(false);
+
+  // Orders
+  const [orders, setOrders] = useState<OrderItem[]>([]);
+  const [orderTotal, setOrderTotal] = useState(0);
+  const [orderOffset, setOrderOffset] = useState(0);
+  const [orderLoading, setOrderLoading] = useState(true);
+  const [orderRefreshing, setOrderRefreshing] = useState(false);
+
+  // Cargar lista de usuarios para el filtro
+  useEffect(() => {
+    fetch("/api/admin/users")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setUsers(data.map((u: { id: string; name: string; email: string }) => ({
+            value: u.id,
+            label: `${u.name} (${u.email})`,
+          })));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Cargar batches
+  const fetchBatches = useCallback(async () => {
+    setBatchRefreshing(true);
     try {
       const params = new URLSearchParams({
         limit: String(PAGE_SIZE),
-        offset: String(offset),
+        offset: String(batchOffset),
       });
-      if (filterStatus) params.set("status", filterStatus);
+      if (userFilter) params.set("userId", userFilter);
+
+      const res = await fetch(`/api/shop/batches/admin?${params}`);
+      const data = await res.json();
+      setBatches(data.batches ?? []);
+      setBatchTotal(data.total ?? 0);
+    } catch {
+      addToast("Error al cargar pedidos", "danger");
+    } finally {
+      setBatchLoading(false);
+      setBatchRefreshing(false);
+    }
+  }, [batchOffset, userFilter]);
+
+  // Cargar orders
+  const fetchOrders = useCallback(async () => {
+    setOrderRefreshing(true);
+    try {
+      const params = new URLSearchParams({
+        limit: String(PAGE_SIZE),
+        offset: String(orderOffset),
+      });
+      if (userFilter) params.set("userId", userFilter);
+      if (statusFilter) params.set("status", statusFilter);
 
       const res = await fetch(`/api/shop/orders/admin?${params}`);
       const data = await res.json();
       setOrders(data.orders ?? []);
-      setTotal(data.total ?? 0);
+      setOrderTotal(data.total ?? 0);
     } catch {
-      addToast("Error al cargar pedidos", "danger");
+      addToast("Error al cargar artículos", "danger");
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      setOrderLoading(false);
+      setOrderRefreshing(false);
     }
-  }, [offset, filterStatus]);
+  }, [orderOffset, userFilter, statusFilter]);
 
-  useEffect(() => {
-    fetchOrders();
-  }, [fetchOrders]);
+  useEffect(() => { fetchBatches(); }, [fetchBatches]);
+  useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
-  async function handleDeliver(orderId: string) {
+  // Acciones
+  async function handleDeliverBatch(batchPrismaId: string) {
+    try {
+      const res = await fetch(`/api/shop/batches/${batchPrismaId}`, { method: "PUT" });
+      if (!res.ok) {
+        const body = await res.json();
+        throw new Error(body.error ?? "Error");
+      }
+      addToast("Pedido marcado como entregado", "success");
+      fetchBatches();
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : "Error", "danger");
+    }
+  }
+
+  async function handleDeliverItem(orderId: string) {
     try {
       const res = await fetch(`/api/shop/orders/${orderId}/deliver`, { method: "PUT" });
       if (!res.ok) {
         const body = await res.json();
         throw new Error(body.error ?? "Error");
       }
-      addToast("Pedido marcado como entregado", "success");
+      addToast("Artículo marcado como entregado", "success");
       fetchOrders();
     } catch (err) {
       addToast(err instanceof Error ? err.message : "Error", "danger");
     }
   }
 
-  async function handleReturn(orderId: string) {
+  async function handleReturnItem(orderId: string) {
     try {
       const res = await fetch(`/api/shop/orders/${orderId}/return`, { method: "PUT" });
       if (!res.ok) {
         const body = await res.json();
         throw new Error(body.error ?? "Error");
       }
-      addToast("Devolución procesada correctamente", "success");
+      addToast("Devolución procesada", "success");
       fetchOrders();
     } catch (err) {
       addToast(err instanceof Error ? err.message : "Error", "danger");
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
+  const isLoading = tab === "batches" ? batchLoading : orderLoading;
+  const isRefreshing = tab === "batches" ? batchRefreshing : orderRefreshing;
 
   return (
     <div className="space-y-6">
       <BackLink href="/dashboard/admin/shop" label="Volver a tienda" />
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-text">Pedidos</h1>
-          <p className="text-text-muted mt-1">
-            Gestión de todos los pedidos del sistema.
-          </p>
+          <p className="text-text-muted mt-1">Gestión de todos los pedidos del sistema.</p>
         </div>
-        <div className="w-48">
-          <Select
-            value={filterStatus}
-            onChange={(e) => {
-              setFilterStatus(e.currentTarget.value);
-              setOffset(0);
-            }}
-            options={STATUS_OPTIONS}
-          />
+
+        {/* Filtros */}
+        <div className="flex gap-3">
+          <div className="w-56">
+            <Select
+              value={userFilter}
+              onChange={(e) => {
+                setUserFilter(e.currentTarget.value);
+                setBatchOffset(0);
+                setOrderOffset(0);
+              }}
+              options={[{ value: "", label: "Todos los usuarios" }, ...users]}
+            />
+          </div>
+          {tab === "items" && (
+            <div className="w-44">
+              <Select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.currentTarget.value);
+                  setOrderOffset(0);
+                }}
+                options={STATUS_OPTIONS}
+              />
+            </div>
+          )}
         </div>
       </div>
 
-      {orders.length === 0 ? (
-        <EmptyState
-          title="Sin pedidos"
-          description="No hay pedidos que coincidan con los filtros."
-        />
-      ) : (
-        <>
-          <Card className="overflow-hidden p-0">
-            <div className={refreshing ? "opacity-50 transition-opacity" : ""}>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Fecha</TableHead>
-                    <TableHead>Usuario</TableHead>
-                    <TableHead>Producto</TableHead>
-                    <TableHead>Precio</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead>Tx Hash</TableHead>
-                    <TableHead>Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {orders.map((order) => {
-                    const status = ORDER_STATUS_MAP[order.status] ?? ORDER_STATUS_MAP.PAID;
-                    return (
-                      <TableRow key={order.id}>
-                        <TableCell className="text-text-muted text-sm whitespace-nowrap">
-                          {formatShortDate(order.purchaseDate)}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          <span className="font-medium">{order.user.name}</span>
-                          <br />
-                          <span className="text-text-muted">{order.user.email}</span>
-                        </TableCell>
-                        <TableCell className="font-medium max-w-[150px] truncate">
-                          {order.product.name}
-                        </TableCell>
-                        <TableCell>
-                          <span className="font-semibold text-primary">{order.pricePaid} ShopTokens</span>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={status.variant}>{status.label}</Badge>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs text-text-muted">
-                          {order.txHash.slice(0, 6)}…{order.txHash.slice(-4)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            {order.status === "PAID" && (
-                              <Button size="sm" onClick={() => handleDeliver(order.id)}>
-                                Entregar
-                              </Button>
-                            )}
-                            {(order.status === "PAID" || order.status === "DELIVERED") && (
-                              <Button
-                                variant="danger"
-                                size="sm"
-                                onClick={() => handleReturn(order.id)}
-                              >
-                                Devolver
-                              </Button>
-                            )}
-                            {order.status === "RETURNED" && (
-                              <span className="text-xs text-text-muted">Completado</span>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          </Card>
+      <Tabs
+        tabs={[
+          { value: "batches", label: "Pedidos", count: batchTotal },
+          { value: "items", label: "Artículos", count: orderTotal },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
 
-          <Pagination
-            offset={offset}
-            limit={PAGE_SIZE}
-            total={total}
-            onChange={setOffset}
-          />
-        </>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-10">
+          <Spinner size="lg" />
+        </div>
+      ) : tab === "batches" ? (
+        /* ── Pestaña Pedidos (batches) ── */
+        batches.length === 0 ? (
+          <EmptyState title="Sin pedidos" description="No hay pedidos que coincidan con los filtros." />
+        ) : (
+          <>
+            <Card className="overflow-hidden p-0">
+              <div className={isRefreshing ? "opacity-50 transition-opacity" : ""}>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Usuario</TableHead>
+                      <TableHead>Artículos</TableHead>
+                      <TableHead>Total</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead>Acciones</TableHead>
+                      <TableHead className="w-10"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {batches.map((batch) => {
+                      const itemNames = batch.items.map((i) => i.product.name);
+                      const summary = itemNames.length <= 2
+                        ? itemNames.join(", ")
+                        : `${itemNames[0]} y ${itemNames.length - 1} más`;
+                      const hasPaid = batch.items.some((i) => i.status === "PAID");
+
+                      return (
+                        <TableRow
+                          key={batch.id}
+                          className="cursor-pointer hover:bg-primary/5 transition-colors"
+                          onClick={() => router.push(`/dashboard/admin/shop/orders/batch/${batch.id}`)}
+                        >
+                          <TableCell className="text-text-muted text-sm whitespace-nowrap">
+                            {formatShortDate(batch.purchaseDate)}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            <span className="font-medium">{batch.user.name}</span>
+                            <br />
+                            <span className="text-text-muted text-xs">{batch.user.email}</span>
+                          </TableCell>
+                          <TableCell>
+                            <p className="font-medium text-text truncate max-w-[200px]">{summary}</p>
+                            <p className="text-xs text-text-muted">{batch.items.length} artículo{batch.items.length !== 1 ? "s" : ""}</p>
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-semibold text-primary">{batch.totalPaid} ShopTokens</span>
+                          </TableCell>
+                          <TableCell>
+                            <BatchStatusBadge status={batch.generalStatus} />
+                          </TableCell>
+                          <TableCell>
+                            <div onClick={(e) => e.stopPropagation()}>
+                              {hasPaid && (
+                                <Button size="sm" onClick={() => handleDeliverBatch(batch.id)}>
+                                  Entregar todo
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <LinkArrow variant="static" size="sm" className="relative right-auto top-auto" />
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </Card>
+
+            <Pagination
+              offset={batchOffset}
+              limit={PAGE_SIZE}
+              total={batchTotal}
+              onChange={setBatchOffset}
+            />
+          </>
+        )
+      ) : (
+        /* ── Pestaña Artículos (orders sueltos) ── */
+        orders.length === 0 ? (
+          <EmptyState title="Sin artículos" description="No hay artículos que coincidan con los filtros." />
+        ) : (
+          <>
+            <Card className="overflow-hidden p-0">
+              <div className={isRefreshing ? "opacity-50 transition-opacity" : ""}>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Usuario</TableHead>
+                      <TableHead>Producto</TableHead>
+                      <TableHead>Precio</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead>Tx Hash</TableHead>
+                      <TableHead>Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orders.map((order) => {
+                      const status = ORDER_STATUS_MAP[order.status] ?? ORDER_STATUS_MAP.PAID;
+                      return (
+                        <TableRow key={order.id}>
+                          <TableCell className="text-text-muted text-sm whitespace-nowrap">
+                            {formatShortDate(order.purchaseDate)}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            <span className="font-medium">{order.user.name}</span>
+                            <br />
+                            <span className="text-text-muted text-xs">{order.user.email}</span>
+                          </TableCell>
+                          <TableCell className="font-medium max-w-[150px] truncate">
+                            {order.product.name}
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-semibold text-primary">{order.pricePaid} ShopTokens</span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={status.variant}>{status.label}</Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs text-text-muted">
+                            {order.txHash.slice(0, 6)}…{order.txHash.slice(-4)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              {order.status === "PAID" && (
+                                <Button size="sm" onClick={() => handleDeliverItem(order.id)}>
+                                  Entregar
+                                </Button>
+                              )}
+                              {(order.status === "PAID" || order.status === "DELIVERED") && (
+                                <Button variant="danger" size="sm" onClick={() => handleReturnItem(order.id)}>
+                                  Devolver
+                                </Button>
+                              )}
+                              {order.status === "RETURNED" && (
+                                <span className="text-xs text-text-muted">Completado</span>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </Card>
+
+            <Pagination
+              offset={orderOffset}
+              limit={PAGE_SIZE}
+              total={orderTotal}
+              onChange={setOrderOffset}
+            />
+          </>
+        )
       )}
     </div>
   );
