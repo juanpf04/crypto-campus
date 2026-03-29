@@ -26,7 +26,7 @@ import { Tabs } from "@/components/ui/Tabs";
 import { LinkArrow } from "@/components/shared/LinkArrow";
 import { BatchStatusBadge } from "@/components/shared/BatchStatusBadge";
 import { ORDER_STATUS_MAP } from "@/lib/shop-constants";
-import { formatShortDate } from "@/lib/formatters";
+import { formatShortDate, formatItemSummary } from "@/lib/formatters";
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "@/components/ui/Table";
@@ -103,8 +103,9 @@ export default function AdminOrdersPage() {
     fetch("/api/admin/users")
       .then((r) => r.json())
       .then((data) => {
-        if (Array.isArray(data)) {
-          setUsers(data.map((u: { id: string; name: string; email: string }) => ({
+        const list = Array.isArray(data) ? data : data.users;
+        if (Array.isArray(list)) {
+          setUsers(list.map((u: { id: string; name: string; email: string }) => ({
             value: u.id,
             label: `${u.name} (${u.email})`,
           })));
@@ -211,13 +212,26 @@ export default function AdminOrdersPage() {
     <div className="space-y-6">
       <BackLink href="/dashboard/admin/shop" label="Volver a tienda" />
 
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-text">Pedidos</h1>
-          <p className="text-text-muted mt-1">Gestión de todos los pedidos del sistema.</p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold text-text">Pedidos</h1>
+        <p className="text-text-muted mt-1">Gestión de todos los pedidos del sistema.</p>
+      </div>
 
-        {/* Filtros */}
+      {/* Tabs + filtros en la misma fila */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <Tabs
+          tabs={[
+            { value: "batches", label: "Tickets", count: batchTotal },
+            { value: "items", label: "Artículos", count: orderTotal },
+          ]}
+          value={tab}
+          onChange={(newTab) => {
+            setTab(newTab);
+            // Resetear filtro de estado al volver a tickets
+            if (newTab === "batches") setStatusFilter("");
+          }}
+        />
+
         <div className="flex gap-3">
           <div className="w-56">
             <Select
@@ -245,15 +259,6 @@ export default function AdminOrdersPage() {
         </div>
       </div>
 
-      <Tabs
-        tabs={[
-          { value: "batches", label: "Pedidos", count: batchTotal },
-          { value: "items", label: "Artículos", count: orderTotal },
-        ]}
-        value={tab}
-        onChange={setTab}
-      />
-
       {isLoading ? (
         <div className="flex items-center justify-center py-10">
           <Spinner size="lg" />
@@ -280,10 +285,7 @@ export default function AdminOrdersPage() {
                   </TableHeader>
                   <TableBody>
                     {batches.map((batch) => {
-                      const itemNames = batch.items.map((i) => i.product.name);
-                      const summary = itemNames.length <= 2
-                        ? itemNames.join(", ")
-                        : `${itemNames[0]} y ${itemNames.length - 1} más`;
+                      const summary = formatItemSummary(batch.items);
                       const hasPaid = batch.items.some((i) => i.status === "PAID");
 
                       return (
@@ -356,13 +358,18 @@ export default function AdminOrdersPage() {
                       <TableHead>Estado</TableHead>
                       <TableHead>Tx Hash</TableHead>
                       <TableHead>Acciones</TableHead>
+                      <TableHead className="w-10"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {orders.map((order) => {
                       const status = ORDER_STATUS_MAP[order.status] ?? ORDER_STATUS_MAP.PAID;
                       return (
-                        <TableRow key={order.id}>
+                        <TableRow
+                          key={order.id}
+                          className="cursor-pointer hover:bg-primary/5"
+                          onClick={() => router.push(`/dashboard/admin/shop/orders/${order.id}`)}
+                        >
                           <TableCell className="text-text-muted text-sm whitespace-nowrap">
                             {formatShortDate(order.purchaseDate)}
                           </TableCell>
@@ -384,7 +391,7 @@ export default function AdminOrdersPage() {
                             {order.txHash.slice(0, 6)}…{order.txHash.slice(-4)}
                           </TableCell>
                           <TableCell>
-                            <div className="flex gap-2">
+                            <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                               {order.status === "PAID" && (
                                 <Button size="sm" onClick={() => handleDeliverItem(order.id)}>
                                   Entregar
@@ -396,9 +403,12 @@ export default function AdminOrdersPage() {
                                 </Button>
                               )}
                               {order.status === "RETURNED" && (
-                                <span className="text-xs text-text-muted">Completado</span>
+                                <span className="text-xs text-text-muted">Devuelto</span>
                               )}
                             </div>
+                          </TableCell>
+                          <TableCell>
+                            <LinkArrow variant="static" size="sm" className="relative right-auto top-auto" />
                           </TableCell>
                         </TableRow>
                       );

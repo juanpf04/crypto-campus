@@ -52,7 +52,8 @@ export default function StudentShopPage() {
   const { openCart, itemCount, setItemCount } = useCart();
 
   const [balance, setBalance] = useState<number | null>(null);
-  const [totalOrders, setTotalOrders] = useState(0);
+  const [totalBatches, setTotalBatches] = useState(0);
+  const [totalItems, setTotalItems] = useState(0);
   const [categories, setCategories] = useState<string[]>([]);
   const [products, setProducts] = useState<ProductGroup[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -64,14 +65,16 @@ export default function StudentShopPage() {
       fetch("/api/shop/balance").then((r) => r.json()),
       fetch("/api/shop/categories").then((r) => r.json()),
       fetch("/api/shop/products").then((r) => r.json()),
+      fetch("/api/shop/batches?limit=1&offset=0").then((r) => r.json()),
       fetch("/api/shop/orders?limit=1&offset=0").then((r) => r.json()),
       fetch("/api/shop/cart").then((r) => r.json()),
     ])
-      .then(([balanceData, categoriesData, productsData, ordersData, cartData]) => {
+      .then(([balanceData, categoriesData, productsData, batchesData, ordersData, cartData]) => {
         setBalance(balanceData.balance ?? 0);
         setCategories(Array.isArray(categoriesData) ? categoriesData : []);
         setProducts(Array.isArray(productsData) ? productsData : []);
-        setTotalOrders(ordersData.total ?? 0);
+        setTotalBatches(batchesData.total ?? 0);
+        setTotalItems(ordersData.total ?? 0);
         setItemCount(Array.isArray(cartData.items) ? cartData.items.length : 0);
       })
       .catch(() => addToast("Error al cargar la tienda", "danger"))
@@ -111,7 +114,7 @@ export default function StudentShopPage() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm text-text-muted">Mis pedidos</p>
-              <p className="text-3xl font-bold text-text">{totalOrders}</p>
+              <p className="text-xl font-bold text-text">{totalBatches} ticket{totalBatches !== 1 ? "s" : ""} · {totalItems} artículo{totalItems !== 1 ? "s" : ""}</p>
               <p className="text-xs text-text-muted mt-0.5">Ver historial de compras</p>
             </div>
             <LinkArrow />

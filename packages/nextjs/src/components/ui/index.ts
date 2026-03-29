@@ -27,4 +27,5 @@ export { ProgressSteps, type ProgressStep } from "./ProgressSteps";
 export { ColorDot, colorToHex } from "./ColorDot";
 export { QuantitySelector } from "./QuantitySelector";
 export { Drawer } from "./Drawer";
+export { FloatingActionBar } from "./FloatingActionBar";
 export { icons } from "./icons";

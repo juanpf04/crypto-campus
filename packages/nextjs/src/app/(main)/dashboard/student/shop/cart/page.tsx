@@ -147,13 +147,16 @@ export default function StudentCartPage() {
         return;
       }
 
+      // Actualizar carrito flotante a 0
+      setItemCount(0);
+
       addToast(
         `Compra realizada. ${body.ordersCreated} producto${body.ordersCreated > 1 ? "s" : ""} pagado${body.ordersCreated > 1 ? "s" : ""}. Nuevo saldo: ${body.newBalance} ShopTokens`,
         "success",
       );
 
       setTimeout(() => {
-        router.push("/dashboard/student/shop/orders");
+        router.push(`/dashboard/student/shop/orders/batch/${body.batchId}`);
       }, 1500);
     } catch {
       addToast("Error al procesar el pago", "danger");

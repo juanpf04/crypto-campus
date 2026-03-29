@@ -26,7 +26,7 @@ import {
 import { LinkArrow } from "@/components/shared/LinkArrow";
 import { BatchStatusBadge } from "@/components/shared/BatchStatusBadge";
 import { ORDER_STATUS_MAP } from "@/lib/shop-constants";
-import { formatShortDate } from "@/lib/formatters";
+import { formatShortDate, formatItemSummary } from "@/lib/formatters";
 
 // ── Tipos ──
 
@@ -127,11 +127,11 @@ export default function StudentOrdersPage() {
 
       <Tabs
         tabs={[
-          { value: "batches", label: "Pedidos", count: batchTotal },
+          { value: "batches", label: "Tickets", count: batchTotal },
           { value: "items", label: "Artículos", count: orderTotal },
         ]}
         value={tab}
-        onChange={setTab}
+        onChange={(newTab) => setTab(newTab)}
       />
 
       {isLoading ? (
@@ -157,10 +157,7 @@ export default function StudentOrdersPage() {
                 </TableHeader>
                 <TableBody>
                   {batches.map((batch) => {
-                    const itemNames = batch.items.map((i) => i.product.name);
-                    const summary = itemNames.length <= 2
-                      ? itemNames.join(", ")
-                      : `${itemNames[0]} y ${itemNames.length - 1} más`;
+                    const summary = formatItemSummary(batch.items);
 
                     return (
                       <TableRow

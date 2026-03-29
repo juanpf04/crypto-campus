@@ -496,6 +496,9 @@ export async function getProduct(productPrismaId: string) {
 	try {
 		const product = await prisma.product.findUnique({
 			where: { id: productPrismaId },
+			include: {
+				base: { select: { slug: true, name: true, category: true } },
+			},
 		});
 		if (!product) throw new Error("Producto no encontrado");
 		return product;
@@ -1373,42 +1376,63 @@ export async function topupWithSimulatedCard(input: SimulatedCardInput) {
  *
  * Acceso: estudiantes y profesores.
  */
-export async function purchaseProduct(productPrismaId: string) {
+/**
+ * Compra rápida: compra un producto directamente sin pasar por el carrito.
+ * Usa purchaseBatch internamente para crear siempre un ticket (batch).
+ * Después marca todos los artículos como entregados automáticamente (simulación).
+ * Acceso: estudiantes y profesores.
+ */
+export async function quickPurchase(productPrismaId: string, quantity = 1) {
 	const session = await getSession();
 	ensureRole(session, ["STUDENT", "PROFESSOR"]);
 
 	try {
+		const safeQuantity = Math.max(1, Math.min(quantity, 50));
+
 		// Obtener producto de Prisma
 		const product = await prisma.product.findUnique({
 			where: { id: productPrismaId },
 		});
 		if (!product) throw new Error("Producto no encontrado");
 		if (!product.active) throw new Error("Producto no disponible");
-		if (product.stock <= 0) throw new Error("Producto sin stock");
+		if (product.stock < safeQuantity) throw new Error(`Stock insuficiente. Disponibles: ${product.stock}`);
 
-		// Crear walletClient del usuario para firmar la tx
+		const totalPrice = product.price * safeQuantity;
+
+		// Wallet del usuario
 		const { walletClient, address } = await getUserWalletClient(session.userId!);
-
-		// Verificar balance antes de intentar la compra
 		const balance = await readShopBalance(address);
-		if (Number(balance) < product.price) {
-			throw new Error(`Saldo insuficiente. Tienes ${Number(balance)} ShopTokens y el producto cuesta ${product.price} ShopTokens`);
+
+		if (Number(balance) < totalPrice) {
+			throw new Error(`Saldo insuficiente. Tienes ${Number(balance)} ShopTokens y necesitas ${totalPrice} ShopTokens`);
 		}
 
-		// Leer el nextOrderId ANTES de la compra para saber qué orderId se asignará
-		const nextOrderId = await publicClient.readContract({
-			address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
-			abi: CAMPUS_SHOP_ABI,
-			functionName: "nextOrderId",
-		}) as bigint;
-		const orderId = Number(nextOrderId);
+		// Construir array de productIds (repetido por quantity)
+		const productIdsOnChain: bigint[] = Array(safeQuantity).fill(BigInt(product.productId));
 
-		// Ejecutar compra on-chain (firmada por el estudiante)
+		// Leer IDs antes de la compra
+		const [nextOrderIdRaw, nextBatchIdRaw] = await Promise.all([
+			publicClient.readContract({
+				address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
+				abi: CAMPUS_SHOP_ABI,
+				functionName: "nextOrderId",
+			}) as Promise<bigint>,
+			publicClient.readContract({
+				address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
+				abi: CAMPUS_SHOP_ABI,
+				functionName: "nextBatchId",
+			}) as Promise<bigint>,
+		]);
+
+		const firstOrderId = Number(nextOrderIdRaw);
+		const batchId = Number(nextBatchIdRaw);
+
+		// 1 sola transacción on-chain: purchaseBatch
 		const hash = await walletClient.writeContract({
 			address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
 			abi: CAMPUS_SHOP_ABI,
-			functionName: "purchase",
-			args: [BigInt(product.productId)],
+			functionName: "purchaseBatch",
+			args: [productIdsOnChain],
 		});
 		const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
@@ -1416,35 +1440,73 @@ export async function purchaseProduct(productPrismaId: string) {
 			throw new Error("La transacción de compra fue revertida");
 		}
 
-		// Actualizar stock en Prisma
-		await prisma.product.update({
-			where: { id: productPrismaId },
-			data: { stock: { decrement: 1 } },
-		});
-
-		// Guardar orden en Prisma
-		const order = await prisma.order.create({
+		// Crear OrderBatch en Prisma
+		const orderBatch = await prisma.orderBatch.create({
 			data: {
-				orderId,
+				batchId,
 				userId: session.userId!,
-				productId: productPrismaId,
-				pricePaid: product.price,
-				status: "PAID",
+				totalPaid: totalPrice,
 				txHash: hash,
 			},
 		});
 
+		// Crear Orders individuales
+		const orderIds: number[] = [];
+		for (let i = 0; i < safeQuantity; i++) {
+			const orderId = firstOrderId + i;
+			orderIds.push(orderId);
+
+			await prisma.order.create({
+				data: {
+					orderId,
+					userId: session.userId!,
+					productId: productPrismaId,
+					batchId: orderBatch.id,
+					pricePaid: product.price,
+					status: "PAID",
+					txHash: hash,
+				},
+			});
+		}
+
+		// Actualizar stock en Prisma
+		await prisma.product.update({
+			where: { id: productPrismaId },
+			data: { stock: { decrement: safeQuantity } },
+		});
+
+		// Auto-deliver: marcar todos como entregados on-chain
+		for (const orderId of orderIds) {
+			const deliverHash = await adminWalletClient.writeContract({
+				address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
+				abi: CAMPUS_SHOP_ABI,
+				functionName: "markDelivered",
+				args: [BigInt(orderId)],
+			});
+			await publicClient.waitForTransactionReceipt({ hash: deliverHash });
+		}
+
+		// Actualizar en Prisma a DELIVERED
+		await prisma.order.updateMany({
+			where: { batchId: orderBatch.id },
+			data: { status: "DELIVERED", deliveryDate: new Date() },
+		});
+
+		const newBalance = await readShopBalance(address);
+
 		return {
-			...order,
-			productName: product.name,
-			balance: Number(balance) - product.price,
+			success: true,
+			batchId: orderBatch.id,
+			ordersCreated: safeQuantity,
+			totalPaid: totalPrice,
+			newBalance: Number(newBalance),
 		};
 	} catch (error) {
 		if (error instanceof Error && (
 			error.message === "No autorizado" ||
 			error.message === "Producto no encontrado" ||
 			error.message === "Producto no disponible" ||
-			error.message === "Producto sin stock" ||
+			error.message.startsWith("Stock insuficiente") ||
 			error.message.startsWith("Saldo insuficiente")
 		)) throw error;
 		throw new Error(`Error al realizar la compra: ${error instanceof Error ? error.message : "desconocido"}`);
@@ -1738,7 +1800,24 @@ export async function checkoutCart() {
 			});
 		}
 
-		// 8. Limpiar el carrito
+		// 8. Auto-deliver: marcar todos como entregados on-chain (simulación)
+		for (const order of createdOrders) {
+			const deliverHash = await adminWalletClient.writeContract({
+				address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
+				abi: CAMPUS_SHOP_ABI,
+				functionName: "markDelivered",
+				args: [BigInt(order.orderId)],
+			});
+			await publicClient.waitForTransactionReceipt({ hash: deliverHash });
+		}
+
+		// Actualizar en Prisma a DELIVERED
+		await prisma.order.updateMany({
+			where: { batchId: orderBatch.id },
+			data: { status: "DELIVERED", deliveryDate: new Date() },
+		});
+
+		// 9. Limpiar el carrito
 		await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
 
 		const newBalance = await readShopBalance(address);
@@ -1746,11 +1825,9 @@ export async function checkoutCart() {
 		return {
 			success: true,
 			batchId: orderBatch.id,
-			batchIdOnChain: batchId,
 			ordersCreated: createdOrders.length,
 			totalPaid: totalPrice,
 			newBalance: Number(newBalance),
-			txHash: hash,
 		};
 	} catch (error) {
 		if (error instanceof Error && (

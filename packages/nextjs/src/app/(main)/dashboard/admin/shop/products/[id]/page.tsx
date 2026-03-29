@@ -75,35 +75,52 @@ export default function AdminProductDetailPage() {
     setLoading(true);
 
     try {
-      // Intentar como groupKey
-      let res = await fetch(`/api/shop/products/groups/${id}`);
+      // 1. Intentar como groupKey directo
+      const groupRes = await fetch(`/api/shop/products/groups/${id}`);
 
-      if (res.ok) {
-        const data = await res.json();
-        setGroup(data);
-        if (!selectedVariantId || !data.variants.some((v: ProductVariant) => v.id === selectedVariantId)) {
-          setSelectedVariantId(data.variants[0]?.id ?? "");
+      if (groupRes.ok) {
+        const data = await groupRes.json();
+        if (data.variants) {
+          setGroup(data);
+          if (!selectedVariantId || !data.variants.some((v: ProductVariant) => v.id === selectedVariantId)) {
+            setSelectedVariantId(data.variants[0]?.id ?? "");
+          }
+          return;
         }
-        return;
       }
 
-      // Si no es groupKey, buscar en todos los grupos admin cual contiene esta variante
-      res = await fetch("/api/shop/products/admin");
-      if (!res.ok) throw new Error("Error al cargar productos");
+      // 2. Puede ser un variant Prisma ID — buscar el producto para obtener su base
+      const productRes = await fetch(`/api/shop/products/${id}`);
+      if (productRes.ok) {
+        const product = await productRes.json();
+        // Si tiene base con slug, cargar el grupo por slug
+        if (product.base?.slug) {
+          const groupBySlug = await fetch(`/api/shop/products/groups/${product.base.slug}`);
+          if (groupBySlug.ok) {
+            const data = await groupBySlug.json();
+            setGroup(data);
+            setSelectedVariantId(id);
+            return;
+          }
+        }
+      }
 
-      const groups = await res.json();
-      if (!Array.isArray(groups)) throw new Error("Formato inesperado");
+      // 3. Fallback: buscar en todos los grupos
+      const allRes = await fetch("/api/shop/products/admin");
+      if (!allRes.ok) throw new Error("Error al cargar productos");
+
+      const groups = await allRes.json();
+      const list = Array.isArray(groups) ? groups : [];
 
       interface VariantLike { id: string }
       interface GroupLike { groupKey: string; variants: VariantLike[] }
-      const matched = groups.find((g: GroupLike) => g.variants.some((v: VariantLike) => v.id === id));
+      const matched = list.find((g: GroupLike) => g.variants?.some((v: VariantLike) => v.id === id));
       if (!matched) throw new Error("Producto no encontrado");
 
-      // Cargar el grupo completo
-      res = await fetch(`/api/shop/products/groups/${matched.groupKey}`);
-      if (!res.ok) throw new Error("Error al cargar grupo");
+      const finalRes = await fetch(`/api/shop/products/groups/${matched.groupKey}`);
+      if (!finalRes.ok) throw new Error("Error al cargar grupo");
 
-      const data = await res.json();
+      const data = await finalRes.json();
       setGroup(data);
       setSelectedVariantId(id);
     } catch (err) {

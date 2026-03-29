@@ -3,31 +3,32 @@
 /**
  * Detalle de un pedido agrupado (batch) para el estudiante.
  *
- * Muestra:
- * - Header: fecha, txHash, total, estado general
- * - Lista de artículos con estado individual y botón "Devolver" por artículo
- * - Resumen: X de Y artículos entregados, Z devueltos
+ * Filas limpias tipo recibo con checkboxes para seleccionar devoluciones en lote.
+ * Barra flotante abajo cuando hay selección. Modal de confirmación.
+ * Filtro por estado. Sin datos blockchain.
+ * Click en fila → detalle del artículo pedido.
  *
- * Compone: BackLink, Card, Badge (atómicos) +
- *          BatchStatusBadge, OrderItemRow, DetailField (intermedios)
+ * Compone: BackLink, Card, Spinner, Tabs (atómicos) +
+ *          BatchHeader, GroupedOrderItem, ReturnSelectionBar, ConfirmModal (intermedios)
  */
 
-import { useEffect, useState, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
-import { BatchStatusBadge } from "@/components/shared/BatchStatusBadge";
-import { OrderItemRow } from "@/components/shared/OrderItemRow";
-import { DetailField } from "@/components/shared/DetailField";
-import { SectionTitle } from "@/components/shared/SectionTitle";
-import { icons } from "@/components/ui/icons";
-import { formatShortDate } from "@/lib/formatters";
+import { Tabs } from "@/components/ui/Tabs";
+import { BatchHeader } from "@/components/shared/BatchHeader";
+import { GroupedOrderItem, groupOrderItems, type GroupedItem } from "@/components/shared/GroupedOrderItem";
+import { ReturnSelectionBar } from "@/components/shared/ReturnSelectionBar";
+import { ConfirmModal } from "@/components/shared/ConfirmModal";
+import { formatShortDate, calculateOrderStats } from "@/lib/formatters";
 
 interface BatchOrderItem {
   id: string;
   orderId: number;
+  productId: string;
   pricePaid: number;
   status: "PAID" | "DELIVERED" | "RETURNED";
   purchaseDate: string;
@@ -46,26 +47,37 @@ interface BatchDetail {
   id: string;
   batchId: number;
   totalPaid: number;
-  txHash: string;
   purchaseDate: string;
   generalStatus: string;
   items: BatchOrderItem[];
 }
 
+// Estado de selección por grupo
+interface SelectionState {
+  selected: boolean;
+  count: number;
+}
+
 export default function StudentBatchDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const { addToast } = useToast();
 
   const [batch, setBatch] = useState<BatchDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [returning, setReturning] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [returning, setReturning] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // Selección: map de groupKey → { selected, count }
+  const [selection, setSelection] = useState<Map<string, SelectionState>>(new Map());
 
   const loadBatch = useCallback(async () => {
     try {
       const res = await fetch(`/api/shop/batches/${id}`);
       if (!res.ok) throw new Error("Error al cargar pedido");
-      const data = await res.json();
-      setBatch(data);
+      setBatch(await res.json());
+      setSelection(new Map()); // Reset selección al recargar
     } catch {
       addToast("Error al cargar el pedido", "danger");
     } finally {
@@ -75,23 +87,93 @@ export default function StudentBatchDetailPage() {
 
   useEffect(() => { loadBatch(); }, [loadBatch]);
 
-  // Devolver un artículo individual
-  async function handleReturn(orderPrismaId: string) {
-    setReturning(orderPrismaId);
-    try {
-      const res = await fetch(`/api/shop/orders/${orderPrismaId}/return`, {
-        method: "PUT",
-      });
-      if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.error ?? "Error al devolver");
+  const groupedItems = useMemo(() => {
+    if (!batch) return [];
+    return groupOrderItems(batch.items);
+  }, [batch]);
+
+  // Ordenar: entregados/pendientes arriba, devueltos abajo
+  const sortedItems = useMemo(() => {
+    const statusOrder: Record<string, number> = { PAID: 0, DELIVERED: 1, RETURNED: 2 };
+    return [...groupedItems].sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9));
+  }, [groupedItems]);
+
+  const filteredItems = useMemo(() => {
+    if (statusFilter === "all") return sortedItems;
+    return sortedItems.filter((g) => g.status === statusFilter);
+  }, [sortedItems, statusFilter]);
+
+  // Helpers de selección
+  function getGroupKey(item: GroupedItem) {
+    return `${item.name}|${item.color}|${item.status}`;
+  }
+
+  function toggleSelect(item: GroupedItem, selected: boolean) {
+    const key = getGroupKey(item);
+    setSelection((prev) => {
+      const next = new Map(prev);
+      if (selected) {
+        next.set(key, { selected: true, count: item.returnableCount });
+      } else {
+        next.delete(key);
       }
-      addToast("Artículo devuelto correctamente", "success");
+      return next;
+    });
+  }
+
+  function updateCount(item: GroupedItem, count: number) {
+    const key = getGroupKey(item);
+    setSelection((prev) => {
+      const next = new Map(prev);
+      next.set(key, { selected: true, count });
+      return next;
+    });
+  }
+
+  // Calcular resumen de selección
+  const selectedSummary = useMemo(() => {
+    let totalCount = 0;
+    let totalRefund = 0;
+    const orderIdsToReturn: string[] = [];
+
+    for (const item of groupedItems) {
+      const key = getGroupKey(item);
+      const sel = selection.get(key);
+      if (!sel?.selected) continue;
+
+      const count = Math.min(sel.count, item.returnableCount);
+      totalCount += count;
+      totalRefund += count * item.pricePaid;
+      orderIdsToReturn.push(...item.orderIds.slice(0, count));
+    }
+
+    return { totalCount, totalRefund, orderIdsToReturn };
+  }, [groupedItems, selection]);
+
+  // Procesar devolución
+  async function handleConfirmReturn() {
+    setReturning(true);
+    setConfirmOpen(false);
+
+    try {
+      for (const orderId of selectedSummary.orderIdsToReturn) {
+        const res = await fetch(`/api/shop/orders/${orderId}/return`, { method: "PUT" });
+        if (!res.ok) {
+          const body = await res.json();
+          throw new Error(body.error ?? "Error al devolver");
+        }
+      }
+      addToast(
+        selectedSummary.totalCount === 1
+          ? "Artículo devuelto correctamente"
+          : `${selectedSummary.totalCount} artículos devueltos correctamente`,
+        "success",
+      );
       await loadBatch();
     } catch (err) {
       addToast(err instanceof Error ? err.message : "Error", "danger");
     } finally {
-      setReturning(null);
+      setReturning(false);
     }
   }
 
@@ -112,87 +194,126 @@ export default function StudentBatchDetailPage() {
     );
   }
 
-  const deliveredCount = batch.items.filter((i) => i.status === "DELIVERED").length;
-  const returnedCount = batch.items.filter((i) => i.status === "RETURNED").length;
-  const paidCount = batch.items.filter((i) => i.status === "PAID").length;
+  const { deliveredCount, returnedCount } = calculateOrderStats(batch.items);
+  const hasMultipleStatuses = deliveredCount > 0 && returnedCount > 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20">
       <BackLink href="/dashboard/student/shop/orders" label="Volver a pedidos" />
 
-      {/* Header del pedido */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-2xl font-bold text-text">Pedido #{batch.batchId}</h1>
-            <BatchStatusBadge status={batch.generalStatus} />
-          </div>
-          <p className="text-sm text-text-muted">
-            {formatShortDate(batch.purchaseDate)} &middot; {batch.items.length} artículo{batch.items.length !== 1 ? "s" : ""}
-          </p>
+      <BatchHeader
+        batchId={batch.batchId}
+        generalStatus={batch.generalStatus}
+        purchaseDate={batch.purchaseDate}
+        itemCount={batch.items.length}
+        totalPaid={batch.totalPaid}
+      />
+
+      {/* Resumen si hay devueltos */}
+      {returnedCount > 0 && (
+        <div className="grid grid-cols-2 gap-3">
+          <Card className="text-center py-4">
+            <p className="text-2xl font-bold text-success">{deliveredCount}</p>
+            <p className="text-xs text-text-muted mt-1">Entregados</p>
+          </Card>
+          <Card className="text-center py-4">
+            <p className="text-2xl font-bold text-danger">{returnedCount}</p>
+            <p className="text-xs text-text-muted mt-1">Devueltos</p>
+          </Card>
         </div>
-        <div className="text-right">
-          <p className="text-2xl font-bold text-primary">{batch.totalPaid} ShopTokens</p>
+      )}
+
+      {/* Filtro */}
+      {hasMultipleStatuses && (
+        <Tabs
+          tabs={[
+            { value: "all", label: "Todos", count: groupedItems.length },
+            { value: "DELIVERED", label: "Entregados", count: groupedItems.filter((g) => g.status === "DELIVERED").length },
+            { value: "RETURNED", label: "Devueltos", count: groupedItems.filter((g) => g.status === "RETURNED").length },
+          ]}
+          value={statusFilter}
+          onChange={setStatusFilter}
+        />
+      )}
+
+      {/* Artículos — filas limpias tipo recibo */}
+      <Card className="overflow-hidden p-0">
+        <div className="flex items-center justify-between px-5 py-3 bg-primary/5 border-b border-border-default">
+          <span className="text-sm font-semibold text-text">Artículos</span>
+          <span className="text-sm text-text-muted">{batch.items.length} producto{batch.items.length !== 1 ? "s" : ""}</span>
         </div>
-      </div>
 
-      {/* Resumen de estado */}
-      <div className="grid grid-cols-3 gap-3">
-        <Card className="text-center py-4">
-          <p className="text-2xl font-bold text-warning">{paidCount}</p>
-          <p className="text-xs text-text-muted mt-1">Pendientes</p>
-        </Card>
-        <Card className="text-center py-4">
-          <p className="text-2xl font-bold text-success">{deliveredCount}</p>
-          <p className="text-xs text-text-muted mt-1">Entregados</p>
-        </Card>
-        <Card className="text-center py-4">
-          <p className="text-2xl font-bold text-danger">{returnedCount}</p>
-          <p className="text-xs text-text-muted mt-1">Devueltos</p>
-        </Card>
-      </div>
-
-      {/* Lista de artículos */}
-      <section className="space-y-4">
-        <SectionTitle icon={icons.items}>Artículos del pedido</SectionTitle>
-
-        <Card className="overflow-hidden p-0 divide-y divide-border-default">
-          {batch.items.map((item) => {
-            // Solo se puede devolver si está entregado
-            const canReturn = item.status === "DELIVERED";
-            // Verificar si está dentro del periodo de devolución (30 días)
-            const withinWindow = item.deliveryDate
-              ? (Date.now() - new Date(item.deliveryDate).getTime()) < 30 * 24 * 60 * 60 * 1000
-              : false;
+        <div className="divide-y divide-border-default">
+          {filteredItems.map((item, idx) => {
+            const key = getGroupKey(item);
+            const sel = selection.get(key);
 
             return (
-              <OrderItemRow
-                key={item.id}
-                name={item.product.name}
-                imageUrl={item.product.imageUrl}
-                category={item.product.category}
-                color={item.product.color}
-                variantLabel={item.product.variantLabel}
-                pricePaid={item.pricePaid}
-                status={item.status}
-                actionLabel={canReturn && withinWindow ? "Devolver" : undefined}
-                actionVariant="danger"
-                onAction={canReturn && withinWindow ? () => handleReturn(item.id) : undefined}
-                actionLoading={returning === item.id}
+              <GroupedOrderItem
+                key={`${key}-${idx}`}
+                item={item}
+                showCheckbox={item.returnableCount > 0}
+                selected={sel?.selected ?? false}
+                selectedCount={sel?.count ?? item.returnableCount}
+                onSelectChange={(checked) => toggleSelect(item, checked)}
+                onCountChange={(count) => updateCount(item, count)}
+                onNavigate={() => {
+                  // Navegar al detalle del primer artículo del grupo
+                  router.push(`/dashboard/student/shop/orders/${item.orderIds[0]}`);
+                }}
               />
             );
           })}
-        </Card>
-      </section>
+        </div>
 
-      {/* Detalles técnicos */}
-      <Card className="space-y-3">
-        <DetailField label="Hash de transacción" value={
-          <span className="font-mono text-xs break-all">{batch.txHash}</span>
-        } />
-        <DetailField label="Fecha de compra" value={formatShortDate(batch.purchaseDate)} />
-        <DetailField label="ID on-chain" value={`Batch #${batch.batchId}`} />
+        <div className="flex items-center justify-between px-5 py-4 bg-primary/5 border-t border-border-default">
+          <span className="text-sm font-semibold text-text">Total</span>
+          <span className="text-lg font-bold text-primary">{batch.totalPaid} ShopTokens</span>
+        </div>
       </Card>
+
+      {/* Info del recibo */}
+      <Card className="space-y-2 text-sm">
+        <div className="flex justify-between">
+          <span className="text-text-muted">Fecha de compra</span>
+          <span className="text-text">{formatShortDate(batch.purchaseDate)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-text-muted">Nº de recibo</span>
+          <span className="text-text">#{batch.batchId}</span>
+        </div>
+        {returnedCount > 0 && (
+          <div className="flex justify-between">
+            <span className="text-text-muted">Reembolsado</span>
+            <span className="text-danger font-semibold">
+              {batch.items.filter((i) => i.status === "RETURNED").reduce((sum, i) => sum + i.pricePaid, 0)} ShopTokens
+            </span>
+          </div>
+        )}
+        <p className="text-xs text-text-muted pt-2 border-t border-border-default mt-2">
+          Tienes 30 días desde la entrega para devolver un artículo.
+        </p>
+      </Card>
+
+      {/* Barra flotante de devolución */}
+      <ReturnSelectionBar
+        selectedCount={selectedSummary.totalCount}
+        totalRefund={selectedSummary.totalRefund}
+        onReturn={() => setConfirmOpen(true)}
+        loading={returning}
+      />
+
+      {/* Modal de confirmación */}
+      <ConfirmModal
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={handleConfirmReturn}
+        loading={returning}
+        title="Confirmar devolución"
+        description={`¿Seguro que quieres devolver ${selectedSummary.totalCount} artículo${selectedSummary.totalCount !== 1 ? "s" : ""}? Se te reembolsarán ${selectedSummary.totalRefund} ShopTokens.`}
+        confirmLabel="Confirmar devolución"
+        variant="danger"
+      />
     </div>
   );
 }

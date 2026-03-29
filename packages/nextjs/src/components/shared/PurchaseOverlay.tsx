@@ -3,11 +3,11 @@
 /**
  * PurchaseOverlay — Overlay animado que simula el proceso de compra.
  *
- * Patrón idéntico a PrintingOverlay:
- * - Muestra una animación multi-paso mientras el backend procesa la compra
- * - Tiene una duración mínima (~5s) para dar sensación de proceso
- * - Cuando terminan AMBOS (animación y backend), llama a onComplete
- * - El padre usa router.replace() para que "atrás" no vuelva aquí
+ * Muestra una animación multi-paso mientras el backend procesa:
+ * compra + entrega automática simulada.
+ * Tiene duración mínima (~6s) para dar sensación de proceso real.
+ * Cuando terminan AMBOS (animación y backend), llama a onComplete.
+ * El padre usa router.replace() para que "atrás" no vuelva aquí.
  */
 
 import { useEffect, useState, useRef } from "react";
@@ -17,20 +17,20 @@ import { icons } from "@/components/ui/icons";
 interface PurchaseOverlayProps {
   /** Nombre del producto que se está comprando */
   productName: string;
-  /** Promise del fetch al backend (se resuelve con el orderId o null) */
+  /** Promise del fetch al backend (se resuelve con el batchId o null) */
   purchasePromise: Promise<string | null>;
   /** Callback cuando todo termina (animación + backend) */
-  onComplete: (orderId: string | null) => void;
+  onComplete: (batchId: string | null) => void;
 }
 
 const STEPS = [
   { label: "Verificando saldo..." },
-  { label: "Procesando compra..." },
-  { label: "Registrando en blockchain..." },
-  { label: "¡Compra completada!" },
+  { label: "Procesando pago..." },
+  { label: "Preparando pedido..." },
+  { label: "¡Pedido completado!" },
 ];
 
-const STEP_DURATION = 1500; // ms por paso
+const STEP_DURATION = 1500;
 
 export function PurchaseOverlay({ productName, purchasePromise, onComplete }: PurchaseOverlayProps) {
   const [currentStep, setCurrentStep] = useState(0);
@@ -61,18 +61,18 @@ export function PurchaseOverlay({ productName, purchasePromise, onComplete }: Pu
 
   // Esperar al backend
   useEffect(() => {
-    purchasePromise.then((orderId) => {
-      backendResult.current = orderId;
+    purchasePromise.then((batchId) => {
+      backendResult.current = batchId;
       backendDone.current = true;
       if (animationDone.current) {
-        setTimeout(() => onComplete(orderId), 800);
+        setTimeout(() => onComplete(batchId), 800);
       }
     });
   }, [purchasePromise, onComplete]);
 
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center space-y-8 py-20">
-      {/* Icono de tienda animado */}
+      {/* Icono animado */}
       <div className="grid h-20 w-20 place-items-center rounded-2xl bg-primary/10 text-primary animate-pulse">
         <div className="h-10 w-10">
           {icons.shop}

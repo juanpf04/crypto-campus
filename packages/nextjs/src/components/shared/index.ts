@@ -9,4 +9,7 @@ export { UserMenu } from "./UserMenu";
 export { InactiveAlert } from "./InactiveAlert";
 export { VariantGridItem } from "./VariantGridItem";
 export { BatchStatusBadge } from "./BatchStatusBadge";
+export { BatchHeader } from "./BatchHeader";
 export { OrderItemRow } from "./OrderItemRow";
+export { GroupedOrderItem, groupOrderItems } from "./GroupedOrderItem";
+export { ReturnSelectionBar } from "./ReturnSelectionBar";

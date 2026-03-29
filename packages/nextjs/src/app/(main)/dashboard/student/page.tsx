@@ -30,7 +30,8 @@ export default function StudentDashboard() {
 
   // Datos reales de la tienda
   const [shopBalance, setShopBalance] = useState<number | string>("—");
-  const [orderCount, setOrderCount] = useState<number | string>("—");
+  const [ticketCount, setTicketCount] = useState<number | string>("—");
+  const [itemCount, setItemCount] = useState<number | string>("—");
 
   useEffect(() => {
     if (!user) return;
@@ -53,10 +54,15 @@ export default function StudentDashboard() {
       .then((data) => setShopBalance(data.balance ?? "—"))
       .catch(() => {});
 
-    // Total de pedidos
+    // Total de tickets y artículos
+    fetch("/api/shop/batches?limit=1&offset=0")
+      .then((r) => r.json())
+      .then((data) => setTicketCount(data.total ?? "—"))
+      .catch(() => {});
+
     fetch("/api/shop/orders?limit=1&offset=0")
       .then((r) => r.json())
-      .then((data) => setOrderCount(data.total ?? "—"))
+      .then((data) => setItemCount(data.total ?? "—"))
       .catch(() => {});
   }, [user]);
 
@@ -167,9 +173,9 @@ export default function StudentDashboard() {
           </Link>
           <Link href="/dashboard/student/shop/orders" className="group relative block">
             <StatCard
-              title="Pedidos realizados"
-              value={orderCount}
-              subtitle="Total acumulado"
+              title="Mis pedidos"
+              value={`${ticketCount} tickets · ${itemCount} artículos`}
+              subtitle="Ver historial de compras"
               icon={icons.orders}
               className="h-full transition-colors group-hover:border-primary/50"
             />

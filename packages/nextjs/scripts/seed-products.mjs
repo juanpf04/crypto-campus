@@ -98,63 +98,131 @@ async function main() {
 
     log(`Sincronizando ${productsJson.length} producto(s) de catálogo...`);
 
-    // 1. Limpiar productos y órdenes anteriores de Prisma.
+    // 1. Limpiar productos, bases, órdenes y batches anteriores de Prisma.
     //    Hasta que se implemente Anvil state persistence, la blockchain se reinicia
-    //    en cada pnpm dev, así que los productos viejos en Prisma son huérfanos.
-    const deleted = await prisma.order.deleteMany({});
+    //    en cada pnpm dev, así que los datos viejos en Prisma son huérfanos.
+    await prisma.order.deleteMany({});
+    await prisma.orderBatch.deleteMany({});
     const deletedProducts = await prisma.product.deleteMany({});
+    await prisma.productBase.deleteMany({});
     if (deletedProducts.count > 0) {
-      log(yellow(`  ⚠ Limpiados ${deletedProducts.count} producto(s) y ${deleted.count} orden(es) huérfanos de Prisma`));
+      log(yellow(`  ⚠ Limpiados ${deletedProducts.count} producto(s) huérfanos de Prisma`));
     }
 
-    // 2. Crear cada producto on-chain + Prisma desde cero
+    // Helper: derivar slug del grupo desde la imageUrl
+    // /products/boligrafo/clip-engomado/azul/main.webp → "boligrafo-clip-engomado"
+    function deriveGroupSlug(imageUrl) {
+      if (!imageUrl) return null;
+      const parts = imageUrl.split("/").filter(Boolean);
+      // parts: ["products", "boligrafo", "clip-engomado", "azul", "main.webp"]
+      if (parts.length < 4) return null;
+      return parts.slice(1, -2).join("-"); // "boligrafo-clip-engomado"
+    }
+
+    // Helper: derivar color desde la imageUrl
+    function deriveColor(imageUrl) {
+      if (!imageUrl) return "default";
+      const parts = imageUrl.split("/").filter(Boolean);
+      if (parts.length < 3) return "default";
+      return parts[parts.length - 2]; // "azul"
+    }
+
+    // Helper: derivar nombre base quitando el color del final
+    function deriveBaseName(name, color) {
+      const displayColor = color.split("-").map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+      for (const candidate of [displayColor, displayColor.toLowerCase(), displayColor.toUpperCase()]) {
+        if (name.endsWith(` ${candidate}`)) {
+          return name.slice(0, -(candidate.length + 1)).trim();
+        }
+      }
+      return name;
+    }
+
+    // 2. Agrupar productos del JSON por grupo (baseSlug)
+    const groupMap = new Map(); // slug → { name, description, category, products[] }
+
+    for (const product of productsJson) {
+      const slug = deriveGroupSlug(product.imageUrl) || product.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+      const color = deriveColor(product.imageUrl);
+      const baseName = deriveBaseName(product.name, color);
+
+      if (!groupMap.has(slug)) {
+        groupMap.set(slug, {
+          slug,
+          name: baseName,
+          description: product.description || null,
+          category: product.category || null,
+          products: [],
+        });
+      }
+      groupMap.get(slug).products.push({ ...product, color });
+    }
+
+    // 3. Crear ProductBase + productos on-chain + Prisma
     let created = 0;
     let skippedCreate = 0;
 
-    for (const product of productsJson) {
-      let productId;
-      try {
-        const nextProductId = await publicClient.readContract({
-          address: CAMPUS_SHOP_ADDRESS,
-          abi: CAMPUS_SHOP_ABI,
-          functionName: "nextProductId",
-        });
-        productId = Number(nextProductId);
-
-        const hash = await adminWalletClient.writeContract({
-          address: CAMPUS_SHOP_ADDRESS,
-          abi: CAMPUS_SHOP_ABI,
-          functionName: "addProduct",
-          args: [BigInt(product.price), BigInt(product.stock)],
-        });
-        const receipt = await publicClient.waitForTransactionReceipt({ hash });
-
-        if (receipt.status !== "success") {
-          skippedCreate += 1;
-          log(yellow(`  ⚠ No creado on-chain (tx revertida): ${product.name}`));
-          continue;
-        }
-      } catch {
-        skippedCreate += 1;
-        log(yellow(`  ⚠ No creado on-chain (nodo no disponible): ${product.name}`));
-        continue;
-      }
-
-      await prisma.product.create({
+    for (const [slug, group] of groupMap) {
+      // Crear ProductBase
+      const base = await prisma.productBase.create({
         data: {
-          productId,
-          name: product.name,
-          description: product.description || null,
-          price: product.price,
-          stock: product.stock,
-          category: product.category || null,
-          imageUrl: product.imageUrl || null,
-          active: true,
+          slug,
+          name: group.name,
+          description: group.description,
+          category: group.category,
         },
       });
 
-      created += 1;
-      log(green(`  + Creado #${productId} ${product.name}`));
+      let sortOrder = 0;
+      for (const product of group.products) {
+        let productId;
+        try {
+          const nextProductId = await publicClient.readContract({
+            address: CAMPUS_SHOP_ADDRESS,
+            abi: CAMPUS_SHOP_ABI,
+            functionName: "nextProductId",
+          });
+          productId = Number(nextProductId);
+
+          const hash = await adminWalletClient.writeContract({
+            address: CAMPUS_SHOP_ADDRESS,
+            abi: CAMPUS_SHOP_ABI,
+            functionName: "addProduct",
+            args: [BigInt(product.price), BigInt(product.stock)],
+          });
+          const receipt = await publicClient.waitForTransactionReceipt({ hash });
+
+          if (receipt.status !== "success") {
+            skippedCreate += 1;
+            log(yellow(`  ⚠ No creado on-chain (tx revertida): ${product.name}`));
+            continue;
+          }
+        } catch {
+          skippedCreate += 1;
+          log(yellow(`  ⚠ No creado on-chain (nodo no disponible): ${product.name}`));
+          continue;
+        }
+
+        await prisma.product.create({
+          data: {
+            productId,
+            baseId: base.id,
+            name: product.name,
+            description: product.description || null,
+            price: product.price,
+            stock: product.stock,
+            category: product.category || null,
+            imageUrl: product.imageUrl || null,
+            color: product.color || null,
+            sortOrder,
+            active: true,
+          },
+        });
+
+        created += 1;
+        sortOrder += 1;
+        log(green(`  + Creado #${productId} ${product.name}`));
+      }
     }
 
     log(green(`Sync completado. Creados: ${created}, no creados on-chain: ${skippedCreate}`));

@@ -130,7 +130,7 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
       return;
     }
     notifyChange(body);
-    addToast("Producto eliminado", "success");
+    addToast("Producto eliminado del carrito", "success");
   }
 
   // Vaciar carrito

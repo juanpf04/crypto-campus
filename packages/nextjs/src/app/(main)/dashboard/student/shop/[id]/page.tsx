@@ -172,38 +172,32 @@ export default function StudentProductDetailPage() {
     setConfirmLoading(true);
     setConfirmOpen(false);
 
-    // Crear las promesas de compra (1 por unidad, ya que el contrato compra de 1 en 1)
+    // Una sola llamada con quantity — crea batch + auto-deliver
     const purchasePromise = (async () => {
-      let lastOrderId: string | null = null;
+      const res = await fetch("/api/shop/purchase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: selectedVariant.id, quantity }),
+      });
 
-      for (let i = 0; i < quantity; i++) {
-        const res = await fetch("/api/shop/purchase", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ productId: selectedVariant.id }),
-        });
-
-        const body = await res.json();
-        if (!res.ok) {
-          addToast(body.error ?? "Error al realizar la compra", "danger");
-          return null;
-        }
-        lastOrderId = body.id ?? null;
+      const body = await res.json();
+      if (!res.ok) {
+        addToast(body.error ?? "Error al realizar la compra", "danger");
+        return null;
       }
-
-      return lastOrderId;
+      return body.batchId as string;
     })();
 
     setPurchaseState({ active: true, promise: purchasePromise });
     setConfirmLoading(false);
   }
 
-  // Cuando termina el overlay
-  const handlePurchaseComplete = useCallback((orderId: string | null) => {
+  // Cuando termina el overlay → redirigir al detalle del ticket
+  const handlePurchaseComplete = useCallback((batchId: string | null) => {
     setPurchaseState({ active: false, promise: null });
-    if (orderId) {
+    if (batchId) {
       addToast("Compra realizada correctamente", "success");
-      router.replace(`/dashboard/student/shop/orders/${orderId}`);
+      router.replace(`/dashboard/student/shop/orders/batch/${batchId}`);
     }
   }, [router, addToast]);
 
