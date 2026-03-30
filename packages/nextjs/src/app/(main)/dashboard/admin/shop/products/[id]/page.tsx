@@ -25,11 +25,13 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Spinner } from "@/components/ui/Spinner";
+import { AddCard } from "@/components/ui/AddCard";
 import { ProductImage } from "@/components/shared/ProductImage";
 import { ColorSwatchRow } from "@/components/shared/ColorSwatchRow";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { InactiveAlert } from "@/components/shared/InactiveAlert";
 import { VariantGridItem } from "@/components/shared/VariantGridItem";
+import { colorToHex } from "@/components/ui/ColorDot";
 import { icons } from "@/components/ui/icons";
 
 interface ProductVariant {
@@ -227,15 +229,15 @@ export default function AdminProductDetailPage() {
       {!group.active && (
         <InactiveAlert
           resourceName={group.name}
-          actionLabel="Reactivar todo"
+          actionLabel="Reactivar grupo"
           onAction={handleToggleGroup}
           loading={toggling === "group"}
         />
       )}
 
-      {/* ── Layout principal: imagen + info ── */}
+      {/* ── Layout principal: imagen + info + variante seleccionada ── */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-        {/* Imagen + variantes */}
+        {/* Columna izquierda: Imagen + color swatches */}
         <Card className="flex flex-col items-center justify-center p-8">
           <div className="w-full max-w-sm">
             <ProductImage
@@ -262,8 +264,8 @@ export default function AdminProductDetailPage() {
           )}
         </Card>
 
-        {/* Info del grupo */}
-        <div className="space-y-6">
+        {/* Columna derecha: Info grupo + botones grupo + variante seleccionada */}
+        <div className="space-y-5">
           {/* Badges + título */}
           <div>
             <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -283,26 +285,13 @@ export default function AdminProductDetailPage() {
             )}
           </div>
 
-          {/* Precio grande */}
-          <div className="text-3xl font-bold text-primary">{priceLabel}</div>
-
-          {/* Stats del grupo en grid */}
-          <div className="grid grid-cols-3 gap-3">
-            <Card className="text-center py-4">
-              <p className="text-2xl font-bold text-text">{group.totalStock}</p>
-              <p className="text-xs text-text-muted mt-1">Stock total</p>
-            </Card>
-            <Card className="text-center py-4">
-              <p className="text-2xl font-bold text-text">{group.variants.length}</p>
-              <p className="text-xs text-text-muted mt-1">Variantes</p>
-            </Card>
-            <Card className="text-center py-4">
-              <p className="text-2xl font-bold text-text">{group.category ?? "—"}</p>
-              <p className="text-xs text-text-muted mt-1">Categoría</p>
-            </Card>
+          {/* Precio + stock en línea */}
+          <div className="flex items-baseline gap-3">
+            <span className="text-3xl font-bold text-primary">{priceLabel}</span>
+            <span className="text-sm text-text-muted">· {group.totalStock} uds. en stock</span>
           </div>
 
-          {/* Acciones del grupo */}
+          {/* Botones del grupo */}
           <div className="flex gap-3">
             <Button
               variant="outline"
@@ -317,113 +306,124 @@ export default function AdminProductDetailPage() {
               onClick={handleToggleGroup}
               loading={toggling === "group"}
             >
-              {group.active ? "Desactivar todo" : "Reactivar todo"}
+              {group.active ? "Desactivar grupo" : "Reactivar grupo"}
             </Button>
           </div>
+
+          {/* Variante seleccionada — debajo de los botones del grupo */}
+          <Card className={`${selectedVariant.active ? "bg-primary/5 border-primary/20" : "bg-danger/5 border-danger/20"}`}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-bold text-text">{selectedVariant.name}</h3>
+                <Badge variant={selectedVariant.active ? "success" : "danger"}>
+                  {selectedVariant.active ? "Activa" : "Inactiva"}
+                </Badge>
+              </div>
+              <Badge variant="neutral">#{selectedVariant.productId}</Badge>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 mb-4">
+              <div>
+                <p className="text-xs text-text-muted">Color</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span
+                    className="inline-block h-4 w-4 rounded-full border border-border-default"
+                    style={{ backgroundColor: colorToHex(selectedVariant.color || "default") }}
+                  />
+                  <span className="text-sm font-medium text-text">{selectedVariant.color || "—"}</span>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-text-muted">Precio</p>
+                <p className="text-sm font-semibold text-primary mt-1">{selectedVariant.price} ShopTokens</p>
+              </div>
+              <div>
+                <p className="text-xs text-text-muted">Stock</p>
+                <p className="text-sm font-semibold text-text mt-1">{selectedVariant.stock} uds.</p>
+              </div>
+              {selectedVariant.variantLabel && (
+                <div>
+                  <p className="text-xs text-text-muted">Etiqueta</p>
+                  <p className="text-sm font-medium text-text mt-1">{selectedVariant.variantLabel}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => router.push(`/dashboard/admin/shop/products/variants/${selectedVariant.id}/edit?from=detail&group=${group.groupKey}`)}
+              >
+                Editar variante
+              </Button>
+              <Button
+                variant={selectedVariant.active ? "danger" : "primary"}
+                size="sm"
+                className="flex-1"
+                onClick={() => handleToggleVariant(selectedVariant.id, selectedVariant.active)}
+                loading={toggling === selectedVariant.id}
+              >
+                {selectedVariant.active ? "Desactivar variante" : "Reactivar variante"}
+              </Button>
+            </div>
+          </Card>
         </div>
       </div>
 
-      {/* ── Variante seleccionada — detalle + acciones individuales ── */}
+      {/* ── Grid de todas las variantes + card de añadir ── */}
       <section className="space-y-4">
-        <SectionTitle icon={icons.items}>Variante seleccionada</SectionTitle>
+        <SectionTitle icon={icons.shop}>Todas las variantes ({group.variants.length})</SectionTitle>
 
-        <Card className={`${selectedVariant.active ? "bg-primary/5 border-primary/20" : "bg-danger/5 border-danger/20"}`}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <h3 className="text-lg font-bold text-text">{selectedVariant.name}</h3>
-              <Badge variant={selectedVariant.active ? "success" : "danger"}>
-                {selectedVariant.active ? "Activa" : "Inactiva"}
-              </Badge>
-            </div>
-            <Badge variant="neutral">#{selectedVariant.productId}</Badge>
-          </div>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          {group.variants.map((v) => (
+            <VariantGridItem
+              key={v.id}
+              id={v.id}
+              name={v.name}
+              color={v.color}
+              price={v.price}
+              stock={v.stock}
+              imageUrl={v.imageUrl}
+              category={group.category}
+              active={v.active}
+              selected={v.id === selectedVariantId}
+              toggling={toggling === v.id}
+              onSelect={() => setSelectedVariantId(v.id)}
+              onEdit={() => router.push(`/dashboard/admin/shop/products/variants/${v.id}/edit?from=detail&group=${group.groupKey}`)}
+              onToggleActive={() => handleToggleVariant(v.id, v.active)}
+            />
+          ))}
 
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mb-4">
-            <div>
-              <p className="text-xs text-text-muted">Color</p>
-              <div className="flex items-center gap-2 mt-1">
-                <span
-                  className="inline-block h-4 w-4 rounded-full border border-border-default"
-                  style={{ backgroundColor: selectedVariant.color || "#ccc" }}
-                />
-                <span className="text-sm font-medium text-text">{selectedVariant.color || "—"}</span>
-              </div>
-            </div>
-            <div>
-              <p className="text-xs text-text-muted">Precio</p>
-              <p className="text-sm font-semibold text-primary mt-1">{selectedVariant.price} ShopTokens</p>
-            </div>
-            <div>
-              <p className="text-xs text-text-muted">Stock</p>
-              <p className="text-sm font-semibold text-text mt-1">{selectedVariant.stock} uds.</p>
-            </div>
-            {selectedVariant.variantLabel && (
-              <div>
-                <p className="text-xs text-text-muted">Etiqueta</p>
-                <p className="text-sm font-medium text-text mt-1">{selectedVariant.variantLabel}</p>
-              </div>
-            )}
-          </div>
+          {/* Card de añadir variante — solo si no crea una fila sola */}
+          {/* Ocultar en cada breakpoint si variants.length es múltiplo de las columnas de ese breakpoint */}
+          <AddCard
+            label="Añadir variante"
+            onClick={() => router.push(`/dashboard/admin/shop/products/${group.groupKey}/add-variant`)}
+            className={[
+              group.variants.length % 2 === 0 ? "hidden" : "",
+              group.variants.length % 3 === 0 ? "sm:hidden" : "sm:flex",
+              group.variants.length % 4 === 0 ? "lg:hidden" : "lg:flex",
+            ].join(" ")}
+          />
+        </div>
 
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={() => router.push(`/dashboard/admin/shop/products/variants/${selectedVariant.id}/edit?from=detail&group=${group.groupKey}`)}
-            >
-              Editar variante
-            </Button>
-            <Button
-              variant={selectedVariant.active ? "danger" : "primary"}
-              size="sm"
-              className="flex-1"
-              onClick={() => handleToggleVariant(selectedVariant.id, selectedVariant.active)}
-              loading={toggling === selectedVariant.id}
-            >
-              {selectedVariant.active ? "Desactivar" : "Reactivar"}
-            </Button>
-          </div>
-        </Card>
+        {/* Botón pequeño — solo visible cuando la card está oculta */}
+        <div className={[
+          "flex justify-center pt-2",
+          group.variants.length % 2 === 0 ? "" : "hidden",
+          group.variants.length % 3 === 0 ? "sm:flex" : "sm:hidden",
+          group.variants.length % 4 === 0 ? "lg:flex" : "lg:hidden",
+        ].join(" ")}>
+          <Button
+            variant="outline"
+            onClick={() => router.push(`/dashboard/admin/shop/products/${group.groupKey}/add-variant`)}
+          >
+            + Añadir nueva variante
+          </Button>
+        </div>
       </section>
-
-      {/* ── Grid de todas las variantes ── */}
-      {group.variants.length > 1 && (
-        <section className="space-y-4">
-          <SectionTitle icon={icons.shop}>Todas las variantes ({group.variants.length})</SectionTitle>
-
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {group.variants.map((v) => (
-              <VariantGridItem
-                key={v.id}
-                id={v.id}
-                name={v.name}
-                color={v.color}
-                price={v.price}
-                stock={v.stock}
-                imageUrl={v.imageUrl}
-                category={group.category}
-                active={v.active}
-                selected={v.id === selectedVariantId}
-                toggling={toggling === v.id}
-                onSelect={() => setSelectedVariantId(v.id)}
-                onEdit={() => router.push(`/dashboard/admin/shop/products/variants/${v.id}/edit?from=detail&group=${group.groupKey}`)}
-                onToggleActive={() => handleToggleVariant(v.id, v.active)}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* ── Añadir variante ── */}
-      <div className="flex justify-center pt-4">
-        <Button
-          variant="outline"
-          onClick={() => router.push(`/dashboard/admin/shop/products/${group.groupKey}/add-variant`)}
-        >
-          + Añadir nueva variante
-        </Button>
-      </div>
     </div>
   );
 }

@@ -1,21 +1,59 @@
 /**
  * Layout de la tienda del estudiante.
  *
- * Monta el CartProvider y el CartDrawer compartido entre todas
- * las páginas de la tienda (catálogo, detalle, pedidos, etc.).
- * Así el drawer del carrito es accesible desde cualquier página
- * sin duplicar código.
+ * Monta el CartProvider, el CartDrawer, el FloatingCartButton
+ * y el PurchaseOverlay compartidos entre todas las páginas de la tienda.
  */
 
 "use client";
 
-import { type ReactNode } from "react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
+import { useRouter, usePathname } from "next/navigation";
+import { useToast } from "@/hooks/useToast";
 import { CartProvider, useCart } from "@/contexts/CartContext";
 import { CartDrawer } from "@/components/shared/CartDrawer";
 import { FloatingCartButton } from "@/components/ui/FloatingCartButton";
+import { PurchaseOverlay } from "@/components/shared/PurchaseOverlay";
 
 function ShopLayoutInner({ children }: { children: ReactNode }) {
-  const { isCartOpen, openCart, closeCart, itemCount, setItemCount } = useCart();
+  const router = useRouter();
+  const pathname = usePathname();
+  const { addToast } = useToast();
+  const {
+    isCartOpen, openCart, closeCart,
+    itemCount, setItemCount,
+    purchaseState, endPurchase,
+  } = useCart();
+
+  // Detectar cuando la URL cambia para desactivar el overlay
+  const prevPathname = useRef(pathname);
+  useEffect(() => {
+    if (prevPathname.current !== pathname && purchaseState.active) {
+      endPurchase();
+    }
+    prevPathname.current = pathname;
+  }, [pathname, purchaseState.active, endPurchase]);
+
+  // Callback cuando el overlay termina
+  const handlePurchaseComplete = useCallback((batchId: string | null) => {
+    if (batchId) {
+      addToast("Compra realizada correctamente", "success");
+      router.replace(`/dashboard/student/shop/orders/batch/${batchId}`);
+    } else {
+      endPurchase();
+    }
+  }, [router, addToast, endPurchase]);
+
+  // Si hay compra en curso, mostrar el overlay encima de todo
+  if (purchaseState.active && purchaseState.promise) {
+    return (
+      <PurchaseOverlay
+        productName={purchaseState.productName}
+        purchasePromise={purchaseState.promise}
+        onComplete={handlePurchaseComplete}
+      />
+    );
+  }
 
   return (
     <>

@@ -138,6 +138,12 @@ async function main() {
       return name;
     }
 
+    // Helper: generar nombre de variante (grupo + color al final)
+    function buildName(baseName, color) {
+      const displayColor = color.split("-").map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+      return `${baseName} ${displayColor}`;
+    }
+
     // 2. Agrupar productos del JSON por grupo (baseSlug)
     const groupMap = new Map(); // slug → { name, description, category, products[] }
 

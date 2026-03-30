@@ -28,4 +28,6 @@ export { ColorDot, colorToHex } from "./ColorDot";
 export { QuantitySelector } from "./QuantitySelector";
 export { Drawer } from "./Drawer";
 export { FloatingActionBar } from "./FloatingActionBar";
+export { SelectAllCheckbox } from "./SelectAllCheckbox";
+export { AddCard } from "./AddCard";
 export { icons } from "./icons";

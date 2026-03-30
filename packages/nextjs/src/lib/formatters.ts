@@ -46,6 +46,19 @@ export function calculateOrderStats(items: { status: string }[]) {
   return { paidCount, deliveredCount, returnedCount };
 }
 
+/**
+ * Genera el nombre completo de una variante: nombre del grupo + color al final.
+ * Ej: "Taza UCM 370ml" + "negra" → "Taza UCM 370ml Negra"
+ */
+export function buildVariantName(groupName: string, color: string): string {
+  const displayColor = color
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
+  return `${groupName} ${displayColor}`;
+}
+
 /** Formatea bytes a cadena legible: "1.5 MB", "320 KB", "128 B" */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

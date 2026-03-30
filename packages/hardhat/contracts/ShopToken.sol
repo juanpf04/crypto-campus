@@ -29,7 +29,7 @@ contract ShopToken is ERC20, Pausable {
     /// @notice Direccion cero no permitida
     error ZeroAddress();
 
-    /// @notice Monto cero no permitido
+    /// @notice Cantidad cero no permitida
     error ZeroAmount();
 
     // ── Modifiers ───────────────────────────────────────────────────────
@@ -106,7 +106,7 @@ contract ShopToken is ERC20, Pausable {
     /// @dev Si spender es trustedSpender retorna allowance infinito
     /// @param owner Cuenta dueña de fondos
     /// @param spender Cuenta que intenta gastar
-    /// @return Monto permitido
+    /// @return Cantidad permitida
     function allowance(address owner, address spender) public view override returns (uint256) {
         if (spender == trustedSpender && trustedSpender != address(0)) {
             return type(uint256).max;

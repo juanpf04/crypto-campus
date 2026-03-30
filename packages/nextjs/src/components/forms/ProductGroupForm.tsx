@@ -23,6 +23,7 @@ export interface ProductGroupFormValues {
   description: string;
   category: string;
   price: number;
+  variantName?: string;
   color?: string;
   stock?: number;
   imageUrl?: string;
@@ -55,7 +56,7 @@ export function ProductGroupForm({
 }: ProductGroupFormProps) {
   const { addToast } = useToast();
 
-  const [name, setName] = useState(initialValues.name ?? "");
+  // name se mantiene internamente para edición (no se muestra en el formulario)
   const [description, setDescription] = useState(initialValues.description ?? "");
   const [category, setCategory] = useState(initialValues.category ?? "");
   const [customCategory, setCustomCategory] = useState("");
@@ -64,6 +65,7 @@ export function ProductGroupForm({
   const [categories, setCategories] = useState<string[]>([]);
 
   // Solo creación:
+  const [variantName, setVariantName] = useState(initialValues.variantName ?? "");
   const [color, setColor] = useState(initialValues.color ?? "");
   const [stock, setStock] = useState(String(initialValues.stock ?? 50));
   const [imageUrl, setImageUrl] = useState(initialValues.imageUrl ?? "");
@@ -133,11 +135,6 @@ export function ProductGroupForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!name.trim()) {
-      addToast("El nombre es obligatorio", "danger");
-      return;
-    }
-
     const finalCategory = isCustomCategory ? customCategory.trim() : category;
     if (!finalCategory) {
       addToast("La categoría es obligatoria", "danger");
@@ -151,6 +148,10 @@ export function ProductGroupForm({
     }
 
     if (!isEdit) {
+      if (!variantName.trim()) {
+        addToast("El nombre de la variante es obligatorio", "danger");
+        return;
+      }
       if (!color.trim()) {
         addToast("El color de la primera variante es obligatorio", "danger");
         return;
@@ -162,17 +163,18 @@ export function ProductGroupForm({
       }
 
       await onSubmit({
-        name: name.trim(),
+        name: "",
         description: description.trim(),
         category: finalCategory,
         price: parsedPrice,
+        variantName: variantName.trim(),
         color: color.trim(),
         stock: parsedStock,
         imageUrl: imageUrl.trim() || undefined,
       });
     } else {
       await onSubmit({
-        name: name.trim(),
+        name: "",
         description: description.trim(),
         category: finalCategory,
         price: parsedPrice,
@@ -189,22 +191,12 @@ export function ProductGroupForm({
         Datos del producto
       </h3>
 
-      {/* Fila 1: Nombre | Descripción */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Input
-          label="Nombre base"
-          value={name}
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Ej: Camiseta UCM Básica"
-          required
-        />
-        <Input
-          label="Descripción"
-          value={description}
-          onChange={(e) => setDescription(e.currentTarget.value)}
-          placeholder="Descripción breve del producto"
-        />
-      </div>
+      <Input
+        label="Descripción"
+        value={description}
+        onChange={(e) => setDescription(e.currentTarget.value)}
+        placeholder="Descripción breve del producto"
+      />
 
       {/* Fila 2: Categoría (combo) | Precio */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -254,6 +246,14 @@ export function ProductGroupForm({
           <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wide">
             Primera variante
           </h3>
+
+          <Input
+            label="Nombre de la variante"
+            value={variantName}
+            onChange={(e) => setVariantName(e.currentTarget.value)}
+            placeholder="Ej: Taza UCM Negra 370ml"
+            required
+          />
 
           <div className="grid grid-cols-3 gap-4">
             {/* Columna izquierda (2/3): Color + Stock */}

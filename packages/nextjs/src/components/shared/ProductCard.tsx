@@ -60,7 +60,7 @@ interface ProductCardProps {
 
 export function ProductCard({
   groupKey,
-  name,
+  name: _name,
   minPrice,
   maxPrice,
   totalStock,
@@ -147,7 +147,7 @@ export function ProductCard({
           )}
 
           <h3 className="font-semibold text-text line-clamp-2 leading-tight">
-            {name}
+            {selectedVariant.name}
           </h3>
 
           {/* Variantes de color */}
@@ -195,16 +195,6 @@ export function ProductCard({
             <div className="flex gap-2 mt-1">
               <button
                 type="button"
-                onClick={handleEdit}
-                className="flex-1 flex items-center justify-center gap-1 rounded-lg border border-border-default py-2 text-sm text-text-muted hover:text-primary hover:border-primary/30 transition-colors cursor-pointer"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-                  <path d="M17 3a2.85 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5Z" />
-                </svg>
-                Editar
-              </button>
-              <button
-                type="button"
                 onClick={handleToggleActive}
                 className={`flex-1 flex items-center justify-center gap-1 rounded-lg border py-2 text-sm transition-colors cursor-pointer ${
                   active
@@ -217,14 +207,14 @@ export function ProductCard({
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
                       <path d="M18 6L6 18M6 6l12 12" />
                     </svg>
-                    Eliminar
+                    Desactivar producto
                   </>
                 ) : (
                   <>
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
                       <path d="M20 6L9 17l-5-5" />
                     </svg>
-                    Reactivar
+                    Reactivar producto
                   </>
                 )}
               </button>

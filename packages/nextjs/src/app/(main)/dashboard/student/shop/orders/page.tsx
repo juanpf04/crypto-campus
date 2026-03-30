@@ -4,17 +4,19 @@
  * Historial de pedidos del estudiante.
  *
  * Dos pestañas:
- * - "Pedidos": batches agrupados (1 compra = 1 fila con N artículos)
- * - "Artículos": orders individuales (vista plana tradicional)
+ * - "Tickets": batches agrupados + filtro por estado (Entregado/Parc. devuelto/Devuelto)
+ * - "Artículos": orders individuales + filtro por estado (Entregado/Devuelto)
  *
- * Ambas con paginación. Filas clicables al detalle.
+ * Filtro local (sin re-fetch). Se resetea al cambiar de tab.
+ * Tabs a la izquierda, filtro a la derecha (misma fila).
  */
 
-import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
+import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
@@ -59,13 +61,32 @@ interface Batch {
   items: BatchItem[];
 }
 
+// ── Opciones de filtro ──
+
+const BATCH_STATUS_OPTIONS = [
+  { value: "", label: "Todos los estados" },
+  { value: "DELIVERED", label: "Entregados" },
+  { value: "PARTIALLY_RETURNED", label: "Parcialmente devueltos" },
+  { value: "RETURNED", label: "Devueltos" },
+];
+
+const ORDER_STATUS_OPTIONS = [
+  { value: "", label: "Todos los estados" },
+  { value: "DELIVERED", label: "Entregados" },
+  { value: "RETURNED", label: "Devueltos" },
+];
+
 const PAGE_SIZE = 10;
 
 export default function StudentOrdersPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { addToast } = useToast();
 
-  const [tab, setTab] = useState("batches");
+  const initialTab = searchParams.get("tab") === "items" ? "items" : "batches";
+  const [tab, setTab] = useState(initialTab);
+  const [batchStatusFilter, setBatchStatusFilter] = useState("");
+  const [orderStatusFilter, setOrderStatusFilter] = useState("");
 
   // Batches
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -112,6 +133,17 @@ export default function StudentOrdersPage() {
   useEffect(() => { fetchBatches(); }, [fetchBatches]);
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
+  // Filtrado local
+  const filteredBatches = useMemo(() => {
+    if (!batchStatusFilter) return batches;
+    return batches.filter((b) => b.generalStatus === batchStatusFilter);
+  }, [batches, batchStatusFilter]);
+
+  const filteredOrders = useMemo(() => {
+    if (!orderStatusFilter) return orders;
+    return orders.filter((o) => o.status === orderStatusFilter);
+  }, [orders, orderStatusFilter]);
+
   const isLoading = tab === "batches" ? batchLoading : orderLoading;
 
   return (
@@ -125,23 +157,51 @@ export default function StudentOrdersPage() {
         </p>
       </div>
 
-      <Tabs
-        tabs={[
-          { value: "batches", label: "Tickets", count: batchTotal },
-          { value: "items", label: "Artículos", count: orderTotal },
-        ]}
-        value={tab}
-        onChange={(newTab) => setTab(newTab)}
-      />
+      {/* Tabs + filtro en la misma fila */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <Tabs
+          tabs={[
+            { value: "batches", label: "Tickets", count: batchTotal },
+            { value: "items", label: "Artículos", count: orderTotal },
+          ]}
+          value={tab}
+          onChange={(newTab) => {
+            setTab(newTab);
+            // Resetear filtros al cambiar de tab
+            if (newTab === "batches") setOrderStatusFilter("");
+            if (newTab === "items") setBatchStatusFilter("");
+          }}
+        />
+
+        {/* Filtro de estado */}
+        <div className="w-56">
+          {tab === "batches" ? (
+            <Select
+              value={batchStatusFilter}
+              onChange={(e) => setBatchStatusFilter(e.currentTarget.value)}
+              options={BATCH_STATUS_OPTIONS}
+            />
+          ) : (
+            <Select
+              value={orderStatusFilter}
+              onChange={(e) => setOrderStatusFilter(e.currentTarget.value)}
+              options={ORDER_STATUS_OPTIONS}
+            />
+          )}
+        </div>
+      </div>
 
       {isLoading ? (
         <div className="flex items-center justify-center py-10">
           <Spinner size="lg" />
         </div>
       ) : tab === "batches" ? (
-        /* ── Pestaña Pedidos (batches) ── */
-        batches.length === 0 ? (
-          <EmptyState title="Sin pedidos" description="Aún no has realizado ninguna compra." />
+        /* ── Pestaña Tickets ── */
+        filteredBatches.length === 0 ? (
+          <EmptyState
+            title="Sin pedidos"
+            description={batchStatusFilter ? "No hay tickets con ese estado." : "Aún no has realizado ninguna compra."}
+          />
         ) : (
           <>
             <Card className="overflow-hidden p-0">
@@ -156,7 +216,7 @@ export default function StudentOrdersPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {batches.map((batch) => {
+                  {filteredBatches.map((batch) => {
                     const summary = formatItemSummary(batch.items);
 
                     return (
@@ -199,9 +259,12 @@ export default function StudentOrdersPage() {
           </>
         )
       ) : (
-        /* ── Pestaña Artículos (orders sueltos) ── */
-        orders.length === 0 ? (
-          <EmptyState title="Sin artículos" description="Aún no has realizado ninguna compra." />
+        /* ── Pestaña Artículos ── */
+        filteredOrders.length === 0 ? (
+          <EmptyState
+            title="Sin artículos"
+            description={orderStatusFilter ? "No hay artículos con ese estado." : "Aún no has realizado ninguna compra."}
+          />
         ) : (
           <>
             <Card className="overflow-hidden p-0">
@@ -216,13 +279,13 @@ export default function StudentOrdersPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {orders.map((order) => {
+                  {filteredOrders.map((order) => {
                     const status = ORDER_STATUS_MAP[order.status] ?? ORDER_STATUS_MAP.PAID;
                     return (
                       <TableRow
                         key={order.id}
                         className="cursor-pointer hover:bg-primary/5 transition-colors"
-                        onClick={() => router.push(`/dashboard/student/shop/orders/${order.id}`)}
+                        onClick={() => router.push(`/dashboard/student/shop/orders/${order.id}?from=items`)}
                       >
                         <TableCell className="text-text-muted text-sm whitespace-nowrap">
                           {formatShortDate(order.purchaseDate)}

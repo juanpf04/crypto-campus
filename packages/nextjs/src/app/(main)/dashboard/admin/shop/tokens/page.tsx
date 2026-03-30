@@ -4,7 +4,7 @@
  * Gestión de ShopTokens (admin).
  *
  * Lista todos los estudiantes/profesores con su balance actual.
- * Permite asignar tokens con un modal.
+ * Permite añadir tokens con un modal.
  * Mismo patrón que admin/printing/credits.
  */
 
@@ -180,7 +180,7 @@ export default function AdminShopTokensPage() {
                         setMintAmount("");
                       }}
                     >
-                      Asignar
+                      Añadir
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -194,7 +194,7 @@ export default function AdminShopTokensPage() {
       <Modal
         open={!!editingUser}
         onClose={() => setEditingUser(null)}
-        title={`Asignar ShopTokens a ${editingUser?.name ?? ""}`}
+        title={`Añadir ShopTokens a ${editingUser?.name ?? ""}`}
       >
         <div className="space-y-4">
           <p className="text-sm text-text-muted">
@@ -202,7 +202,7 @@ export default function AdminShopTokensPage() {
             Los tokens se añaden al balance existente.
           </p>
           <Input
-            label="Cantidad a asignar"
+            label="Cantidad a añadir"
             type="number"
             min="1"
             value={mintAmount}
@@ -213,7 +213,7 @@ export default function AdminShopTokensPage() {
               Cancelar
             </Button>
             <Button onClick={handleMint} loading={minting}>
-              Asignar tokens
+              Añadir tokens
             </Button>
           </div>
         </div>

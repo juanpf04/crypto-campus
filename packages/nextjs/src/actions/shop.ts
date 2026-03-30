@@ -874,7 +874,9 @@ export async function updateVariant(
 	ensureRole(session, ["ADMIN"]);
 
 	try {
-		const variant = await prisma.product.findUnique({ where: { id: variantPrismaId } });
+		const variant = await prisma.product.findUnique({
+			where: { id: variantPrismaId },
+		});
 		if (!variant) throw new Error("Variante no encontrada");
 
 		const newStock = input.stock !== undefined ? ensureNonNegativeInt(input.stock, "El stock") : undefined;
@@ -915,6 +917,7 @@ export async function updateVariant(
 export async function addVariantToGroup(
 	groupKey: string,
 	input: {
+		name: string;
 		color: string;
 		variantLabel?: string;
 		stock: number;
@@ -936,8 +939,7 @@ export async function addVariantToGroup(
 		const price = referenceVariant.price;
 		const stock = ensureNonNegativeInt(input.stock, "El stock");
 		const color = normalizeColor(input.color);
-		const displayColor = toDisplayColor(color);
-		const variantName = `${base.name} ${displayColor}`;
+		const variantName = cleanString(input.name, "El nombre");
 
 		// Leer nextProductId
 		const nextProductId = await publicClient.readContract({
@@ -989,6 +991,7 @@ export async function addVariantToGroup(
  */
 export async function createProductGroup(input: {
 	name: string;
+	variantName: string;
 	description?: string;
 	category?: string;
 	price: number;
@@ -1000,17 +1003,18 @@ export async function createProductGroup(input: {
 	ensureRole(session, ["ADMIN"]);
 
 	try {
-		const name = cleanString(input.name, "El nombre");
+		const variantName = cleanString(input.variantName ?? input.name, "El nombre de la variante");
 		const price = ensurePositiveInt(input.price, "El precio");
 		const stock = ensureNonNegativeInt(input.stock, "El stock");
 		const color = normalizeColor(input.color);
-		const displayColor = toDisplayColor(color);
-		const slug = slugify(name);
-		const variantName = `${name} ${displayColor}`;
+
+		// Derivar nombre del grupo quitando el color del nombre de la variante
+		const groupName = deriveBaseName(variantName, color);
+		const slug = slugify(groupName);
 
 		// Verificar que no exista ya un grupo con el mismo slug
 		const existing = await prisma.productBase.findUnique({ where: { slug } });
-		if (existing) throw new Error(`Ya existe un grupo de producto con el nombre "${name}"`);
+		if (existing) throw new Error(`Ya existe un grupo de producto con el nombre "${groupName}"`);
 
 		// Leer nextProductId
 		const nextProductId = await publicClient.readContract({
@@ -1032,11 +1036,11 @@ export async function createProductGroup(input: {
 			throw new Error("La transacción de creación fue revertida");
 		}
 
-		// Crear ProductBase
+		// Crear ProductBase (nombre derivado del nombre de la variante sin color)
 		const base = await prisma.productBase.create({
 			data: {
 				slug,
-				name,
+				name: groupName,
 				description: input.description?.trim() || null,
 				category: input.category?.trim() || null,
 			},
@@ -2423,6 +2427,8 @@ export async function listAllTransactions(
 	limit = 10,
 	offset = 0,
 	userId?: string,
+	typeFilter?: "purchase" | "topup" | "refund",
+	directionFilter?: "income" | "expense",
 ) {
 	const session = await getSession();
 	ensureRole(session, ["ADMIN"]);
@@ -2432,8 +2438,8 @@ export async function listAllTransactions(
 
 	const userWhere = userId ? { userId } : {};
 
-	// Consultar compras y recargas en paralelo
-	const [orders, topups, totalOrders, totalTopups] = await Promise.all([
+	// Cargar las 3 fuentes en paralelo
+	const [orders, topups] = await Promise.all([
 		prisma.order.findMany({
 			where: userWhere,
 			include: {
@@ -2441,8 +2447,6 @@ export async function listAllTransactions(
 				product: { select: { name: true } },
 			},
 			orderBy: { purchaseDate: "desc" },
-			take: safeLimit * 2, // Traemos el doble para combinar
-			skip: 0,
 		}),
 		prisma.cardTopupSimulation.findMany({
 			where: { ...userWhere, status: "SUCCESS" },
@@ -2450,44 +2454,60 @@ export async function listAllTransactions(
 				user: { select: { name: true, email: true } },
 			},
 			orderBy: { createdAt: "desc" },
-			take: safeLimit * 2,
-			skip: 0,
 		}),
-		prisma.order.count({ where: userWhere }),
-		prisma.cardTopupSimulation.count({ where: { ...userWhere, status: "SUCCESS" } }),
 	]);
 
 	// Unificar en un formato común
 	type TransactionEntry = {
 		id: string;
-		type: "purchase" | "topup";
+		type: "purchase" | "topup" | "refund";
+		direction: "income" | "expense";
 		date: Date;
 		userName: string;
 		userEmail: string;
-		amount: number; // positivo = ingreso, negativo = gasto
+		amount: number;
 		description: string;
 		txHash: string | null;
 	};
 
 	const unified: TransactionEntry[] = [];
 
+	// Compras (gasto)
 	for (const order of orders) {
 		unified.push({
-			id: order.id,
+			id: `purchase-${order.id}`,
 			type: "purchase",
+			direction: "expense",
 			date: order.purchaseDate,
 			userName: order.user.name,
 			userEmail: order.user.email,
 			amount: -(order.pricePaid * order.quantity),
-			description: `Compra: ${order.product.name} (x${order.quantity})`,
+			description: `Compra: ${order.product.name}`,
 			txHash: order.txHash,
 		});
+
+		// Devoluciones (ingreso) — solo si el order fue devuelto
+		if (order.status === "RETURNED" && order.returnDate) {
+			unified.push({
+				id: `refund-${order.id}`,
+				type: "refund",
+				direction: "income",
+				date: order.returnDate,
+				userName: order.user.name,
+				userEmail: order.user.email,
+				amount: order.pricePaid * order.quantity,
+				description: `Devolución: ${order.product.name}`,
+				txHash: order.txHash,
+			});
+		}
 	}
 
+	// Recargas (ingreso)
 	for (const topup of topups) {
 		unified.push({
-			id: topup.id,
+			id: `topup-${topup.id}`,
 			type: "topup",
+			direction: "income",
 			date: topup.createdAt,
 			userName: topup.user.name,
 			userEmail: topup.user.email,
@@ -2497,13 +2517,24 @@ export async function listAllTransactions(
 		});
 	}
 
+	// Filtrar por tipo
+	let filtered = unified;
+	if (typeFilter) {
+		filtered = filtered.filter((t) => t.type === typeFilter);
+	}
+	// Filtrar por dirección
+	if (directionFilter) {
+		filtered = filtered.filter((t) => t.direction === directionFilter);
+	}
+
 	// Ordenar por fecha descendente y paginar
-	unified.sort((a, b) => b.date.getTime() - a.date.getTime());
-	const paged = unified.slice(safeOffset, safeOffset + safeLimit);
+	filtered.sort((a, b) => b.date.getTime() - a.date.getTime());
+	const total = filtered.length;
+	const paged = filtered.slice(safeOffset, safeOffset + safeLimit);
 
 	return {
 		transactions: paged,
-		total: totalOrders + totalTopups,
+		total,
 		limit: safeLimit,
 		offset: safeOffset,
 	};

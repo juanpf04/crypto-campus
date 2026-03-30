@@ -3,14 +3,16 @@
 /**
  * Historial de transacciones del admin — Log unificado.
  *
- * Muestra todas las transacciones de ShopTokens (compras y recargas)
- * con paginación de 10 registros y filtro por usuario.
+ * Muestra todas las transacciones de ShopTokens (compras, recargas, devoluciones)
+ * con paginación y filtros por: usuario, tipo (compra/recarga/devolución),
+ * dirección (ingreso/gasto).
  */
 
 import { useCallback, useEffect, useState } from "react";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import { Badge, type BadgeVariant } from "@/components/ui/Badge";
+import { Select } from "@/components/ui/Select";
 import { Pagination } from "@/components/ui/Pagination";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -21,7 +23,8 @@ const PAGE_SIZE = 10;
 
 interface Transaction {
   id: string;
-  type: "purchase" | "topup";
+  type: "purchase" | "topup" | "refund";
+  direction: "income" | "expense";
   date: string;
   userName: string;
   userEmail: string;
@@ -30,6 +33,30 @@ interface Transaction {
   txHash: string | null;
 }
 
+interface UserOption {
+  value: string;
+  label: string;
+}
+
+const TYPE_OPTIONS = [
+  { value: "", label: "Todos los tipos" },
+  { value: "purchase", label: "Compras" },
+  { value: "topup", label: "Recargas" },
+  { value: "refund", label: "Devoluciones" },
+];
+
+const DIRECTION_OPTIONS = [
+  { value: "", label: "Ingresos y gastos" },
+  { value: "income", label: "Ingresos" },
+  { value: "expense", label: "Gastos" },
+];
+
+const TYPE_BADGE_MAP: Record<string, { label: string; variant: BadgeVariant }> = {
+  purchase: { label: "Compra", variant: "info" },
+  topup: { label: "Recarga", variant: "success" },
+  refund: { label: "Devolución", variant: "warning" },
+};
+
 export default function AdminTransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [total, setTotal] = useState(0);
@@ -37,15 +64,25 @@ export default function AdminTransactionsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Filtro por usuario
-  const [users, setUsers] = useState<{ id: string; name: string; email: string }[]>([]);
-  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  // Filtros
+  const [users, setUsers] = useState<UserOption[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [directionFilter, setDirectionFilter] = useState("");
 
-  // Cargar lista de usuarios para el filtro
+  // Cargar lista de usuarios
   useEffect(() => {
     fetch("/api/admin/users")
       .then((r) => r.json())
-      .then((data) => setUsers(data.users ?? []))
+      .then((data) => {
+        const list = Array.isArray(data) ? data : data.users;
+        if (Array.isArray(list)) {
+          setUsers(list.map((u: { id: string; name: string; email: string }) => ({
+            value: u.id,
+            label: `${u.name} (${u.email})`,
+          })));
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -57,6 +94,8 @@ export default function AdminTransactionsPage() {
       offset: String(offset),
     });
     if (selectedUserId) params.set("userId", selectedUserId);
+    if (typeFilter) params.set("type", typeFilter);
+    if (directionFilter) params.set("direction", directionFilter);
 
     try {
       const res = await fetch(`/api/shop/transactions?${params}`);
@@ -69,15 +108,14 @@ export default function AdminTransactionsPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [offset, selectedUserId]);
+  }, [offset, selectedUserId, typeFilter, directionFilter]);
 
   useEffect(() => {
     loadTransactions();
   }, [loadTransactions]);
 
-  // Reset página al cambiar filtro
-  function handleUserFilter(userId: string) {
-    setSelectedUserId(userId);
+  function resetAndSetFilter(setter: (v: string) => void, value: string) {
+    setter(value);
     setOffset(0);
   }
 
@@ -93,30 +131,36 @@ export default function AdminTransactionsPage() {
     <div className="space-y-6">
       <BackLink href="/dashboard/admin/shop" label="Volver a la tienda" />
 
-      <SectionTitle icon={icons.pending}>Transacciones</SectionTitle>
-
-      {/* Filtro por usuario */}
-      <div className="flex items-center gap-3">
-        <label htmlFor="user-filter" className="text-sm text-text-muted whitespace-nowrap">
-          Filtrar por usuario:
-        </label>
-        <select
-          id="user-filter"
-          value={selectedUserId}
-          onChange={(e) => handleUserFilter(e.target.value)}
-          className="rounded-lg border border-border-default bg-card px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/30"
-        >
-          <option value="">Todos los usuarios</option>
-          {users.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.name} ({u.email})
-            </option>
-          ))}
-        </select>
-
-        <span className="text-xs text-text-muted ml-auto">
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <SectionTitle icon={icons.pending}>Transacciones</SectionTitle>
+        <span className="text-sm text-text-muted">
           {total} {total === 1 ? "transacción" : "transacciones"}
         </span>
+      </div>
+
+      {/* Filtros */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="w-56">
+          <Select
+            value={selectedUserId}
+            onChange={(e) => resetAndSetFilter(setSelectedUserId, e.currentTarget.value)}
+            options={[{ value: "", label: "Todos los usuarios" }, ...users]}
+          />
+        </div>
+        <div className="w-44">
+          <Select
+            value={typeFilter}
+            onChange={(e) => resetAndSetFilter(setTypeFilter, e.currentTarget.value)}
+            options={TYPE_OPTIONS}
+          />
+        </div>
+        <div className="w-44">
+          <Select
+            value={directionFilter}
+            onChange={(e) => resetAndSetFilter(setDirectionFilter, e.currentTarget.value)}
+            options={DIRECTION_OPTIONS}
+          />
+        </div>
       </div>
 
       {/* Tabla */}
@@ -125,7 +169,11 @@ export default function AdminTransactionsPage() {
           <div className="p-8">
             <EmptyState
               title="Sin transacciones"
-              description={selectedUserId ? "Este usuario no tiene transacciones." : "No hay transacciones registradas."}
+              description={
+                selectedUserId || typeFilter || directionFilter
+                  ? "No hay transacciones con esos filtros."
+                  : "No hay transacciones registradas."
+              }
             />
           </div>
         ) : (
@@ -137,38 +185,39 @@ export default function AdminTransactionsPage() {
                   <th className="px-4 py-3 text-left font-medium text-text-muted">Usuario</th>
                   <th className="px-4 py-3 text-left font-medium text-text-muted">Tipo</th>
                   <th className="px-4 py-3 text-left font-medium text-text-muted">Descripción</th>
-                  <th className="px-4 py-3 text-right font-medium text-text-muted">Monto</th>
+                  <th className="px-4 py-3 text-right font-medium text-text-muted">Cantidad</th>
                 </tr>
               </thead>
               <tbody>
-                {transactions.map((tx) => (
-                  <tr key={tx.id} className="border-b border-border-default last:border-b-0 hover:bg-primary/5 transition-colors">
-                    <td className="px-4 py-3 whitespace-nowrap text-text-muted">
-                      {new Date(tx.date).toLocaleDateString("es-ES", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-text">{tx.userName}</p>
-                      <p className="text-xs text-text-muted">{tx.userEmail}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge variant={tx.type === "topup" ? "success" : "info"}>
-                        {tx.type === "topup" ? "Recarga" : "Compra"}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-text">
-                      {tx.description}
-                    </td>
-                    <td className={`px-4 py-3 text-right font-semibold whitespace-nowrap ${tx.amount >= 0 ? "text-success" : "text-danger"}`}>
-                      {tx.amount >= 0 ? "+" : ""}{tx.amount} ShopTokens
-                    </td>
-                  </tr>
-                ))}
+                {transactions.map((tx) => {
+                  const typeBadge = TYPE_BADGE_MAP[tx.type] ?? TYPE_BADGE_MAP.purchase;
+                  return (
+                    <tr key={tx.id} className="border-b border-border-default last:border-b-0 hover:bg-primary/5 transition-colors">
+                      <td className="px-4 py-3 whitespace-nowrap text-text-muted">
+                        {new Date(tx.date).toLocaleDateString("es-ES", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-text">{tx.userName}</p>
+                        <p className="text-xs text-text-muted">{tx.userEmail}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge variant={typeBadge.variant}>{typeBadge.label}</Badge>
+                      </td>
+                      <td className="px-4 py-3 text-text">
+                        {tx.description}
+                      </td>
+                      <td className={`px-4 py-3 text-right font-semibold whitespace-nowrap ${tx.amount >= 0 ? "text-success" : "text-danger"}`}>
+                        {tx.amount >= 0 ? "+" : ""}{tx.amount} ShopTokens
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

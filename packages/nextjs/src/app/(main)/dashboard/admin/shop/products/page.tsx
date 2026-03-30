@@ -86,41 +86,31 @@ export default function AdminProductsPage() {
 
   // Toggle activo/inactivo — optimistic update
   async function handleToggleActive(variantId: string, currentlyActive: boolean) {
-    // Optimistic: cambiar en local inmediatamente
+    // Buscar el grupo que contiene esta variante
+    const targetGroup = products.find((p) => p.variants.some((v) => v.id === variantId));
+    if (!targetGroup) return;
+
+    // Optimistic update
     setProducts((prev) =>
-      prev.map((p) => {
-        const hasVariant = p.variants.some((v) => v.id === variantId);
-        if (!hasVariant) return p;
-        return { ...p, active: !currentlyActive };
-      }),
+      prev.map((p) => p.groupKey === targetGroup.groupKey ? { ...p, active: !currentlyActive } : p),
     );
 
-    const method = currentlyActive ? "DELETE" : "PATCH";
     try {
-      // Buscar el grupo para desactivar/reactivar TODAS sus variantes
-      const targetGroup = products.find((p) => p.variants.some((v) => v.id === variantId));
-      const variantIds = targetGroup ? targetGroup.variants.map((v) => v.id) : [variantId];
-
-      const results = await Promise.all(
-        variantIds.map((vid) => fetch(`/api/shop/products/${vid}`, { method })),
-      );
-      const anyFailed = results.some((r) => !r.ok);
-      if (anyFailed) throw new Error("Algunas variantes no se pudieron actualizar");
+      const res = await fetch(`/api/shop/products/groups/${targetGroup.groupKey}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: !currentlyActive }),
+      });
+      if (!res.ok) throw new Error("Error al cambiar estado del grupo");
 
       addToast(
-        currentlyActive
-          ? `Producto desactivado (${variantIds.length} variantes)`
-          : `Producto reactivado (${variantIds.length} variantes)`,
+        currentlyActive ? "Grupo desactivado" : "Grupo reactivado",
         "success",
       );
     } catch (err) {
-      // Revertir optimistic update
+      // Revertir
       setProducts((prev) =>
-        prev.map((p) => {
-          const hasVariant = p.variants.some((v) => v.id === variantId);
-          if (!hasVariant) return p;
-          return { ...p, active: currentlyActive };
-        }),
+        prev.map((p) => p.groupKey === targetGroup.groupKey ? { ...p, active: currentlyActive } : p),
       );
       addToast(err instanceof Error ? err.message : "Error", "danger");
     }

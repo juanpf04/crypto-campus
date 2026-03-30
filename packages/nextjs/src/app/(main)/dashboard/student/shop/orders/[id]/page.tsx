@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
@@ -44,7 +44,16 @@ interface OrderDetail {
 
 export default function StudentOrderDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const { addToast } = useToast();
+
+  // BackLink inteligente: si viene de un batch, volver al batch; si de items, volver a la tab de artículos
+  const from = searchParams.get("from");
+  const batchId = searchParams.get("batchId");
+  const backHref = from === "batch" && batchId
+    ? `/dashboard/student/shop/orders/batch/${batchId}`
+    : "/dashboard/student/shop/orders?tab=items";
+  const backLabel = from === "batch" ? "Volver al pedido" : "Volver a artículos";
 
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -108,7 +117,7 @@ export default function StudentOrderDetailPage() {
   if (!order) {
     return (
       <div className="space-y-6">
-        <BackLink href="/dashboard/student/shop/orders" label="Volver a mis pedidos" />
+        <BackLink href={backHref} label={backLabel} />
         <p className="text-text-muted">Pedido no encontrado.</p>
       </div>
     );
@@ -118,7 +127,7 @@ export default function StudentOrderDetailPage() {
 
   return (
     <div className="space-y-6">
-      <BackLink href="/dashboard/student/shop/orders" label="Volver a mis pedidos" />
+      <BackLink href={backHref} label={backLabel} />
 
       <div>
         <h1 className="text-2xl font-bold text-text">Detalle del pedido</h1>

@@ -38,7 +38,7 @@ export function ColorSwatchRow({
   maxVisible = 0,
   size = "sm",
 }: ColorSwatchRowProps) {
-  if (variants.length <= 1) return null;
+  if (variants.length === 0) return null;
 
   const visibleVariants = maxVisible > 0 ? variants.slice(0, maxVisible) : variants;
   const overflow = maxVisible > 0 ? variants.length - maxVisible : 0;

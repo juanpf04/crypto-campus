@@ -12,6 +12,7 @@
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { colorToHex } from "@/components/ui/ColorDot";
 import { ProductImage } from "@/components/shared/ProductImage";
 
 interface VariantGridItemProps {
@@ -78,14 +79,14 @@ export function VariantGridItem({
       <div className="flex items-center justify-center gap-2 mb-2">
         <span
           className="inline-block h-3 w-3 rounded-full border border-border-default"
-          style={{ backgroundColor: color || "#ccc" }}
+          style={{ backgroundColor: colorToHex(color || "default") }}
         />
         <span className="text-xs text-text-muted">{color || "—"}</span>
       </div>
 
       <div className="flex justify-between text-xs text-text-muted">
         <span>Stock: {stock}</span>
-        <span className="font-semibold text-primary">{price} ST</span>
+        <span className="font-semibold text-primary">{price} ShopTokens</span>
       </div>
 
       {/* Acciones rápidas */}

@@ -25,6 +25,7 @@ export default function AdminNewProductPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: values.name,
+          variantName: values.variantName,
           description: values.description || undefined,
           category: values.category || undefined,
           price: values.price,

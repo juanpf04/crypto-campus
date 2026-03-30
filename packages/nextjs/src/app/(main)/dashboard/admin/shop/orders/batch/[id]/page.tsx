@@ -22,6 +22,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { Tabs } from "@/components/ui/Tabs";
+import { SelectAllCheckbox } from "@/components/ui/SelectAllCheckbox";
 import { BatchHeader } from "@/components/shared/BatchHeader";
 import { GroupedOrderItem, groupOrderItems, type GroupedItem } from "@/components/shared/GroupedOrderItem";
 import { ReturnSelectionBar } from "@/components/shared/ReturnSelectionBar";
@@ -242,37 +243,29 @@ export default function AdminBatchDetailPage() {
         itemCount={batch.items.length}
         totalPaid={batch.totalPaid}
         user={batch.user}
-        actions={paidCount > 0 ? (
-          <Button onClick={handleDeliverAll} loading={acting === "deliver-all"}>
-            Entregar todo ({paidCount})
-          </Button>
-        ) : undefined}
       />
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        <Card className="text-center py-4">
-          <p className="text-2xl font-bold text-warning">{paidCount}</p>
-          <p className="text-xs text-text-muted mt-1">Pendientes</p>
-        </Card>
-        <Card className="text-center py-4">
-          <p className="text-2xl font-bold text-success">{deliveredCount}</p>
-          <p className="text-xs text-text-muted mt-1">Entregados</p>
-        </Card>
-        <Card className="text-center py-4">
-          <p className="text-2xl font-bold text-danger">{returnedCount}</p>
-          <p className="text-xs text-text-muted mt-1">Devueltos</p>
-        </Card>
-      </div>
+      {/* Stats — solo si hay mezcla de entregados y devueltos */}
+      {deliveredCount > 0 && returnedCount > 0 && (
+        <div className="grid grid-cols-2 gap-3">
+          <Card className="text-center py-4">
+            <p className="text-2xl font-bold text-success">{deliveredCount}</p>
+            <p className="text-xs text-text-muted mt-1">Entregados</p>
+          </Card>
+          <Card className="text-center py-4">
+            <p className="text-2xl font-bold text-danger">{returnedCount}</p>
+            <p className="text-xs text-text-muted mt-1">Devueltos</p>
+          </Card>
+        </div>
+      )}
 
-      {/* Filtro */}
-      {statusCounts > 1 && (
+      {/* Filtro — solo si hay mezcla de entregados y devueltos */}
+      {deliveredCount > 0 && returnedCount > 0 && (
         <Tabs
           tabs={[
             { value: "all", label: "Todos", count: groupedItems.length },
-            ...(paidCount > 0 ? [{ value: "PAID", label: "Pendientes", count: groupedItems.filter((g) => g.status === "PAID").length }] : []),
-            ...(deliveredCount > 0 ? [{ value: "DELIVERED", label: "Entregados", count: groupedItems.filter((g) => g.status === "DELIVERED").length }] : []),
-            ...(returnedCount > 0 ? [{ value: "RETURNED", label: "Devueltos", count: groupedItems.filter((g) => g.status === "RETURNED").length }] : []),
+            { value: "DELIVERED", label: "Entregados", count: groupedItems.filter((g) => g.status === "DELIVERED").length },
+            { value: "RETURNED", label: "Devueltos", count: groupedItems.filter((g) => g.status === "RETURNED").length },
           ]}
           value={statusFilter}
           onChange={setStatusFilter}
@@ -283,7 +276,30 @@ export default function AdminBatchDetailPage() {
       <section className="space-y-4">
         <SectionTitle icon={icons.items}>Artículos del pedido</SectionTitle>
 
-        <Card className="overflow-hidden p-0 divide-y divide-border-default">
+        <Card className="overflow-hidden p-0">
+          {/* Header con seleccionar todos */}
+          {filteredItems.some((i) => i.returnableCount > 0) && (
+            <div className="px-5 py-3 bg-primary/5 border-b border-border-default">
+              <SelectAllCheckbox
+                allSelected={filteredItems.filter((i) => i.returnableCount > 0).every((i) => selection.has(getGroupKey(i)))}
+                onToggle={(selectAll) => {
+                  if (selectAll) {
+                    const next = new Map(selection);
+                    for (const item of filteredItems) {
+                      if (item.returnableCount > 0) {
+                        next.set(getGroupKey(item), { selected: true, count: item.returnableCount });
+                      }
+                    }
+                    setSelection(next);
+                  } else {
+                    setSelection(new Map());
+                  }
+                }}
+              />
+            </div>
+          )}
+
+          <div className="divide-y divide-border-default">
           {filteredItems.map((item, idx) => {
             const key = getGroupKey(item);
             const sel = selection.get(key);
@@ -298,10 +314,11 @@ export default function AdminBatchDetailPage() {
                 selectedCount={sel?.count ?? (item.returnableCount || item.deliverableCount || item.quantity)}
                 onSelectChange={(checked) => toggleSelect(item, checked)}
                 onCountChange={(count) => updateCount(item, count)}
-                onNavigate={() => router.push(`/dashboard/admin/shop/orders/${item.orderIds[0]}`)}
+                onNavigate={() => router.push(`/dashboard/admin/shop/orders/${item.orderIds[0]}?from=batch&batchId=${batch.id}`)}
               />
             );
           })}
+          </div>
         </Card>
       </section>
 

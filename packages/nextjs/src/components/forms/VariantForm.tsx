@@ -3,12 +3,8 @@
 /**
  * VariantForm — Formulario reutilizable para crear y editar variantes.
  *
- * Se usa en "Añadir variante" (isEdit=false) y "Editar variante" (isEdit=true).
- * Incluye upload de imagen con FileDropZone.
- *
- * Layout:
- * - [Color / Stock] | [FileDropZone imagen]
- * - En edición: nombre editable arriba
+ * Cada variante tiene su propio nombre independiente.
+ * Campos: Nombre, Color, Etiqueta (opcional), Stock, Imagen.
  */
 
 import { useState, useCallback } from "react";
@@ -18,7 +14,7 @@ import { FileDropZone } from "@/components/ui/FileDropZone";
 import { useToast } from "@/hooks/useToast";
 
 export interface VariantFormValues {
-  name?: string;
+  name: string;
   color: string;
   variantLabel: string;
   stock: number;
@@ -86,6 +82,10 @@ export function VariantForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
+    if (!name.trim()) {
+      addToast("El nombre es obligatorio", "danger");
+      return;
+    }
     if (!color.trim()) {
       addToast("El color es obligatorio", "danger");
       return;
@@ -97,13 +97,8 @@ export function VariantForm({
       return;
     }
 
-    if (isEdit && !name.trim()) {
-      addToast("El nombre es obligatorio", "danger");
-      return;
-    }
-
     await onSubmit({
-      ...(isEdit && { name: name.trim() }),
+      name: name.trim(),
       color: color.trim(),
       variantLabel: variantLabel.trim(),
       stock: parsedStock,
@@ -115,14 +110,13 @@ export function VariantForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {isEdit && (
-        <Input
-          label="Nombre completo"
-          value={name}
-          onChange={(e) => setName(e.currentTarget.value)}
-          required
-        />
-      )}
+      <Input
+        label="Nombre de la variante"
+        value={name}
+        onChange={(e) => setName(e.currentTarget.value)}
+        placeholder="Ej: Taza UCM Negra 370ml"
+        required
+      />
 
       <Input
         label="Etiqueta (opcional)"
@@ -133,7 +127,6 @@ export function VariantForm({
 
       {/* Layout: [Color + Stock] | [Imagen] */}
       <div className="grid grid-cols-3 gap-4">
-        {/* Columna izquierda (2/3) */}
         <div className="col-span-2 space-y-4">
           <Input
             label="Color"
@@ -152,7 +145,6 @@ export function VariantForm({
           />
         </div>
 
-        {/* Columna derecha (1/3): Imagen */}
         <div className="col-span-1 flex flex-col">
           <label className="text-sm font-medium text-text mb-1.5">Imagen</label>
           {effectiveImageUrl ? (

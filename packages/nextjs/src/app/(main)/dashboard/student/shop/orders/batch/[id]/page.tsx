@@ -19,6 +19,7 @@ import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import { Tabs } from "@/components/ui/Tabs";
+import { SelectAllCheckbox } from "@/components/ui/SelectAllCheckbox";
 import { BatchHeader } from "@/components/shared/BatchHeader";
 import { GroupedOrderItem, groupOrderItems, type GroupedItem } from "@/components/shared/GroupedOrderItem";
 import { ReturnSelectionBar } from "@/components/shared/ReturnSelectionBar";
@@ -239,7 +240,30 @@ export default function StudentBatchDetailPage() {
       {/* Artículos — filas limpias tipo recibo */}
       <Card className="overflow-hidden p-0">
         <div className="flex items-center justify-between px-5 py-3 bg-primary/5 border-b border-border-default">
-          <span className="text-sm font-semibold text-text">Artículos</span>
+          <div className="flex items-center gap-3">
+            {filteredItems.some((i) => i.returnableCount > 0) && (
+              <SelectAllCheckbox
+                allSelected={filteredItems.filter((i) => i.returnableCount > 0).every((i) => selection.has(getGroupKey(i)))}
+                onToggle={(selectAll) => {
+                  if (selectAll) {
+                    const next = new Map(selection);
+                    for (const item of filteredItems) {
+                      if (item.returnableCount > 0) {
+                        next.set(getGroupKey(item), { selected: true, count: item.returnableCount });
+                      }
+                    }
+                    setSelection(next);
+                  } else {
+                    setSelection(new Map());
+                  }
+                }}
+                label="Artículos"
+              />
+            )}
+            {!filteredItems.some((i) => i.returnableCount > 0) && (
+              <span className="text-sm font-semibold text-text">Artículos</span>
+            )}
+          </div>
           <span className="text-sm text-text-muted">{batch.items.length} producto{batch.items.length !== 1 ? "s" : ""}</span>
         </div>
 
@@ -258,8 +282,7 @@ export default function StudentBatchDetailPage() {
                 onSelectChange={(checked) => toggleSelect(item, checked)}
                 onCountChange={(count) => updateCount(item, count)}
                 onNavigate={() => {
-                  // Navegar al detalle del primer artículo del grupo
-                  router.push(`/dashboard/student/shop/orders/${item.orderIds[0]}`);
+                  router.push(`/dashboard/student/shop/orders/${item.orderIds[0]}?from=batch&batchId=${batch.id}`);
                 }}
               />
             );

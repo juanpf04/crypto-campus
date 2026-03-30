@@ -7,7 +7,7 @@
  * Query params:
  * - from=detail → redirige al detalle del grupo
  * - from=list → redirige al listado de productos
- * - group=slug → groupKey para redirección
+ * - group=slug → groupKey para redirección y cargar template
  */
 
 import { useEffect, useState } from "react";
@@ -113,13 +113,14 @@ export default function EditVariantPage() {
               </Badge>
             </div>
             <p className="text-sm text-text-muted">
-              Edita los campos individuales de esta variante. El stock se actualiza on-chain.
+              Edita los campos de esta variante. El nombre se genera automáticamente a partir del color y el template del grupo.
             </p>
           </div>
 
           <VariantForm
             isEdit
             initialValues={initialValues}
+
             onSubmit={handleSubmit}
             onCancel={() => router.push(getBackUrl())}
             loading={saving}

@@ -11,8 +11,8 @@
  *          BatchStatusBadge, LinkArrow (intermedios) + Table (atómico).
  */
 
-import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
@@ -25,6 +25,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { Tabs } from "@/components/ui/Tabs";
 import { LinkArrow } from "@/components/shared/LinkArrow";
 import { BatchStatusBadge } from "@/components/shared/BatchStatusBadge";
+import { ConfirmModal } from "@/components/shared/ConfirmModal";
 import { ORDER_STATUS_MAP } from "@/lib/shop-constants";
 import { formatShortDate, formatItemSummary } from "@/lib/formatters";
 import {
@@ -68,20 +69,29 @@ interface UserOption {
 
 const PAGE_SIZE = 20;
 
-const STATUS_OPTIONS = [
+const BATCH_STATUS_OPTIONS = [
   { value: "", label: "Todos los estados" },
-  { value: "PAID", label: "Pagado" },
-  { value: "DELIVERED", label: "Entregado" },
-  { value: "RETURNED", label: "Devuelto" },
+  { value: "DELIVERED", label: "Entregados" },
+  { value: "PARTIALLY_RETURNED", label: "Parcialmente devueltos" },
+  { value: "RETURNED", label: "Devueltos" },
+];
+
+const ORDER_STATUS_OPTIONS = [
+  { value: "", label: "Todos los estados" },
+  { value: "DELIVERED", label: "Entregados" },
+  { value: "RETURNED", label: "Devueltos" },
 ];
 
 export default function AdminOrdersPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { addToast } = useToast();
 
-  const [tab, setTab] = useState("batches");
+  const initialTab = searchParams.get("tab") === "items" ? "items" : "batches";
+  const [tab, setTab] = useState(initialTab);
   const [userFilter, setUserFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [batchStatusFilter, setBatchStatusFilter] = useState("");
+  const [orderStatusFilter, setOrderStatusFilter] = useState("");
   const [users, setUsers] = useState<UserOption[]>([]);
 
   // Batches
@@ -97,6 +107,10 @@ export default function AdminOrdersPage() {
   const [orderOffset, setOrderOffset] = useState(0);
   const [orderLoading, setOrderLoading] = useState(true);
   const [orderRefreshing, setOrderRefreshing] = useState(false);
+
+  // Modal de confirmación de devolución
+  const [returnModal, setReturnModal] = useState<{ orderId: string; productName: string } | null>(null);
+  const [returning, setReturning] = useState(false);
 
   // Cargar lista de usuarios para el filtro
   useEffect(() => {
@@ -145,7 +159,6 @@ export default function AdminOrdersPage() {
         offset: String(orderOffset),
       });
       if (userFilter) params.set("userId", userFilter);
-      if (statusFilter) params.set("status", statusFilter);
 
       const res = await fetch(`/api/shop/orders/admin?${params}`);
       const data = await res.json();
@@ -157,7 +170,7 @@ export default function AdminOrdersPage() {
       setOrderLoading(false);
       setOrderRefreshing(false);
     }
-  }, [orderOffset, userFilter, statusFilter]);
+  }, [orderOffset, userFilter]);
 
   useEffect(() => { fetchBatches(); }, [fetchBatches]);
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
@@ -191,19 +204,39 @@ export default function AdminOrdersPage() {
     }
   }
 
-  async function handleReturnItem(orderId: string) {
+  function handleReturnItem(orderId: string, productName: string) {
+    setReturnModal({ orderId, productName });
+  }
+
+  async function confirmReturn() {
+    if (!returnModal) return;
+    setReturning(true);
     try {
-      const res = await fetch(`/api/shop/orders/${orderId}/return`, { method: "PUT" });
+      const res = await fetch(`/api/shop/orders/${returnModal.orderId}/return`, { method: "PUT" });
       if (!res.ok) {
         const body = await res.json();
         throw new Error(body.error ?? "Error");
       }
       addToast("Devolución procesada", "success");
+      setReturnModal(null);
       fetchOrders();
     } catch (err) {
       addToast(err instanceof Error ? err.message : "Error", "danger");
+    } finally {
+      setReturning(false);
     }
   }
+
+  // Filtrado local por estado
+  const filteredBatches = useMemo(() => {
+    if (!batchStatusFilter) return batches;
+    return batches.filter((b) => b.generalStatus === batchStatusFilter);
+  }, [batches, batchStatusFilter]);
+
+  const filteredOrders = useMemo(() => {
+    if (!orderStatusFilter) return orders;
+    return orders.filter((o) => o.status === orderStatusFilter);
+  }, [orders, orderStatusFilter]);
 
   const isLoading = tab === "batches" ? batchLoading : orderLoading;
   const isRefreshing = tab === "batches" ? batchRefreshing : orderRefreshing;
@@ -227,8 +260,8 @@ export default function AdminOrdersPage() {
           value={tab}
           onChange={(newTab) => {
             setTab(newTab);
-            // Resetear filtro de estado al volver a tickets
-            if (newTab === "batches") setStatusFilter("");
+            if (newTab === "batches") setOrderStatusFilter("");
+            if (newTab === "items") setBatchStatusFilter("");
           }}
         />
 
@@ -244,18 +277,21 @@ export default function AdminOrdersPage() {
               options={[{ value: "", label: "Todos los usuarios" }, ...users]}
             />
           </div>
-          {tab === "items" && (
-            <div className="w-44">
+          <div className="w-52">
+            {tab === "batches" ? (
               <Select
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.currentTarget.value);
-                  setOrderOffset(0);
-                }}
-                options={STATUS_OPTIONS}
+                value={batchStatusFilter}
+                onChange={(e) => setBatchStatusFilter(e.currentTarget.value)}
+                options={BATCH_STATUS_OPTIONS}
               />
-            </div>
-          )}
+            ) : (
+              <Select
+                value={orderStatusFilter}
+                onChange={(e) => setOrderStatusFilter(e.currentTarget.value)}
+                options={ORDER_STATUS_OPTIONS}
+              />
+            )}
+          </div>
         </div>
       </div>
 
@@ -265,8 +301,8 @@ export default function AdminOrdersPage() {
         </div>
       ) : tab === "batches" ? (
         /* ── Pestaña Pedidos (batches) ── */
-        batches.length === 0 ? (
-          <EmptyState title="Sin pedidos" description="No hay pedidos que coincidan con los filtros." />
+        filteredBatches.length === 0 ? (
+          <EmptyState title="Sin pedidos" description={batchStatusFilter ? "No hay tickets con ese estado." : "No hay pedidos que coincidan con los filtros."} />
         ) : (
           <>
             <Card className="overflow-hidden p-0">
@@ -279,14 +315,12 @@ export default function AdminOrdersPage() {
                       <TableHead>Artículos</TableHead>
                       <TableHead>Total</TableHead>
                       <TableHead>Estado</TableHead>
-                      <TableHead>Acciones</TableHead>
                       <TableHead className="w-10"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {batches.map((batch) => {
+                    {filteredBatches.map((batch) => {
                       const summary = formatItemSummary(batch.items);
-                      const hasPaid = batch.items.some((i) => i.status === "PAID");
 
                       return (
                         <TableRow
@@ -313,15 +347,6 @@ export default function AdminOrdersPage() {
                             <BatchStatusBadge status={batch.generalStatus} />
                           </TableCell>
                           <TableCell>
-                            <div onClick={(e) => e.stopPropagation()}>
-                              {hasPaid && (
-                                <Button size="sm" onClick={() => handleDeliverBatch(batch.id)}>
-                                  Entregar todo
-                                </Button>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
                             <LinkArrow variant="static" size="sm" className="relative right-auto top-auto" />
                           </TableCell>
                         </TableRow>
@@ -342,8 +367,8 @@ export default function AdminOrdersPage() {
         )
       ) : (
         /* ── Pestaña Artículos (orders sueltos) ── */
-        orders.length === 0 ? (
-          <EmptyState title="Sin artículos" description="No hay artículos que coincidan con los filtros." />
+        filteredOrders.length === 0 ? (
+          <EmptyState title="Sin artículos" description={orderStatusFilter ? "No hay artículos con ese estado." : "No hay artículos que coincidan con los filtros."} />
         ) : (
           <>
             <Card className="overflow-hidden p-0">
@@ -362,13 +387,13 @@ export default function AdminOrdersPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {orders.map((order) => {
+                    {filteredOrders.map((order) => {
                       const status = ORDER_STATUS_MAP[order.status] ?? ORDER_STATUS_MAP.PAID;
                       return (
                         <TableRow
                           key={order.id}
                           className="cursor-pointer hover:bg-primary/5"
-                          onClick={() => router.push(`/dashboard/admin/shop/orders/${order.id}`)}
+                          onClick={() => router.push(`/dashboard/admin/shop/orders/${order.id}?from=items`)}
                         >
                           <TableCell className="text-text-muted text-sm whitespace-nowrap">
                             {formatShortDate(order.purchaseDate)}
@@ -398,7 +423,7 @@ export default function AdminOrdersPage() {
                                 </Button>
                               )}
                               {(order.status === "PAID" || order.status === "DELIVERED") && (
-                                <Button variant="danger" size="sm" onClick={() => handleReturnItem(order.id)}>
+                                <Button variant="danger" size="sm" onClick={() => handleReturnItem(order.id, order.product.name)}>
                                   Devolver
                                 </Button>
                               )}
@@ -427,6 +452,18 @@ export default function AdminOrdersPage() {
           </>
         )
       )}
+
+      {/* Modal de confirmación de devolución */}
+      <ConfirmModal
+        open={!!returnModal}
+        onClose={() => setReturnModal(null)}
+        onConfirm={confirmReturn}
+        loading={returning}
+        title="Confirmar devolución"
+        description={returnModal ? `¿Procesar devolución de "${returnModal.productName}"? Se reembolsarán los ShopTokens al usuario.` : ""}
+        confirmLabel="Procesar devolución"
+        variant="danger"
+      />
     </div>
   );
 }

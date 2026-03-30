@@ -194,10 +194,13 @@ export default function StudentProductDetailPage() {
 
   // Cuando termina el overlay → redirigir al detalle del ticket
   const handlePurchaseComplete = useCallback((batchId: string | null) => {
-    setPurchaseState({ active: false, promise: null });
     if (batchId) {
       addToast("Compra realizada correctamente", "success");
+      // No desactivamos el overlay — se mantiene visible hasta que
+      // router.replace() desmonte este componente al navegar
       router.replace(`/dashboard/student/shop/orders/batch/${batchId}`);
+    } else {
+      setPurchaseState({ active: false, promise: null });
     }
   }, [router, addToast]);
 

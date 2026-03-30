@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
@@ -48,7 +48,15 @@ interface OrderDetail {
 
 export default function AdminOrderDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const { addToast } = useToast();
+
+  const from = searchParams.get("from");
+  const batchId = searchParams.get("batchId");
+  const backHref = from === "batch" && batchId
+    ? `/dashboard/admin/shop/orders/batch/${batchId}`
+    : "/dashboard/admin/shop/orders?tab=items";
+  const backLabel = from === "batch" ? "Volver al pedido" : "Volver a artículos";
 
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -105,7 +113,7 @@ export default function AdminOrderDetailPage() {
   if (!order) {
     return (
       <div className="space-y-6">
-        <BackLink href="/dashboard/admin/shop/orders" label="Volver a pedidos" />
+        <BackLink href={backHref} label={backLabel} />
         <p className="text-text-muted">Pedido no encontrado.</p>
       </div>
     );
@@ -117,7 +125,7 @@ export default function AdminOrderDetailPage() {
 
   return (
     <div className="space-y-6">
-      <BackLink href="/dashboard/admin/shop/orders" label="Volver a pedidos" />
+      <BackLink href={backHref} label={backLabel} />
 
       <div>
         <h1 className="text-2xl font-bold text-text">Detalle del artículo</h1>

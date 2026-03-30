@@ -72,11 +72,9 @@ export function PurchaseOverlay({ productName, purchasePromise, onComplete }: Pu
 
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center space-y-8 py-20">
-      {/* Icono animado */}
-      <div className="grid h-20 w-20 place-items-center rounded-2xl bg-primary/10 text-primary animate-pulse">
-        <div className="h-10 w-10">
-          {icons.shop}
-        </div>
+      {/* Icono animado — [&>svg] fuerza el tamaño sobre el h-5 w-5 de icons */}
+      <div className="grid h-20 w-20 place-items-center rounded-2xl bg-primary/10 text-primary animate-pulse [&>svg]:h-10 [&>svg]:w-10">
+        {icons.shop}
       </div>
 
       {/* Nombre del producto */}

@@ -19,13 +19,13 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Drawer } from "@/components/ui/Drawer";
 import { Button } from "@/components/ui/Button";
 import { QuantitySelector } from "@/components/ui/QuantitySelector";
 import { ProductImage } from "@/components/shared/ProductImage";
 import { PurchaseConfirmModal, type PurchaseItem } from "@/components/shared/PurchaseConfirmModal";
 import { useToast } from "@/hooks/useToast";
+import { useCart } from "@/contexts/CartContext";
 
 interface CartItem {
   id: string;
@@ -56,8 +56,8 @@ interface CartDrawerProps {
 }
 
 export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
-  const router = useRouter();
   const { addToast } = useToast();
+  const { startPurchase } = useCart();
   const [cart, setCart] = useState<CartPayload | null>(null);
   const [balance, setBalance] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -145,31 +145,34 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
     addToast("Carrito vaciado", "success");
   }
 
-  // Checkout
-  async function handleConfirmCheckout() {
-    setCheckingOut(true);
+  // Checkout — delega al overlay vía CartContext
+  function handleConfirmCheckout() {
     setConfirmOpen(false);
 
-    try {
+    // Reseteamos carrito y contador inmediatamente
+    setCart(null);
+    onCartChange?.(0, 0);
+    setCheckingOut(false);
+    onClose();
+
+    // Nombre para el overlay (resumen de artículos)
+    const itemNames = cart?.items.map((i) => i.name) ?? [];
+    const overlayName = itemNames.length <= 2
+      ? itemNames.join(", ")
+      : `${itemNames[0]} y ${itemNames.length - 1} más`;
+
+    // Crear la promise del checkout y activar el overlay
+    const checkoutPromise = (async () => {
       const res = await fetch("/api/shop/checkout", { method: "POST" });
       const body = await res.json();
-
       if (!res.ok) {
         addToast(body.error ?? "Error en el pago", "danger");
-        setCheckingOut(false);
-        return;
+        return null;
       }
+      return (body.batchId as string) ?? null;
+    })();
 
-      addToast(
-        `Compra realizada. Nuevo saldo: ${body.newBalance} ShopTokens`,
-        "success",
-      );
-      onClose();
-      router.push("/dashboard/student/shop/orders");
-    } catch {
-      addToast("Error al procesar el pago", "danger");
-      setCheckingOut(false);
-    }
+    startPurchase(checkoutPromise, overlayName);
   }
 
   const isEmpty = !cart || cart.items.length === 0;
@@ -218,16 +221,13 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
       </Button>
 
       {/* Ver carrito completo */}
-      <button
-        type="button"
-        onClick={() => {
-          onClose();
-          router.push("/dashboard/student/shop/cart");
-        }}
-        className="w-full text-center text-sm text-text-muted hover:text-primary transition-colors cursor-pointer underline"
+      <a
+        href="/dashboard/student/shop/cart"
+        onClick={() => onClose()}
+        className="w-full text-center text-sm text-text-muted hover:text-primary transition-colors cursor-pointer underline block"
       >
         Ver carrito completo
-      </button>
+      </a>
     </div>
   ) : undefined;
 
@@ -316,7 +316,7 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
                         type="button"
                         onClick={() => removeItem(item.id)}
                         className="rounded p-1 text-text-muted hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer"
-                        aria-label="Eliminar"
+                        aria-label="Eliminar "
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
                           <path d="M18 6L6 18M6 6l12 12" />

@@ -45,6 +45,7 @@ export default function AddVariantPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          name: values.name,
           color: values.color,
           variantLabel: values.variantLabel || undefined,
           stock: values.stock,

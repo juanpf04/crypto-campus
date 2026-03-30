@@ -253,7 +253,7 @@ export default function StudentCartPage() {
                 type="button"
                 onClick={() => removeItem(item.id)}
                 className="shrink-0 rounded-md p-1.5 text-text-muted hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer"
-                aria-label="Eliminar producto"
+                aria-label="Desactivar producto"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
                   <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
@@ -271,23 +271,23 @@ export default function StudentCartPage() {
               <p className="text-xl font-bold text-primary">{cart.total} ShopTokens</p>
             </div>
 
-            <Button
-              onClick={() => setConfirmOpen(true)}
-              disabled={checkingOut}
-              loading={checkingOut}
-              className="w-full"
-              size="lg"
-            >
-              {checkingOut ? "Procesando..." : "Finalizar compra"}
-            </Button>
-
-            <Button
-              variant="outline"
-              onClick={() => router.push("/dashboard/student/shop")}
-              className="w-full"
-            >
-              &larr; Seguir comprando
-            </Button>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => router.push("/dashboard/student/shop")}
+                className="flex-1"
+              >
+                &larr; Seguir comprando
+              </Button>
+              <Button
+                onClick={() => setConfirmOpen(true)}
+                disabled={checkingOut}
+                loading={checkingOut}
+                className="flex-1"
+              >
+                Finalizar compra
+              </Button>
+            </div>
           </Card>
         </div>
       )}
