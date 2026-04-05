@@ -104,8 +104,10 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
     }
 
     modifier onlyLibrarian() {
-        if (!campusRoles.hasRole(campusRoles.LIBRARIAN_ROLE(), msg.sender))
-            revert NotLibrarian();
+        if (
+            !campusRoles.hasRole(campusRoles.LIBRARIAN_ROLE(), msg.sender) &&
+            !campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender)
+        ) revert NotLibrarian();
         _;
     }
 

@@ -30,4 +30,5 @@ export { Drawer } from "./Drawer";
 export { FloatingActionBar } from "./FloatingActionBar";
 export { SelectAllCheckbox } from "./SelectAllCheckbox";
 export { AddCard } from "./AddCard";
+export { FilterPills } from "./FilterPills";
 export { icons } from "./icons";

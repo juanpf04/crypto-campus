@@ -53,6 +53,12 @@ export default function AdminDashboard() {
     orders: "—",
     tokensInCirculation: "—",
   });
+  const [libraryStats, setLibraryStats] = useState<{ activeItems: number | string; activeLoans: number | string; pendingRequests: number | string }>({
+    activeItems: "—", activeLoans: "—", pendingRequests: "—",
+  });
+  const [roomStats, setRoomStats] = useState<{ activeRooms: number | string; todayBookings: number | string }>({
+    activeRooms: "—", todayBookings: "—",
+  });
 
   useEffect(() => {
     if (!user) return;
@@ -82,6 +88,29 @@ export default function AdminDashboard() {
     fetch("/api/printer/logs/admin?limit=200&offset=0")
       .then((r) => r.json())
       .then((data) => setTotalPrintLogs(Array.isArray(data) ? data.length : "—"))
+      .catch(() => {});
+
+    // Estadísticas de la biblioteca
+    fetch("/api/library/stats")
+      .then((r) => r.json())
+      .then((data) => {
+        setLibraryStats({
+          activeItems: data.activeItems ?? "—",
+          activeLoans: data.activeLoans ?? "—",
+          pendingRequests: data.pendingRequests ?? "—",
+        });
+      })
+      .catch(() => {});
+
+    // Estadísticas de salas
+    fetch("/api/rooms/stats")
+      .then((r) => r.json())
+      .then((data) => {
+        setRoomStats({
+          activeRooms: data.activeRooms ?? "—",
+          todayBookings: data.todayBookings ?? "—",
+        });
+      })
       .catch(() => {});
 
     // Estadísticas de la tienda
@@ -150,10 +179,52 @@ export default function AdminDashboard() {
       {/* ── Sección: Biblioteca ── */}
       <section className="space-y-4">
         <SectionTitle icon={icons.library}>Biblioteca</SectionTitle>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard title="Libros en catálogo" value="—" subtitle="Títulos registrados" icon={icons.library} />
-          <StatCard title="Préstamos activos" value="—" subtitle="En curso" icon={icons.loans} />
-          <StatCard title="Tokens LIB en circulación" value="—" subtitle="Total emitidos" icon={icons.token} />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Link href="/dashboard/admin/library/items" className="group">
+            <Card className="relative h-full hover:border-primary/50 transition-colors">
+              <div className="flex items-center gap-4">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                  {icons.library}
+                </div>
+                <div>
+                  <p className="text-sm text-text-muted">Ítems en catálogo</p>
+                  <p className="text-2xl font-bold text-text">{libraryStats.activeItems}</p>
+                  <p className="text-xs text-text-muted">Títulos activos</p>
+                </div>
+              </div>
+              <ClickableArrow />
+            </Card>
+          </Link>
+          <Link href="/dashboard/admin/library/loans" className="group">
+            <Card className="relative h-full hover:border-primary/50 transition-colors">
+              <div className="flex items-center gap-4">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                  {icons.loans}
+                </div>
+                <div>
+                  <p className="text-sm text-text-muted">Préstamos activos</p>
+                  <p className="text-2xl font-bold text-text">{libraryStats.activeLoans}</p>
+                  <p className="text-xs text-text-muted">{libraryStats.pendingRequests} pendientes</p>
+                </div>
+              </div>
+              <ClickableArrow />
+            </Card>
+          </Link>
+          <Link href="/dashboard/admin/library/rooms" className="group">
+            <Card className="relative h-full hover:border-primary/50 transition-colors">
+              <div className="flex items-center gap-4">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                  {icons.rooms}
+                </div>
+                <div>
+                  <p className="text-sm text-text-muted">Salas activas</p>
+                  <p className="text-2xl font-bold text-text">{roomStats.activeRooms}</p>
+                  <p className="text-xs text-text-muted">{roomStats.todayBookings} reservas hoy</p>
+                </div>
+              </div>
+              <ClickableArrow />
+            </Card>
+          </Link>
         </div>
       </section>
 

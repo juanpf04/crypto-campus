@@ -28,6 +28,10 @@ export default function StudentDashboard() {
   const [printCredits, setPrintCredits] = useState<number | string>("—");
   const [printCount, setPrintCount] = useState<number | string>("—");
 
+  // Datos reales de la biblioteca
+  const [libBalance, setLibBalance] = useState<number | string>("—");
+  const [activeLoans, setActiveLoans] = useState<number | string>("—");
+
   // Datos reales de la tienda
   const [shopBalance, setShopBalance] = useState<number | string>("—");
   const [ticketCount, setTicketCount] = useState<number | string>("—");
@@ -46,6 +50,21 @@ export default function StudentDashboard() {
     fetch("/api/printer/logs?limit=100&offset=0")
       .then((r) => r.json())
       .then((data) => setPrintCount(Array.isArray(data) ? data.length : "—"))
+      .catch(() => {});
+
+    // Balance de LibraryTokens
+    fetch("/api/library/balance")
+      .then((r) => r.json())
+      .then((data) => setLibBalance(data.balance ?? "—"))
+      .catch(() => {});
+
+    // Préstamos activos del estudiante
+    fetch("/api/library/loans/my")
+      .then((r) => r.json())
+      .then((data) => {
+        const loans = Array.isArray(data) ? data : [];
+        setActiveLoans(loans.filter((l: { status: string }) => l.status === "REQUESTED" || l.status === "APPROVED").length);
+      })
       .catch(() => {});
 
     // Balance de ShopTokens
@@ -112,18 +131,36 @@ export default function StudentDashboard() {
       <section className="space-y-4">
         <SectionTitle icon={icons.library}>Biblioteca</SectionTitle>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard
-            title="Tokens LIB"
-            value="—"
-            subtitle="Balance actual"
-            icon={icons.library}
-          />
-          <StatCard
-            title="Préstamos activos"
-            value="—"
-            subtitle="En curso"
-            icon={icons.loans}
-          />
+          <Link href="/dashboard/student/library" className="group relative block">
+            <StatCard
+              title="LibraryTokens"
+              value={libBalance}
+              subtitle="Balance actual"
+              icon={icons.library}
+              className="h-full transition-colors group-hover:border-primary/50"
+            />
+            <LinkArrow />
+          </Link>
+          <Link href="/dashboard/student/library" className="group relative block">
+            <StatCard
+              title="Préstamos activos"
+              value={activeLoans}
+              subtitle="Solicitados o en curso"
+              icon={icons.loans}
+              className="h-full transition-colors group-hover:border-primary/50"
+            />
+            <LinkArrow />
+          </Link>
+          <Link href="/dashboard/student/library/rooms" className="group relative block">
+            <StatCard
+              title="Salas de estudio"
+              value=""
+              subtitle="Reservar sala para hoy"
+              icon={icons.rooms}
+              className="h-full transition-colors group-hover:border-primary/50"
+            />
+            <LinkArrow />
+          </Link>
         </div>
       </section>
 

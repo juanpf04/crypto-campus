@@ -1,0 +1,58 @@
+[
+  {
+    "name": "Sala 1",
+    "description": "Sala grande para grupos de trabajo y reuniones.",
+    "location": "Planta baja, Biblioteca",
+    "capacity": 10,
+    "amenities": { "projector": true, "whiteboard": true, "powerOutlets": true, "airConditioning": true }
+  },
+  {
+    "name": "Sala 2",
+    "description": "Sala pequeña para estudio individual o en pareja.",
+    "location": "Primera planta, Biblioteca",
+    "capacity": 4,
+    "amenities": { "whiteboard": true, "powerOutlets": true, "airConditioning": true }
+  },
+  {
+    "name": "Sala 3",
+    "description": "Sala de estudio en grupo.",
+    "location": "Primera planta, Biblioteca",
+    "capacity": 6,
+    "amenities": { "whiteboard": true, "powerOutlets": true, "airConditioning": true }
+  },
+  {
+    "name": "Sala 4",
+    "description": "Sala de estudio en grupo.",
+    "location": "Primera planta, Biblioteca",
+    "capacity": 6,
+    "amenities": { "whiteboard": true, "powerOutlets": true, "airConditioning": true }
+  },
+  {
+    "name": "Sala 5",
+    "description": "Sala de estudio en grupo.",
+    "location": "Primera planta, Biblioteca",
+    "capacity": 6,
+    "amenities": { "whiteboard": true, "powerOutlets": true, "airConditioning": true }
+  },
+  {
+    "name": "Sala 6",
+    "description": "Sala de estudio en grupo.",
+    "location": "Primera planta, Biblioteca",
+    "capacity": 6,
+    "amenities": { "whiteboard": true, "powerOutlets": true, "airConditioning": true }
+  },
+  {
+    "name": "Sala 7",
+    "description": "Sala de estudio en grupo.",
+    "location": "Primera planta, Biblioteca",
+    "capacity": 6,
+    "amenities": { "whiteboard": true, "powerOutlets": true, "airConditioning": true }
+  },
+  {
+    "name": "Sala 8",
+    "description": "Sala de estudio en grupo.",
+    "location": "Primera planta, Biblioteca",
+    "capacity": 6,
+    "amenities": { "whiteboard": true, "powerOutlets": true, "airConditioning": true }
+  }
+]

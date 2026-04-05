@@ -43,6 +43,7 @@ import BadgeSystemArtifact from "../../../hardhat/artifacts/contracts/BadgeSyste
 import PrinterArtifact from "../../../hardhat/artifacts/contracts/Printer.sol/Printer.json";
 import LibraryManagerArtifact from "../../../hardhat/artifacts/contracts/LibraryManager.sol/LibraryManager.json";
 import CampusShopArtifact from "../../../hardhat/artifacts/contracts/CampusShop.sol/CampusShop.json";
+import RoomBookingArtifact from "../../../hardhat/artifacts/contracts/RoomBooking.sol/RoomBooking.json";
 
 /**
  * Direcciones de los contratos en la red local Hardhat (chain ID 31337).
@@ -53,11 +54,12 @@ import CampusShopArtifact from "../../../hardhat/artifacts/contracts/CampusShop.
 export const CONTRACT_ADDRESSES = {
   campusRoles:         "0x5FbDB2315678afecb367f032d93F642f64180aa3",
   libraryToken:        "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
-  shopToken:           "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
+  shopToken:           "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
   badgeSystem:         "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
   printer:             "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
-  libraryManager:      "0x0165878A594ca255338adfa4d48449f69242Eb8F",
-  campusShop:          "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
+  libraryManager:      "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853",
+  campusShop:          "0x0165878A594ca255338adfa4d48449f69242Eb8F",
+  roomBooking:         "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
 } as const;
 
 /** ABIs extraídos de los artifacts de compilación de Hardhat */
@@ -68,6 +70,7 @@ export const BADGE_SYSTEM_ABI          = BadgeSystemArtifact.abi;
 export const PRINTER_ABI               = PrinterArtifact.abi;
 export const LIBRARY_MANAGER_ABI       = LibraryManagerArtifact.abi;
 export const CAMPUS_SHOP_ABI           = CampusShopArtifact.abi;
+export const ROOM_BOOKING_ABI          = RoomBookingArtifact.abi;
 
 /**
  * Hashes de roles para CampusRoles.

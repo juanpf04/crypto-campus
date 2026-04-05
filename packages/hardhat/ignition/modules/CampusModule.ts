@@ -13,6 +13,7 @@ import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
  *   5. Printer              — necesita CampusRoles
  *   6. LibraryManager       — necesita CampusRoles + LibraryToken
  *   7. CampusShop           — necesita CampusRoles + ShopToken
+ *   8. RoomBooking          — necesita CampusRoles
  *
  * Post-despliegue:
  *   - LibraryToken.setTrustedSpender(LibraryManager)
@@ -53,6 +54,9 @@ export default buildModule("CampusModule", (m) => {
     shopUri,
   ]);
 
+  // 8. RoomBooking
+  const roomBooking = m.contract("RoomBooking", [campusRoles]);
+
   // Post-despliegue: configurar trusted spenders
   // LibraryManager puede gastar LibraryTokens de los estudiantes sin approve individual.
   m.call(libraryToken, "setTrustedSpender", [libraryManager], {
@@ -72,5 +76,6 @@ export default buildModule("CampusModule", (m) => {
     printer,
     libraryManager,
     campusShop,
+    roomBooking,
   };
 });

@@ -38,6 +38,7 @@ model User {
   cart              Cart?
   topupSimulations  CardTopupSimulation[]
   paymentLogs       PaymentSimulationLog[]
+  roomBookings      RoomBooking[]
   badgeAwards       BadgeAward[]
   awardedBadgesTo   BadgeAward[]     @relation("AwardedBy")
   badgeTypesCreated BadgeType[]      @relation("BadgeTypeCreator")
@@ -240,6 +241,45 @@ model Loan {
 
   libraryItem LibraryItem @relation(fields: [libraryItemId], references: [id])
   user        User        @relation(fields: [userId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────
+// SALAS DE ESTUDIO
+// ─────────────────────────────────────────────────────────────
+
+model Room {
+  id          String    @id @default(cuid())
+  roomId      Int       @unique        // ID on-chain en RoomBooking
+  name        String                   // "Sala 1", "Sala de Estudio A"
+  description String?
+  location    String?                  // "Planta 2, ala norte"
+  capacity    Int
+  amenities   Json?                    // { "projector": true, "whiteboard": true }
+  imageUrl    String?
+  active      Boolean   @default(true)
+  txHash      String
+  createdAt   DateTime  @default(now())
+
+  bookings    RoomBooking[]
+}
+
+model RoomBooking {
+  id          String   @id @default(cuid())
+  bookingId   Int      @unique         // ID on-chain en RoomBooking
+  roomId      String
+  userId      String
+  date        DateTime                 // dia (sin hora, truncado a medianoche)
+  startHour   Int                      // 0-23
+  duration    Int                      // 1-4
+  cancelled   Boolean  @default(false)
+  txHash      String
+  createdAt   DateTime @default(now())
+
+  room        Room     @relation(fields: [roomId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([roomId, date])
+  @@index([userId, date])
 }
 
 // ─────────────────────────────────────────────────────────────
