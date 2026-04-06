@@ -37,7 +37,13 @@ pnpm dev
 
 3. Abre la DApp en `http://localhost:3000`.
 
-Si quieres resetear Prisma en local:
+> [!WARNING]
+> **Docker debe estar corriendo.** Si `docker compose` no está disponible, el comando `pnpm dev` fallará. Asegúrate de tener Docker Desktop abierto antes de ejecutar el comando.
+
+> [!NOTE]
+> El comando `pnpm dev` levanta automáticamente la base de datos, compila y despliega los contratos, y arranca el frontend. La primera ejecución puede tardar un poco.
+
+Si quieres resetear la BD en local:
 
 ```bash
 pnpm run db:reset
@@ -98,6 +104,14 @@ cd packages/hardhat
 pnpm hardhat ignition deploy ignition/modules/Counter.ts --network hardhatMainnet
 ```
 
+> [!TIP]
+> **Para desarrollo local, se puede usar `pnpm dev` desde la raíz**, que automáticamente:
+> - Arranca el nodo de Hardhat
+> - Despliega los contratos
+> - Configura la BD
+> 
+> No necesitas ejecutar `hardhat node` manualmente ni usar el flag `--network hardhatMainnet` desde `packages/hardhat`.
+
 ## DApp Frontend (Next.js)
 
 ### Dependencias principales
@@ -138,6 +152,11 @@ SESSION_SECRET="tu-secreto-local"
 
 `DATABASE_URL` se usa en Prisma y `SESSION_SECRET` para cifrado de claves privadas/sesiones.
 
+> [!IMPORTANT]
+> - **`DATABASE_URL`**: Debe coincidir exactamente con la configuración de `docker-compose.yaml` (usuario: `root`, contraseña: `root`, puerto: `5435`, BD: `cryptocampusdb`)
+> - **`SESSION_SECRET`**: Cualquier string aleatorio de al menos 32 caracteres.
+> - Este archivo **NO se debe subir** al repositorio (está en `.gitignore`).
+
 ## Desarrollo — Arrancar todo con un solo comando
 
 ```bash
@@ -155,9 +174,11 @@ Este comando ejecuta el script [`scripts/dev.mjs`](scripts/dev.mjs), que automá
 7. Limpia archivos de impresión expirados
 8. Arranca **Next.js** en `http://localhost:3000`
 
-Para detener todos los procesos: `Ctrl + C`.
+> [!NOTE]
+> Para detener todos los procesos: `Ctrl + C`.
 
-> Si Docker no está activo, `pnpm dev` abortará con un mensaje de error indicando que debes iniciar Docker Desktop.
+> [!WARNING]
+> Si Docker no está corriendo, `pnpm dev` abortará con un mensaje de error.
 
 ## Configuración de MetaMask
 
@@ -195,22 +216,46 @@ El nodo de Hardhat genera cuentas de prueba con 10 000 ETH cada una. Para import
 3. Selecciona **MetaMask** y aprueba la conexión
 4. Asegúrate de estar en la red **Hardhat Local** (chain ID 31337)
 
-## Comandos disponibles (raíz del monorepo)
+## Comandos disponibles
+
+> [!TIP]
+> Ejecuta todos los comandos **desde la raíz del proyecto** (`CryptoCampus/`). No es necesario entrar en `packages/hardhat` o `packages/nextjs`.
+
+### 🚀 Desarrollo principal
 
 | Comando | Descripción |
 |---|---|
-| `pnpm dev` | Arranca PostgreSQL + nodo Hardhat + deploy + Next.js (todo en uno) |
-| `pnpm dev:next` | Arranca solo el frontend Next.js |
-| `pnpm run db:up` | Levanta PostgreSQL local (`docker compose up -d db`) |
-| `pnpm run db:down` | Apaga contenedores Docker Compose |
-| `pnpm run db:logs` | Sigue logs del contenedor PostgreSQL |
-| `pnpm run db:reset` | Ejecuta `prisma db push --force-reset` en `packages/nextjs` |
-| `pnpm --filter nextjs run db:push` | Sincroniza el esquema Prisma sin reset |
-| `pnpm --filter nextjs run db:studio` | Abre Prisma Studio |
-| `pnpm compile` | Compila los smart contracts |
-| `pnpm test` | Ejecuta los tests de los contratos |
-| `pnpm deploy` | Despliega contratos en red local |
-| `pnpm build` | Build de producción del frontend |
-| `pnpm start` | Sirve el build de producción |
-| `pnpm lint` | Ejecuta el linter del frontend |
+| `pnpm dev` | Arranca todo: PostgreSQL + nodo Hardhat + deploy contratos + Next.js (recomendado) |
+| `pnpm dev:next` | Arranca solo el frontend Next.js (requiere que Hardhat ya esté corriendo) |
+
+### 🗄️ Base de datos (PostgreSQL + Prisma)
+
+| Comando | Descripción |
+|---|---|
+| `pnpm run db:up` | Levanta el contenedor PostgreSQL en Docker (`docker compose up -d db`) |
+| `pnpm run db:down` | Detiene y elimina el contenedor PostgreSQL |
+| `pnpm run db:logs` | Muestra logs en vivo del contenedor PostgreSQL |
+| `pnpm run db:push` | Sincroniza el esquema Prisma con BD (sin eliminar datos) |
+| `pnpm run db:reset` | **Reinicia BD completamente** - elimina datos y sincroniza esquema (`prisma db push --force-reset`) |
+| `pnpm run db:generate` | Regenera el cliente Prisma (ejecutar si cambias `schema.prisma`) |
+| `pnpm run db:studio` | Abre [Prisma Studio](https://www.prisma.io/studio) en `http://localhost:5555` |
+
+> [!WARNING]
+> **`pnpm run db:reset` elimina TODOS los datos de la BD.** Úsalo solo en desarrollo local cuando necesites empezar desde cero. Si solo quieres aplicar cambios al esquema sin perder datos, usa `pnpm run db:push`.
+
+### 🔗 Smart Contracts (Hardhat)
+
+| Comando | Descripción |
+|---|---|
+| `pnpm compile` | Compila todos los contratos Solidity (`hardhat compile`) |
+| `pnpm test` | Ejecuta los tests de contratos (Foundry + Hardhat) |
+| `pnpm deploy` | Despliega contratos en red local via Hardhat Ignition |
+
+### 🎨 Frontend (Next.js)
+
+| Comando | Descripción |
+|---|---|
+| `pnpm build` | Genera build optimizado de producción |
+| `pnpm start` | Sirve el build de producción en `http://localhost:3000` |
+| `pnpm lint` | Ejecuta ESLint para validar código (`packages/nextjs`) |
 
