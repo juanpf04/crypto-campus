@@ -36,9 +36,10 @@ export async function POST(req: NextRequest) {
 		const result = await requestLoan(itemId);
 		return NextResponse.json(result, { status: 201 });
 	} catch (error) {
-		console.error("[POST /api/library/loans]", error);
 		const message = error instanceof Error ? error.message : "Error al solicitar préstamo";
-		const status = message === "No autorizado" ? 403 : 500;
+		const isValidation = message.includes("Ya tienes") || message.includes("no encontrado") || message.includes("inactivo");
+		const status = message === "No autorizado" ? 403 : isValidation ? 400 : 500;
+		if (status === 500) console.error("[POST /api/library/loans]", error);
 		return NextResponse.json({ error: message }, { status });
 	}
 }

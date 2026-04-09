@@ -26,5 +26,12 @@ export const TYPE_LABELS: Record<string, string> = {
   OTHER: "Otro",
 };
 
+export const TYPE_EMOJI: Record<string, string> = {
+  BOOK: "\u{1F4DA}",
+  BOARD_GAME: "\u{1F3B2}",
+  VIDEO_GAME: "\u{1F3AE}",
+  OTHER: "\u{1F4E6}",
+};
+
 export type LibraryTypeFilter = "ALL" | "BOOK" | "BOARD_GAME" | "VIDEO_GAME" | "OTHER";
 export type LoanStatusFilter = "ALL" | "REQUESTED" | "APPROVED" | "REJECTED" | "RETURNED";

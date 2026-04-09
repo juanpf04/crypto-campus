@@ -51,6 +51,9 @@ contract LibraryManagerTest is Test {
         vm.prank(student);
         libraryManager.requestLoan(1);
 
+        // Deposit locked on request
+        assertEq(libraryToken.balanceOf(student), 9);
+
         vm.prank(librarian);
         libraryManager.approveLoan(1);
 
@@ -67,6 +70,7 @@ contract LibraryManagerTest is Test {
     function test_ForceReturnOverdueKeepsDeposit() public {
         vm.prank(student);
         libraryManager.requestLoan(1);
+        assertEq(libraryToken.balanceOf(student), 9);
 
         vm.prank(librarian);
         libraryManager.approveLoan(1);
@@ -77,6 +81,7 @@ contract LibraryManagerTest is Test {
         libraryManager.forceReturn(1);
 
         assertEq(libraryManager.balanceOf(student, 1), 0);
+        // Deposit NOT returned (penalty)
         assertEq(libraryToken.balanceOf(student), 9);
     }
 
@@ -103,15 +108,18 @@ contract LibraryManagerTest is Test {
         libraryManager.addCopies(1, 0);
     }
 
-    function test_RejectLoan() public {
+    function test_RejectLoanReturnsDeposit() public {
         vm.prank(student);
         libraryManager.requestLoan(1);
+        assertEq(libraryToken.balanceOf(student), 9);
 
         vm.prank(librarian);
         libraryManager.rejectLoan(1, "Not available");
 
         LibraryManager.Loan memory loan = libraryManager.getLoanInfo(1);
         assertEq(uint256(loan.status), uint256(LibraryManager.LoanStatus.Rejected));
+        // Deposit returned
+        assertEq(libraryToken.balanceOf(student), 10);
     }
 
     function test_RevertAddBookZeroCopies() public {
@@ -150,9 +158,10 @@ contract LibraryManagerTest is Test {
         libraryManager.forceReturn(1);
     }
 
-    function test_CancelLoanRequest() public {
+    function test_CancelLoanRequestReturnsDeposit() public {
         vm.prank(student);
         libraryManager.requestLoan(1);
+        assertEq(libraryToken.balanceOf(student), 9);
 
         vm.prank(student);
         libraryManager.cancelLoanRequest(1);
@@ -160,6 +169,8 @@ contract LibraryManagerTest is Test {
         LibraryManager.Loan memory loan = libraryManager.getLoanInfo(1);
         // cancelLoanRequest deja el estado en Rejected (reutilizado para cancelaciones).
         assertEq(uint256(loan.status), uint256(LibraryManager.LoanStatus.Rejected));
+        // Deposit returned
+        assertEq(libraryToken.balanceOf(student), 10);
     }
 
     function test_PauseAndUnpause() public {
@@ -192,5 +203,25 @@ contract LibraryManagerTest is Test {
         vm.warp(block.timestamp + 22 days);
 
         assertTrue(libraryManager.isOverdue(1));
+    }
+
+    function test_RevertRequestLoanAlreadyPending() public {
+        vm.prank(student);
+        libraryManager.requestLoan(1);
+
+        // Segunda solicitud del mismo libro mientras la primera esta pendiente
+        vm.prank(student);
+        vm.expectRevert(abi.encodeWithSelector(LibraryManager.AlreadyBorrowingBook.selector, student, 1));
+        libraryManager.requestLoan(1);
+    }
+
+    function test_RevertRequestLoanInsufficientDeposit() public {
+        // Quemar todos los tokens del estudiante
+        libraryToken.burn(student, 10);
+        assertEq(libraryToken.balanceOf(student), 0);
+
+        vm.prank(student);
+        vm.expectRevert(abi.encodeWithSelector(LibraryManager.InsufficientDeposit.selector, student));
+        libraryManager.requestLoan(1);
     }
 }

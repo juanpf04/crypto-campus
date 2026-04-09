@@ -34,8 +34,13 @@ export function LoanCard({ title, creator, status, dueDate, cancellable, onCance
           Vence: {new Date(dueDate).toLocaleDateString("es-ES")}
         </p>
       )}
+      {status === "APPROVED" && (
+        <p className="text-xs text-text-muted italic">
+          Para devolver este ítem, acude a la biblioteca. El bibliotecario confirmará la devolución.
+        </p>
+      )}
       {cancellable && onCancel && (
-        <Button size="sm" variant="ghost" onClick={onCancel}>
+        <Button size="sm" variant="danger" onClick={onCancel}>
           Cancelar solicitud
         </Button>
       )}

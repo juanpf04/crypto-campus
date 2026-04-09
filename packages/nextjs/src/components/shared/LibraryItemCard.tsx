@@ -2,14 +2,16 @@
 
 /**
  * LibraryItemCard — Tarjeta de ítem de biblioteca para el catálogo del estudiante.
- * Molécula que compone Card + Badge + Button + Link.
- * La tarjeta es clicable (navega al detalle), el botón de préstamo tiene stopPropagation.
+ * Muestra cabecera visual con emoji/cover, badge de tipo, título, autor,
+ * descripción, copias y botón de solicitud alineado al fondo.
  */
 
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { TYPE_LABELS } from "@/lib/library-constants";
+import { LinkArrow } from "@/components/shared/LinkArrow";
+import { TYPE_LABELS, TYPE_EMOJI } from "@/lib/library-constants";
 
 interface LibraryItemCardProps {
   id: string;
@@ -17,7 +19,9 @@ interface LibraryItemCardProps {
   type: string;
   creator: string | null;
   description: string | null;
+  coverUrl?: string | null;
   totalCopies: number;
+  availableCopies?: number;
   onRequestLoan: () => void;
   requesting?: boolean;
   /** Base URL para el detalle (por defecto /dashboard/student/library) */
@@ -30,36 +34,66 @@ export function LibraryItemCard({
   type,
   creator,
   description,
+  coverUrl,
   totalCopies,
+  availableCopies,
   onRequestLoan,
   requesting,
   detailBase = "/dashboard/student/library",
 }: LibraryItemCardProps) {
   return (
     <Link href={`${detailBase}/${id}`} className="block group">
-      <Card className="p-4 space-y-3 transition-colors group-hover:border-primary/50">
-        <div>
-          <div className="flex items-start justify-between">
-            <p className="font-medium text-text group-hover:text-primary transition-colors">{title}</p>
-            <span className="text-xs text-text-muted bg-surface px-2 py-0.5 rounded-full shrink-0 ml-2">
-              {TYPE_LABELS[type] || type}
+      <Card className="relative h-full flex flex-col overflow-hidden p-0 transition-colors group-hover:border-primary/50">
+        {/* Cabecera visual */}
+        <div className="flex h-40 items-center justify-center bg-primary/5 shrink-0">
+          {coverUrl ? (
+            <img
+              src={coverUrl}
+              alt={title}
+              className="h-full w-full object-contain p-4"
+            />
+          ) : (
+            <span className="text-5xl" role="img" aria-label={TYPE_LABELS[type] || type}>
+              {TYPE_EMOJI[type] || "\u{1F4E6}"}
             </span>
-          </div>
-          {creator && <p className="text-sm text-text-muted">{creator}</p>}
-          {description && (
-            <p className="text-sm text-text-muted mt-1 line-clamp-2">{description}</p>
           )}
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-text-muted">{totalCopies} copias</span>
+
+        {/* Info */}
+        <div className="flex flex-col flex-1 space-y-2 p-4">
+          <Badge variant="neutral">{TYPE_LABELS[type] || type}</Badge>
+
+          <h3 className="font-semibold text-text line-clamp-2 leading-tight group-hover:text-primary transition-colors">
+            {title}
+          </h3>
+
+          {creator && (
+            <p className="text-sm text-text-muted">{creator}</p>
+          )}
+
+          {description && (
+            <p className="text-sm text-text-muted line-clamp-2">{description}</p>
+          )}
+
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-text-muted">{totalCopies} copias</span>
+            {availableCopies !== undefined && (
+              <span className="text-xs text-text-muted">{availableCopies} disponibles</span>
+            )}
+          </div>
+
+          {/* Botón alineado al fondo */}
           <Button
             size="sm"
+            className="mt-auto w-full"
             onClick={(e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); onRequestLoan(); }}
             loading={requesting}
           >
             Solicitar préstamo
           </Button>
         </div>
+
+        <LinkArrow variant="fade" size="sm" className="right-3 top-3" />
       </Card>
     </Link>
   );

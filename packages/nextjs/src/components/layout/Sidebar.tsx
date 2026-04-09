@@ -1,12 +1,11 @@
 "use client";
 
-import { useState } from "react";
 import { NavBrand } from "@/components/ui/NavBrand";
 import { NavItem } from "@/components/ui/NavItem";
 import { NavGroup } from "@/components/shared/NavGroup";
 import { UserMenu } from "@/components/shared/UserMenu";
 import { ThemeSwitcher } from "@/components/shared/ThemeSwitcher";
-import { InfoPanel } from "@/components/shared/InfoPanel";
+
 import { cn } from "@/lib/utils";
 import { icons } from "@/components/ui/icons";
 import type { UserRole } from "@/types";
@@ -117,7 +116,6 @@ function getNavGroups(role: UserRole) {
 
 export function Sidebar({ name, role, collapsed = false, className }: SidebarProps) {
   const groups = getNavGroups(role);
-  const [infoOpen, setInfoOpen] = useState(false);
 
   return (
     <aside
@@ -151,24 +149,10 @@ export function Sidebar({ name, role, collapsed = false, className }: SidebarPro
 
       {/* Info + Tema + User */}
       <div className="border-t border-border-default p-3 space-y-1">
-        <button
-          type="button"
-          onClick={() => setInfoOpen(true)}
-          className={cn(
-            "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-text-muted transition-colors hover:bg-primary/5 hover:text-text cursor-pointer",
-            collapsed && "justify-center px-0",
-          )}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0">
-            <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
-          </svg>
-          {!collapsed && <span>Normas de uso</span>}
-        </button>
         <ThemeSwitcher collapsed={collapsed} />
         <UserMenu name={name} role={role} collapsed={collapsed} />
       </div>
 
-      <InfoPanel open={infoOpen} onClose={() => setInfoOpen(false)} />
     </aside>
   );
 }

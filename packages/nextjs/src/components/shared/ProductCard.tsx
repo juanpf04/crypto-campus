@@ -121,7 +121,7 @@ export function ProductCard({
 
   return (
     <Link href={`${linkBase}${selectedVariant.id}`} className="group block">
-      <Card className={`relative h-full overflow-hidden p-0 transition-colors hover:border-primary/50 ${!active ? "opacity-60" : ""}`}>
+      <Card className={`relative h-full flex flex-col overflow-hidden p-0 transition-colors hover:border-primary/50 ${!active ? "opacity-60" : ""}`}>
         {/* Badge inactivo */}
         {!active && adminMode && (
           <div className="absolute top-2 left-2 z-10">
@@ -141,7 +141,7 @@ export function ProductCard({
         </div>
 
         {/* Info del producto */}
-        <div className="space-y-2 p-4">
+        <div className="flex flex-col flex-1 space-y-2 p-4">
           {category && (
             <Badge variant="neutral">{category}</Badge>
           )}
@@ -158,7 +158,7 @@ export function ProductCard({
             maxVisible={6}
           />
 
-          <div className="flex items-center justify-between">
+          <div className="mt-auto flex items-center justify-between">
             <span className="text-lg font-bold text-primary">{priceLabel}</span>
             {isOutOfStock ? (
               <Badge variant="danger">Agotado</Badge>
@@ -173,7 +173,7 @@ export function ProductCard({
               type="button"
               onClick={handleAddToCart}
               disabled={adding}
-              className="w-full mt-1 flex items-center justify-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 py-2 text-sm font-medium text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 py-2 text-sm font-medium text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:opacity-50"
             >
               {adding ? (
                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -192,7 +192,7 @@ export function ProductCard({
 
           {/* Botones admin */}
           {adminMode && (
-            <div className="flex gap-2 mt-1">
+            <div className="flex gap-2 mt-auto">
               <button
                 type="button"
                 onClick={handleToggleActive}

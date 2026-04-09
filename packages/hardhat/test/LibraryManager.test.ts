@@ -78,9 +78,12 @@ describe("LibraryManager", async function () {
             const { libraryManager, libraryToken, librarian, student1 } = await deploySystem();
 
             await libraryManager.write.addBook([2n], { account: librarian.account });
-            await libraryManager.write.requestLoan([1n], { account: student1.account });
-            await libraryManager.write.approveLoan([1n], { account: librarian.account });
 
+            // Deposit is locked on request (not on approve)
+            await libraryManager.write.requestLoan([1n], { account: student1.account });
+            assert.equal(await libraryToken.read.balanceOf([student1.account.address]), 9n);
+
+            await libraryManager.write.approveLoan([1n], { account: librarian.account });
             assert.equal(await libraryManager.read.balanceOf([student1.account.address, 1n]), 1n);
             assert.equal(await libraryToken.read.balanceOf([student1.account.address]), 9n);
 
@@ -94,12 +97,14 @@ describe("LibraryManager", async function () {
 
             await libraryManager.write.addBook([2n], { account: librarian.account });
             await libraryManager.write.requestLoan([1n], { account: student1.account });
+            assert.equal(await libraryToken.read.balanceOf([student1.account.address]), 9n);
             await libraryManager.write.approveLoan([1n], { account: librarian.account });
 
             await increaseTime(21 * 24 * 60 * 60 + 1);
             await libraryManager.write.forceReturn([1n], { account: librarian.account });
 
             assert.equal(await libraryManager.read.balanceOf([student1.account.address, 1n]), 0n);
+            // Deposit NOT returned (penalty)
             assert.equal(await libraryToken.read.balanceOf([student1.account.address]), 9n);
         });
 
@@ -187,17 +192,22 @@ describe("LibraryManager", async function () {
     });
 
     describe("rejectLoan", function () {
-        it("Should reject a Requested loan", async function () {
-            const { libraryManager, librarian, student1 } = await deploySystem();
+        it("Should reject a Requested loan and return deposit", async function () {
+            const { libraryManager, libraryToken, librarian, student1 } = await deploySystem();
 
             await libraryManager.write.addBook([2n], { account: librarian.account });
             await libraryManager.write.requestLoan([1n], { account: student1.account });
+            assert.equal(await libraryToken.read.balanceOf([student1.account.address]), 9n);
 
             await libraryManager.write.rejectLoan([1n, "Not available"], { account: librarian.account });
 
             const loan = await libraryManager.read.getLoanInfo([1n]);
             // LoanStatus: 0=None, 1=Requested, 2=Approved, 3=Rejected, 4=Returned
             assert.equal(loan.status, 3);
+            // Deposit returned
+            assert.equal(await libraryToken.read.balanceOf([student1.account.address]), 10n);
+            // Student can request the same book again
+            assert.equal(await libraryManager.read.activeLoanByStudentAndBook([student1.account.address, 1n]), 0n);
         });
 
         it("Should revert on non-existent loan (LoanNotFound)", async function () {
@@ -323,12 +333,38 @@ describe("LibraryManager", async function () {
             });
         });
 
-        it("Should revert when already borrowing (AlreadyBorrowingBook)", async function () {
+        it("Should revert when already borrowing (AlreadyBorrowingBook) — approved", async function () {
             const { libraryManager, librarian, student1 } = await deploySystem();
 
             await libraryManager.write.addBook([2n], { account: librarian.account });
             await libraryManager.write.requestLoan([1n], { account: student1.account });
             await libraryManager.write.approveLoan([1n], { account: librarian.account });
+
+            await assert.rejects(async () => {
+                await libraryManager.write.requestLoan([1n], { account: student1.account });
+            });
+        });
+
+        it("Should revert when request already pending (AlreadyBorrowingBook)", async function () {
+            const { libraryManager, librarian, student1 } = await deploySystem();
+
+            await libraryManager.write.addBook([2n], { account: librarian.account });
+            await libraryManager.write.requestLoan([1n], { account: student1.account });
+
+            // Second request for the same book while first is still pending
+            await assert.rejects(async () => {
+                await libraryManager.write.requestLoan([1n], { account: student1.account });
+            });
+        });
+
+        it("Should revert with insufficient tokens (InsufficientDeposit)", async function () {
+            const { libraryManager, libraryToken, librarian, student1 } = await deploySystem();
+
+            await libraryManager.write.addBook([2n], { account: librarian.account });
+
+            // Burn all student tokens
+            await libraryToken.write.burn([student1.account.address, 10n]);
+            assert.equal(await libraryToken.read.balanceOf([student1.account.address]), 0n);
 
             await assert.rejects(async () => {
                 await libraryManager.write.requestLoan([1n], { account: student1.account });
@@ -343,6 +379,23 @@ describe("LibraryManager", async function () {
             await assert.rejects(async () => {
                 await libraryManager.write.requestLoan([1n], { account: outsider.account });
             });
+        });
+    });
+
+    describe("cancelLoanRequest", function () {
+        it("Should cancel a pending request and return deposit", async function () {
+            const { libraryManager, libraryToken, librarian, student1 } = await deploySystem();
+
+            await libraryManager.write.addBook([2n], { account: librarian.account });
+            await libraryManager.write.requestLoan([1n], { account: student1.account });
+            assert.equal(await libraryToken.read.balanceOf([student1.account.address]), 9n);
+
+            await libraryManager.write.cancelLoanRequest([1n], { account: student1.account });
+
+            // Deposit returned
+            assert.equal(await libraryToken.read.balanceOf([student1.account.address]), 10n);
+            // Mapping cleared — can request again
+            assert.equal(await libraryManager.read.activeLoanByStudentAndBook([student1.account.address, 1n]), 0n);
         });
     });
 

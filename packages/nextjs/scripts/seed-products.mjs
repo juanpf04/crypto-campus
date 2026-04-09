@@ -98,9 +98,11 @@ async function main() {
 
     log(`Sincronizando ${productsJson.length} producto(s) de catálogo...`);
 
-    // 1. Limpiar productos, bases, órdenes y batches anteriores de Prisma.
+    // 1. Limpiar productos, bases, órdenes, carritos y batches anteriores de Prisma.
     //    Hasta que se implemente Anvil state persistence, la blockchain se reinicia
     //    en cada pnpm dev, así que los datos viejos en Prisma son huérfanos.
+    await prisma.cartItem.deleteMany({});
+    await prisma.cart.deleteMany({});
     await prisma.order.deleteMany({});
     await prisma.orderBatch.deleteMany({});
     const deletedProducts = await prisma.product.deleteMany({});

@@ -392,6 +392,16 @@ export async function requestLoan(itemId: string) {
 		const item = await prisma.libraryItem.findUnique({ where: { id: itemId } });
 		if (!item || !item.active) throw new Error("Ítem no encontrado o inactivo");
 
+		// Verificar que no tenga ya un préstamo activo o pendiente de este ítem
+		const existingLoan = await prisma.loan.findFirst({
+			where: {
+				userId: session.userId!,
+				libraryItemId: item.id,
+				status: { in: ["REQUESTED", "APPROVED"] },
+			},
+		});
+		if (existingLoan) throw new Error("Ya tienes un préstamo activo o pendiente de este ítem");
+
 		// Leer nextLoanId antes
 		const nextLoanId = await publicClient.readContract({
 			address: CONTRACT_ADDRESSES.libraryManager as `0x${string}`,
@@ -764,19 +774,78 @@ export async function getLibraryStats() {
 	const session = await getSession();
 	ensureRole(session, ["LIBRARIAN", "ADMIN"]);
 
-	const [totalItems, activeItems, totalLoans, pendingRequests, activeLoans, overdueLoans] = await Promise.all([
+	const now = new Date();
+	const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+
+	const [
+		totalItems, activeItems, totalLoans, pendingRequests, activeLoans, overdueLoans,
+		onTimeReturned, totalReturned,
+		itemsByType, topItemsRaw, recentLoansRaw, loansLast6Months,
+	] = await Promise.all([
 		prisma.libraryItem.count(),
 		prisma.libraryItem.count({ where: { active: true } }),
 		prisma.loan.count(),
 		prisma.loan.count({ where: { status: "REQUESTED" } }),
 		prisma.loan.count({ where: { status: "APPROVED" } }),
-		prisma.loan.count({
-			where: {
-				status: "APPROVED",
-				dueDate: { lt: new Date() },
+		prisma.loan.count({ where: { status: "APPROVED", dueDate: { lt: now } } }),
+		prisma.loan.count({ where: { status: "RETURNED", overdue: false } }),
+		prisma.loan.count({ where: { status: "RETURNED" } }),
+		prisma.libraryItem.groupBy({ by: ["type"], where: { active: true }, _count: true }),
+		prisma.loan.groupBy({
+			by: ["libraryItemId"],
+			_count: { id: true },
+			orderBy: { _count: { id: "desc" } },
+			take: 5,
+		}),
+		prisma.loan.findMany({
+			take: 5,
+			orderBy: { requestDate: "desc" },
+			include: {
+				libraryItem: { select: { title: true, type: true } },
+				user: { select: { name: true } },
 			},
 		}),
+		prisma.loan.findMany({
+			where: { requestDate: { gte: sixMonthsAgo } },
+			select: { requestDate: true },
+		}),
 	]);
+
+	// Agrupar préstamos por mes (últimos 6 meses)
+	const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+	const loansByMonth: { month: string; count: number }[] = [];
+	for (let i = 5; i >= 0; i--) {
+		const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+		const key = `${d.getFullYear()}-${d.getMonth()}`;
+		const label = `${monthNames[d.getMonth()]} ${d.getFullYear().toString().slice(-2)}`;
+		const count = loansLast6Months.filter((l) => {
+			const rd = new Date(l.requestDate);
+			return `${rd.getFullYear()}-${rd.getMonth()}` === key;
+		}).length;
+		loansByMonth.push({ month: label, count });
+	}
+
+	// Resolver títulos para top ítems
+	const topItemIds = topItemsRaw.map((t) => t.libraryItemId);
+	const topItemDetails = await prisma.libraryItem.findMany({
+		where: { id: { in: topItemIds } },
+		select: { id: true, title: true, type: true },
+	});
+	const topItems = topItemsRaw.map((t) => {
+		const item = topItemDetails.find((d) => d.id === t.libraryItemId);
+		return { title: item?.title ?? "Desconocido", type: item?.type ?? "OTHER", loanCount: t._count.id };
+	});
+
+	// Tasa de puntualidad
+	const onTimeRate = totalReturned > 0 ? Math.round((onTimeReturned / totalReturned) * 100) : 100;
+
+	// Actividad reciente
+	const recentLoans = recentLoansRaw.map((l) => ({
+		title: l.libraryItem.title,
+		userName: l.user.name,
+		status: l.status,
+		date: l.requestDate.toISOString(),
+	}));
 
 	return {
 		totalItems,
@@ -785,6 +854,11 @@ export async function getLibraryStats() {
 		pendingRequests,
 		activeLoans,
 		overdueLoans,
+		onTimeRate,
+		loansByMonth,
+		itemsByType: itemsByType.map((g) => ({ type: g.type, count: g._count })),
+		topItems,
+		recentLoans,
 	};
 }
 

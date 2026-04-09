@@ -188,14 +188,18 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
 
     /**
      * @dev Estudiante solicita prestamo de un libro.
-     *      No bloquea tokens todavia (eso se hace al aprobar).
+     *      Bloquea 1 LibraryToken como deposito al solicitar.
+     *      El deposito se devuelve si el prestamo es rechazado o cancelado.
      */
-    function requestLoan(uint256 bookId) external onlyStudent whenNotPaused returns (uint256 loanId) {
+    function requestLoan(uint256 bookId) external onlyStudent whenNotPaused nonReentrant returns (uint256 loanId) {
         if (!_books[bookId].exists) revert BookNotFound(bookId);
         if (balanceOf(address(this), bookId) == 0) revert BookNotAvailable(bookId);
         if (activeLoanByStudentAndBook[msg.sender][bookId] != 0)
             revert AlreadyBorrowingBook(msg.sender, bookId);
+        if (libraryToken.balanceOf(msg.sender) < DEPOSIT_PER_LOAN)
+            revert InsufficientDeposit(msg.sender);
 
+        // --- Effects ---
         loanId = nextLoanId;
         unchecked { ++nextLoanId; }
 
@@ -210,28 +214,38 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
         });
 
         _studentLoanIds[msg.sender].push(loanId);
+        activeLoanByStudentAndBook[msg.sender][bookId] = loanId;
+
+        // --- Interactions ---
+        libraryToken.transferFrom(msg.sender, address(this), DEPOSIT_PER_LOAN);
 
         emit LoanRequested(loanId, msg.sender, bookId);
     }
 
     /**
      * @dev Estudiante cancela su propia solicitud pendiente.
+     *      Devuelve el deposito bloqueado al solicitar.
      */
-    function cancelLoanRequest(uint256 loanId) external onlyStudent {
+    function cancelLoanRequest(uint256 loanId) external onlyStudent nonReentrant {
         Loan storage loan = _loans[loanId];
         if (loan.status == LoanStatus.None) revert LoanNotFound(loanId);
         if (loan.student != msg.sender) revert NotLoanOwner(loanId, msg.sender);
         if (loan.status != LoanStatus.Requested)
             revert InvalidLoanState(loanId, loan.status, LoanStatus.Requested);
 
+        // --- Effects ---
         loan.status = LoanStatus.Rejected; // Reutilizamos Rejected para cancelaciones
+        activeLoanByStudentAndBook[msg.sender][loan.bookId] = 0;
+
+        // --- Interactions ---
+        libraryToken.transfer(msg.sender, DEPOSIT_PER_LOAN);
 
         emit LoanRequestCancelled(loanId);
     }
 
     /**
      * @dev Bibliotecario aprueba un prestamo.
-     *      Bloquea 1 LibraryToken del estudiante y transfiere 1 copia del libro.
+     *      El deposito ya fue bloqueado en requestLoan; aqui solo se transfiere el libro.
      */
     function approveLoan(uint256 loanId) external onlyLibrarian whenNotPaused nonReentrant {
         Loan storage loan = _loans[loanId];
@@ -245,26 +259,14 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
         // Verificar que aun hay copias disponibles
         if (balanceOf(address(this), bookId) == 0) revert BookNotAvailable(bookId);
 
-        // Verificar que el estudiante tiene suficientes LibraryTokens
-        if (libraryToken.balanceOf(student) < DEPOSIT_PER_LOAN)
-            revert InsufficientDeposit(student);
-
-        // Verificar allowance
-        if (libraryToken.allowance(student, address(this)) < DEPOSIT_PER_LOAN)
-            revert InsufficientDeposit(student);
-
         // --- Effects ---
         loan.status = LoanStatus.Approved;
         loan.approvalDate = uint40(block.timestamp);
         loan.dueDate = uint40(block.timestamp + DEFAULT_LOAN_DURATION);
-        activeLoanByStudentAndBook[student][bookId] = loanId;
         activeLoansForBook[bookId] += 1;
 
         // --- Interactions ---
-        // 1. Bloquear deposito (transferir LibraryToken del estudiante al contrato)
-        libraryToken.transferFrom(student, address(this), DEPOSIT_PER_LOAN);
-
-        // 2. Transferir libro al estudiante
+        // Transferir libro al estudiante (deposito ya bloqueado en requestLoan)
         _safeTransferFrom(address(this), student, bookId, 1, "");
 
         emit LoanApproved(loanId, msg.sender, loan.dueDate);
@@ -272,14 +274,23 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
 
     /**
      * @dev Bibliotecario rechaza una solicitud de prestamo.
+     *      Devuelve el deposito bloqueado al solicitar.
      */
-    function rejectLoan(uint256 loanId, string calldata reason) external onlyLibrarian {
+    function rejectLoan(uint256 loanId, string calldata reason) external onlyLibrarian nonReentrant {
         Loan storage loan = _loans[loanId];
         if (loan.status == LoanStatus.None) revert LoanNotFound(loanId);
         if (loan.status != LoanStatus.Requested)
             revert InvalidLoanState(loanId, loan.status, LoanStatus.Requested);
 
+        address student = loan.student;
+        uint256 bookId = loan.bookId;
+
+        // --- Effects ---
         loan.status = LoanStatus.Rejected;
+        activeLoanByStudentAndBook[student][bookId] = 0;
+
+        // --- Interactions ---
+        libraryToken.transfer(student, DEPOSIT_PER_LOAN);
 
         emit LoanRejected(loanId, msg.sender, reason);
     }

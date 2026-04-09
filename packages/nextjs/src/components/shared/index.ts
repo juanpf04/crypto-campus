@@ -19,4 +19,3 @@ export { LibraryItemCard } from "./LibraryItemCard";
 export { LoanCard } from "./LoanCard";
 export { BookingCard } from "./BookingCard";
 export { RoomSelectorCard } from "./RoomSelectorCard";
-export { InfoPanel } from "./InfoPanel";

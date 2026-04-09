@@ -21,7 +21,8 @@ import Link from "next/link";
 
 interface LibraryItem {
   id: string; tokenId: number; type: string; title: string;
-  creator: string | null; description: string | null; totalCopies: number;
+  creator: string | null; description: string | null; coverUrl: string | null;
+  totalCopies: number;
 }
 
 interface MyLoan {
@@ -149,6 +150,7 @@ export default function StudentLibraryPage() {
                 type={item.type}
                 creator={item.creator}
                 description={item.description}
+                coverUrl={item.coverUrl}
                 totalCopies={item.totalCopies}
                 onRequestLoan={() => handleRequestLoan(item.id)}
                 requesting={requesting === item.id}
