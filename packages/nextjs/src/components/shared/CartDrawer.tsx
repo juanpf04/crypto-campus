@@ -19,6 +19,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { Drawer } from "@/components/ui/Drawer";
 import { Button } from "@/components/ui/Button";
 import { QuantitySelector } from "@/components/ui/QuantitySelector";
@@ -221,13 +222,13 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
       </Button>
 
       {/* Ver carrito completo */}
-      <a
+      <Link
         href="/dashboard/student/shop/cart"
         onClick={() => onClose()}
         className="w-full text-center text-sm text-text-muted hover:text-primary transition-colors cursor-pointer underline block"
       >
         Ver carrito completo
-      </a>
+      </Link>
     </div>
   ) : undefined;
 

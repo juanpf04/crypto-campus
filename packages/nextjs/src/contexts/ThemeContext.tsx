@@ -34,22 +34,21 @@ export const ThemeContext = createContext<ThemeContextValue>({
 const STORAGE_KEY = "theme-id";
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  // Inicializar con la paleta por defecto; el useEffect leerá localStorage
-  const [themeId, setThemeIdState] = useState(DEFAULT_THEME_ID);
+  // Inicializar leyendo localStorage cuando exista window.
+  const [themeId, setThemeIdState] = useState(() => {
+    if (typeof window === "undefined") return DEFAULT_THEME_ID;
+    return localStorage.getItem(STORAGE_KEY) ?? DEFAULT_THEME_ID;
+  });
 
-  // Al montar: leer la preferencia guardada y aplicarla
+  // Aplicar la paleta activa al montar y cada vez que cambie.
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    const id = saved ?? DEFAULT_THEME_ID;
-    setThemeIdState(id);
-    applyTheme(id);
-  }, []);
+    applyTheme(themeId);
+  }, [themeId]);
 
   // Función pública para cambiar de tema
   const setThemeId = (id: string) => {
     setThemeIdState(id);
     localStorage.setItem(STORAGE_KEY, id);
-    applyTheme(id);
   };
 
   return (

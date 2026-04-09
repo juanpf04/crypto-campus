@@ -12,7 +12,7 @@
  * Reutilizable para cualquier módulo con subida de archivos.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { icons } from "@/components/ui/icons";
 import { Modal } from "@/components/ui/Modal";
@@ -45,25 +45,22 @@ function getFileCategory(type: string): "pdf" | "image" | "other" {
 }
 
 export function FilePreview({ file, pageCount, onChangeFile, acceptString, className }: FilePreviewProps) {
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [expandedForFile, setExpandedForFile] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const category = getFileCategory(file.type);
+  const fileIdentity = `${file.name}-${file.size}-${file.lastModified}`;
+  const isExpanded = expandedForFile === fileIdentity;
 
-  // Generar URL temporal para preview (solo para PDF e imágenes)
-  useEffect(() => {
-    if (category === "other") {
-      setPreviewUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
+  const previewUrl = useMemo(() => {
+    if (category === "other") return null;
+    return URL.createObjectURL(file);
   }, [file, category]);
 
   useEffect(() => {
-    setIsExpanded(false);
-  }, [file]);
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   // Handler para el input nativo de cambio de archivo
   function handleFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -161,7 +158,7 @@ export function FilePreview({ file, pageCount, onChangeFile, acceptString, class
           {(category === "pdf" || category === "image") && (
             <button
               type="button"
-              onClick={() => setIsExpanded(true)}
+              onClick={() => setExpandedForFile(fileIdentity)}
               className="grid h-8 w-8 place-items-center rounded-md bg-primary/10 text-primary hover:bg-primary hover:text-white transition-colors cursor-pointer"
               aria-label="Ampliar vista previa"
               title="Ampliar vista previa"
@@ -174,7 +171,7 @@ export function FilePreview({ file, pageCount, onChangeFile, acceptString, class
 
       <Modal
         open={isExpanded}
-        onClose={() => setIsExpanded(false)}
+        onClose={() => setExpandedForFile(null)}
         title={`Vista previa: ${file.name}`}
         className="max-w-6xl"
       >

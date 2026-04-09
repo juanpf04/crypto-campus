@@ -44,7 +44,6 @@ export function PrintingOverlay({ filename, printPromise, onComplete }: Printing
   // Avanzar los pasos con los tiempos definidos
   useEffect(() => {
     let timeout: ReturnType<typeof setTimeout>;
-    let elapsed = 0;
 
     function advanceStep(step: number) {
       if (step >= STEPS.length) {

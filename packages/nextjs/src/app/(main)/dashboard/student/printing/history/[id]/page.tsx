@@ -56,16 +56,14 @@ export default function StudentPrintDetailPage() {
   const { addToast } = useToast();
 
   const [log, setLog] = useState<PrintLogDetail | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => Boolean(id));
 
   useEffect(() => {
     if (!id) {
-      setLoading(false);
       return;
     }
 
     const controller = new AbortController();
-    setLoading(true);
 
     fetch(`/api/printer/logs/${id}`, { signal: controller.signal })
       .then(async (r) => {
