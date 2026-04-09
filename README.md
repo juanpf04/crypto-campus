@@ -61,14 +61,7 @@ CryptoCampus/
     │   ├── test/             # Tests (Node.js + Forge/Foundry)
     │   └── ignition/         # Módulos de despliegue (Hardhat Ignition)
     └── nextjs/               # Frontend (Next.js) — en desarrollo
-        ├── app/                ← PÁGINAS Y COMPONENTES
-        │   ├── page.tsx            → Página principal de la DApp (UI)
-        │   ├── layout.tsx          → Layout raíz (metadata, fuentes)
-        │   ├── providers.tsx       → Wagmi + RainbowKit + React Query
-        │   └── globals.css         → Estilos globales (Tailwind)
-        └── lib/                ← CONFIGURACIÓN WEB3
-            ├── counterAbi.ts       → ABI del contrato (interfaz)
-            └── wagmiConfig.ts      → Config de cadenas y wallet connect
+        ├── TODO
 ```
 
 ## Smart Contracts (Hardhat)
