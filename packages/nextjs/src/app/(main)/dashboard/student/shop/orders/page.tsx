@@ -113,7 +113,7 @@ export default function StudentOrdersPage() {
     } finally {
       setBatchLoading(false);
     }
-  }, [batchOffset]);
+  }, [batchOffset, addToast]);
 
   // Cargar orders
   const fetchOrders = useCallback(async () => {
@@ -128,7 +128,7 @@ export default function StudentOrdersPage() {
     } finally {
       setOrderLoading(false);
     }
-  }, [orderOffset]);
+  }, [orderOffset, addToast]);
 
   useEffect(() => { fetchBatches(); }, [fetchBatches]);
   useEffect(() => { fetchOrders(); }, [fetchOrders]);

@@ -73,7 +73,7 @@ export default function AdminShopTokensPage() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [addToast]);
 
   // Filtro por nombre/email
   const filtered = users.filter(

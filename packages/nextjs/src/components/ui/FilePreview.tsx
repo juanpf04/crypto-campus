@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { icons } from "@/components/ui/icons";
 import { Modal } from "@/components/ui/Modal";
@@ -103,9 +104,12 @@ export function FilePreview({ file, pageCount, onChangeFile, acceptString, class
         )}
 
         {category === "image" && previewUrl && (
-          <img
+          <Image
             src={previewUrl}
             alt={file.name}
+            width={1200}
+            height={800}
+            unoptimized
             className="h-full w-full object-contain p-2"
           />
         )}
@@ -185,9 +189,12 @@ export function FilePreview({ file, pageCount, onChangeFile, acceptString, class
           )}
 
           {category === "image" && previewUrl && (
-            <img
+            <Image
               src={previewUrl}
               alt={file.name}
+              width={1600}
+              height={1200}
+              unoptimized
               className="h-full w-full rounded-lg border border-border-default bg-black/5 object-contain"
             />
           )}

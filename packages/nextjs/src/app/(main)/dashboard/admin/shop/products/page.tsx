@@ -18,9 +18,7 @@ import { Button } from "@/components/ui/Button";
 import { CategoryFilter } from "@/components/ui/CategoryFilter";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { SectionTitle } from "@/components/shared/SectionTitle";
 import { ProductCard } from "@/components/shared/ProductCard";
-import { icons } from "@/components/ui/icons";
 
 interface ProductVariant {
   id: string;

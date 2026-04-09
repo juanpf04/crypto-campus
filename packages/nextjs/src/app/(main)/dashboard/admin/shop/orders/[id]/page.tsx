@@ -73,7 +73,7 @@ export default function AdminOrderDetailPage() {
       .then(setOrder)
       .catch((err) => addToast(err.message, "danger"))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, addToast]);
 
   async function handleDeliver() {
     if (!order) return;

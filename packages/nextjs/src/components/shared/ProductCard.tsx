@@ -59,8 +59,7 @@ interface ProductCardProps {
 }
 
 export function ProductCard({
-  groupKey,
-  name: _name,
+  name,
   minPrice,
   maxPrice,
   totalStock,
@@ -71,7 +70,6 @@ export function ProductCard({
   showAddToCart = true,
   adminMode = false,
   active = true,
-  onEdit,
   onToggleActive,
 }: ProductCardProps) {
   const [selectedVariantId, setSelectedVariantId] = useState<string>(variants[0]?.id ?? "");
@@ -105,12 +103,6 @@ export function ProductCard({
     } finally {
       setAdding(false);
     }
-  }
-
-  function handleEdit(e: React.MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    onEdit?.(selectedVariant.id);
   }
 
   function handleToggleActive(e: React.MouseEvent) {
@@ -147,7 +139,7 @@ export function ProductCard({
           )}
 
           <h3 className="font-semibold text-text line-clamp-2 leading-tight">
-            {selectedVariant.name}
+            {name}
           </h3>
 
           {/* Variantes de color */}

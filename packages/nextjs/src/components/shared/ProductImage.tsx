@@ -10,6 +10,7 @@
  */
 
 import { useState } from "react";
+import Image from "next/image";
 import { CATEGORY_FALLBACKS, DEFAULT_PRODUCT_EMOJI } from "@/lib/shop-constants";
 
 interface ProductImageProps {
@@ -46,9 +47,12 @@ export function ProductImage({
   }
 
   return (
-    <img
+    <Image
       src={imageUrl}
       alt={name}
+      width={512}
+      height={512}
+      unoptimized
       className={className}
       onError={() => setFailed(true)}
     />

@@ -148,7 +148,7 @@ export default function AdminOrdersPage() {
       setBatchLoading(false);
       setBatchRefreshing(false);
     }
-  }, [batchOffset, userFilter]);
+  }, [batchOffset, userFilter, addToast]);
 
   // Cargar orders
   const fetchOrders = useCallback(async () => {
@@ -170,26 +170,12 @@ export default function AdminOrdersPage() {
       setOrderLoading(false);
       setOrderRefreshing(false);
     }
-  }, [orderOffset, userFilter]);
+  }, [orderOffset, userFilter, addToast]);
 
   useEffect(() => { fetchBatches(); }, [fetchBatches]);
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
   // Acciones
-  async function handleDeliverBatch(batchPrismaId: string) {
-    try {
-      const res = await fetch(`/api/shop/batches/${batchPrismaId}`, { method: "PUT" });
-      if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.error ?? "Error");
-      }
-      addToast("Pedido marcado como entregado", "success");
-      fetchBatches();
-    } catch (err) {
-      addToast(err instanceof Error ? err.message : "Error", "danger");
-    }
-  }
-
   async function handleDeliverItem(orderId: string) {
     try {
       const res = await fetch(`/api/shop/orders/${orderId}/deliver`, { method: "PUT" });

@@ -46,7 +46,7 @@ export default function EditPrinterPage() {
       })
       .catch(() => addToast("Error al cargar impresora", "danger"))
       .finally(() => setLoading(false));
-  }, [params.id]);
+  }, [params.id, addToast, router]);
 
   async function handleSubmit(data: PrinterFormData) {
     const res = await fetch(`/api/printer/${params.id}`, {

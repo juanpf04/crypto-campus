@@ -7,6 +7,7 @@
  */
 
 import Link from "next/link";
+import Image from "next/image";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -47,9 +48,12 @@ export function LibraryItemCard({
         {/* Cabecera visual */}
         <div className="flex h-40 items-center justify-center bg-primary/5 shrink-0">
           {coverUrl ? (
-            <img
+            <Image
               src={coverUrl}
               alt={title}
+              width={640}
+              height={320}
+              unoptimized
               className="h-full w-full object-contain p-4"
             />
           ) : (

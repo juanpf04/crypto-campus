@@ -12,6 +12,7 @@
  */
 
 import { useState } from "react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 interface DocumentPreviewProps {
@@ -110,9 +111,12 @@ export function DocumentPreview({
         )}
 
         {fileType === "image" && (
-          <img
+          <Image
             src={src}
             alt={filename}
+            width={1200}
+            height={900}
+            unoptimized
             className="max-h-[500px] w-auto object-contain p-4"
             onError={() => setLoadError(true)}
           />

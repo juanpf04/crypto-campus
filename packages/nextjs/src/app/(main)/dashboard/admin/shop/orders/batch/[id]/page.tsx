@@ -19,7 +19,6 @@ import { useParams, useRouter } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { Tabs } from "@/components/ui/Tabs";
 import { SelectAllCheckbox } from "@/components/ui/SelectAllCheckbox";
@@ -165,21 +164,6 @@ export default function AdminBatchDetailPage() {
     return { returnCount, returnRefund, deliverCount, orderIdsToReturn, orderIdsToDeliver };
   }, [groupedItems, selection]);
 
-  // Entregar todos
-  async function handleDeliverAll() {
-    setActing("deliver-all");
-    try {
-      const res = await fetch(`/api/shop/batches/${id}`, { method: "PUT" });
-      if (!res.ok) throw new Error((await res.json()).error ?? "Error");
-      addToast("Todos los artículos marcados como entregados", "success");
-      await loadBatch();
-    } catch (err) {
-      addToast(err instanceof Error ? err.message : "Error", "danger");
-    } finally {
-      setActing(null);
-    }
-  }
-
   // Devolver selección
   async function handleConfirmReturn() {
     setActing("return");
@@ -228,9 +212,7 @@ export default function AdminBatchDetailPage() {
     );
   }
 
-  const { paidCount, deliveredCount, returnedCount } = calculateOrderStats(batch.items);
-  const statusCounts = [paidCount > 0, deliveredCount > 0, returnedCount > 0].filter(Boolean).length;
-  const totalSelected = selectedSummary.returnCount + selectedSummary.deliverCount;
+  const { deliveredCount, returnedCount } = calculateOrderStats(batch.items);
 
   return (
     <div className="space-y-6 pb-20">

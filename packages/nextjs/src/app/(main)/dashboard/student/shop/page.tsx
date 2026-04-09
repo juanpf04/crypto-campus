@@ -77,9 +77,9 @@ export default function StudentShopPage() {
         setTotalItems(ordersData.total ?? 0);
         setItemCount(Array.isArray(cartData.items) ? cartData.items.length : 0);
       })
-      .catch(() => addToast("Error al cargar la tienda", "danger"))
-      .finally(() => setLoading(false));
-  }, []);
+        .catch(() => addToast("Error al cargar la tienda", "danger"))
+        .finally(() => setLoading(false));
+      }, [addToast, setItemCount]);
 
   // Filtrar productos por categoría (local, sin fetch)
   const filteredProducts = selectedCategory

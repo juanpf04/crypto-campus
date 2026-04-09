@@ -17,7 +17,7 @@ interface RegisterFormProps {
 }
 
 export function RegisterForm({ onSubmit }: RegisterFormProps) {
-  const { fields, errors, submitError, loading, setField, handleSubmit } = useForm<RegisterFormData>({
+  const { fields, errors, loading, setField, handleSubmit } = useForm<RegisterFormData>({
     initialValues: { name: "", email: "", password: "", confirmPassword: "" },
     validateOnChange: true,
     validate: (v) => {

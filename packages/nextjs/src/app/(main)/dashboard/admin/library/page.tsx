@@ -10,7 +10,6 @@ import { useAuthUser } from "@/hooks/useAuthUser";
 import { icons } from "@/components/ui/icons";
 import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
-import { BackLink } from "@/components/ui/BackLink";
 import { StatCard } from "@/components/shared/StatCard";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { DashboardGreeting } from "@/components/shared/DashboardGreeting";

@@ -45,7 +45,7 @@ export default function PrintersListPage() {
       .then((data) => setPrinters(data ?? []))
       .catch(() => addToast("Error al cargar impresoras", "danger"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [addToast]);
 
   /** Activa o desactiva una impresora (soft delete) */
   async function toggleActive(printer: Printer) {

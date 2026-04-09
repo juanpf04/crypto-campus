@@ -55,9 +55,9 @@ export default function StudentPrintingPage() {
         setPrinters(printersData ?? []);
         setTotalPrints(Array.isArray(logsData) ? logsData.length : 0);
       })
-      .catch(() => addToast("Error al cargar datos de impresión", "danger"))
-      .finally(() => setLoading(false));
-  }, []);
+        .catch(() => addToast("Error al cargar datos de impresión", "danger"))
+        .finally(() => setLoading(false));
+      }, [addToast]);
 
   // Ejecutar trabajo de impresión: crea una promise y activa el overlay
   function handlePrint(data: PrintJobResult) {

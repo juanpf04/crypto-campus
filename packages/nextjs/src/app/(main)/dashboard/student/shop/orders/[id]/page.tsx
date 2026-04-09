@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Badge, type BadgeVariant } from "@/components/ui/Badge";
+import { Badge } from "@/components/ui/Badge";
 import { Spinner } from "@/components/ui/Spinner";
 import { DetailField } from "@/components/shared/DetailField";
 import { ProductImage } from "@/components/shared/ProductImage";
@@ -71,7 +71,7 @@ export default function StudentOrderDetailPage() {
       .then(setOrder)
       .catch((err) => addToast(err.message, "danger"))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, addToast]);
 
   // Calcular si se puede devolver (DELIVERED + dentro de 30 días)
   const canReturn = order?.status === "DELIVERED" && order.deliveryDate

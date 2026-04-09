@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useState, useCallback } from "react";
+import Image from "next/image";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
@@ -280,9 +281,12 @@ export function ProductGroupForm({
               <label className="text-sm font-medium text-text mb-1.5">Imagen</label>
               {effectiveImageUrl ? (
                 <div className="relative flex-1 min-h-[120px] rounded-lg border border-border-default overflow-hidden bg-primary/5">
-                  <img
+                  <Image
                     src={effectiveImageUrl}
                     alt="Preview"
+                    fill
+                    unoptimized
+                    sizes="(max-width: 768px) 100vw, 33vw"
                     className="h-full w-full object-contain p-2"
                   />
                   <button

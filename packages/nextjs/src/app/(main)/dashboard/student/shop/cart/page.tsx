@@ -84,7 +84,7 @@ export default function StudentCartPage() {
     } finally {
       setLoading(false);
     }
-  }, [addToast]);
+  }, [addToast, setItemCount]);
 
   useEffect(() => {
     loadCart();

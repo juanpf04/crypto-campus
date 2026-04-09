@@ -20,7 +20,6 @@ const MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 horas
 
 const cyan = (s) => `\x1b[36m${s}\x1b[0m`;
 const green = (s) => `\x1b[32m${s}\x1b[0m`;
-const yellow = (s) => `\x1b[33m${s}\x1b[0m`;
 
 function log(msg) {
   console.log(`${cyan("[cleanup]")} ${msg}`);

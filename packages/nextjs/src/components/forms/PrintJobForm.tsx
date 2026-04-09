@@ -292,7 +292,7 @@ export function PrintJobForm({
         fileSize: file.size,
         filePath: uploaded?.filePath ?? null,
       });
-    } catch (err) {
+    } catch {
       // El toast de error lo gestiona la page
     } finally {
       setSubmitting(false);

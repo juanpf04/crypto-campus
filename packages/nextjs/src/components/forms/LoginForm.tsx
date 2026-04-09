@@ -13,7 +13,7 @@ interface LoginFormProps {
 }
 
 export function LoginForm({ onSubmit }: LoginFormProps) {
-  const { fields, errors, submitError, loading, setField, handleSubmit } = useForm<LoginFormData>({
+  const { fields, errors, loading, setField, handleSubmit } = useForm<LoginFormData>({
     initialValues: { email: "", password: "" },
     validate: (v) => {
       const e: Partial<Record<keyof LoginFormData, string>> = {};

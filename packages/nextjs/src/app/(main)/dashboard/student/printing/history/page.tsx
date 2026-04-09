@@ -64,14 +64,14 @@ export default function StudentPrintHistoryPage() {
       if (data.length < PAGE_SIZE) {
         setTotalLogs(offset + data.length);
       } else {
-        setTotalLogs(Math.max(totalLogs, offset + PAGE_SIZE + 1));
+        setTotalLogs((prev) => Math.max(prev, offset + PAGE_SIZE + 1));
       }
     } catch {
       addToast("Error al cargar historial", "danger");
     } finally {
       setLoading(false);
     }
-  }, [offset]);
+  }, [offset, addToast]);
 
   useEffect(() => {
     fetchLogs();

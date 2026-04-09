@@ -130,7 +130,7 @@ export default function AdminProductDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, addToast, selectedVariantId]);
 
   useEffect(() => {
     loadGroup();

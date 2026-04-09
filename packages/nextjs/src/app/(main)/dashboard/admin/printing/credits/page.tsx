@@ -88,7 +88,7 @@ export default function AdminPrintingCreditsPage() {
     }
 
     loadData();
-  }, []);
+  }, [addToast]);
 
   /** Filtrar por nombre o email */
   function handleSearch(term: string) {

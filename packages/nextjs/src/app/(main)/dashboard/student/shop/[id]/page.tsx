@@ -113,9 +113,9 @@ export default function StudentProductDetailPage() {
           setSelectedVariantId(singleProduct.id);
         }
       })
-      .catch(() => addToast("Error al cargar el producto", "danger"))
-      .finally(() => setLoading(false));
-  }, [id]);
+        .catch(() => addToast("Error al cargar el producto", "danger"))
+        .finally(() => setLoading(false));
+      }, [id, addToast]);
 
   // Variante seleccionada
   const selectedVariant = useMemo(

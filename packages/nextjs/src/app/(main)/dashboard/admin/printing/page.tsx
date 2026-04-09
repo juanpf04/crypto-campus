@@ -8,7 +8,6 @@
  */
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { icons } from "@/components/ui/icons";
 import { useAuthUser } from "@/hooks/useAuthUser";
 import { DashboardGreeting } from "@/components/shared/DashboardGreeting";
