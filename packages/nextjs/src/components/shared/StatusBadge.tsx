@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui";
    que repetir el mapeo en cada página.
    ─────────────────────────────────────────────────── */
 
-type LoanStatus = "REQUESTED" | "APPROVED" | "REJECTED" | "RETURNED" | "OVERDUE";
+type LoanStatus = "QUEUED" | "RESERVED" | "PICKED_UP" | "RETURNED" | "CANCELLED";
 type OrderStatus = "PAID" | "DELIVERED" | "RETURNED";
 type UseRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
 type GenericActive = "ACTIVE" | "INACTIVE";
@@ -17,17 +17,18 @@ type DomainStatus = LoanStatus | OrderStatus | UseRequestStatus | GenericActive;
 
 const statusConfig: Record<DomainStatus, { label: string; variant: "success" | "warning" | "danger" | "info" | "neutral" }> = {
   // Préstamos
-  REQUESTED: { label: "Solicitado", variant: "info" },
-  APPROVED: { label: "Aprobado", variant: "success" },
-  REJECTED: { label: "Rechazado", variant: "danger" },
+  QUEUED: { label: "En cola", variant: "warning" },
+  RESERVED: { label: "Reservado", variant: "info" },
+  PICKED_UP: { label: "Prestado", variant: "success" },
   RETURNED: { label: "Devuelto", variant: "neutral" },
-  OVERDUE: { label: "Retrasado", variant: "danger" },
+  CANCELLED: { label: "Cancelado", variant: "neutral" },
   // Pedidos
   PAID: { label: "Pagado", variant: "success" },
   DELIVERED: { label: "Entregado", variant: "neutral" },
   // UseRequest
   PENDING: { label: "Pendiente", variant: "warning" },
-  CANCELLED: { label: "Cancelado", variant: "neutral" },
+  APPROVED: { label: "Aprobado", variant: "success" },
+  REJECTED: { label: "Rechazado", variant: "danger" },
   // Genérico
   ACTIVE: { label: "Activo", variant: "success" },
   INACTIVE: { label: "Inactivo", variant: "neutral" },

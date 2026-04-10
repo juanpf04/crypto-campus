@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * LoanCard — Tarjeta de préstamo activo del estudiante.
- * Molécula que compone Card + StatusBadge + Button.
+ * LoanCard — Tarjeta de préstamo del estudiante.
+ * Muestra estado visual diferente según QUEUED, RESERVED, PICKED_UP.
  */
 
 import { Card } from "@/components/ui/Card";
@@ -14,14 +14,21 @@ interface LoanCardProps {
   creator: string | null;
   status: string;
   dueDate: string | null;
-  /** Si el préstamo es cancelable (status REQUESTED) */
-  cancellable?: boolean;
+  reservationDate: string | null;
+  queuePosition: number | null;
   onCancel?: () => void;
 }
 
-export function LoanCard({ title, creator, status, dueDate, cancellable, onCancel }: LoanCardProps) {
+export function LoanCard({ title, creator, status, dueDate, reservationDate, queuePosition, onCancel }: LoanCardProps) {
+  const isOverdue = status === "PICKED_UP" && dueDate && new Date(dueDate) < new Date();
+
+  // Calcular fecha límite de recogida (reservationDate + 3 días)
+  const pickupDeadline = reservationDate
+    ? new Date(new Date(reservationDate).getTime() + 3 * 24 * 60 * 60 * 1000)
+    : null;
+
   return (
-    <Card className="p-4 space-y-2">
+    <Card className={`p-4 space-y-2 ${isOverdue ? "border-danger/50" : ""}`}>
       <div className="flex items-start justify-between">
         <div>
           <p className="font-medium text-text">{title}</p>
@@ -29,19 +36,40 @@ export function LoanCard({ title, creator, status, dueDate, cancellable, onCance
         </div>
         <StatusBadge status={status} />
       </div>
-      {dueDate && (
-        <p className="text-xs text-text-muted">
-          Vence: {new Date(dueDate).toLocaleDateString("es-ES")}
+
+      {/* QUEUED: posición en cola */}
+      {status === "QUEUED" && queuePosition != null && (
+        <p className="text-sm text-warning font-medium">
+          Posición #{queuePosition} en la lista de espera
         </p>
       )}
-      {status === "APPROVED" && (
-        <p className="text-xs text-text-muted italic">
-          Para devolver este ítem, acude a la biblioteca. El bibliotecario confirmará la devolución.
+
+      {/* RESERVED: fecha límite de recogida */}
+      {status === "RESERVED" && pickupDeadline && (
+        <p className="text-sm text-info">
+          Recoge antes del {pickupDeadline.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" })}
         </p>
       )}
-      {cancellable && onCancel && (
+
+      {/* PICKED_UP: fecha de devolución */}
+      {status === "PICKED_UP" && dueDate && (
+        <>
+          <p className={`text-sm ${isOverdue ? "text-danger font-medium" : "text-text-muted"}`}>
+            {isOverdue
+              ? "Préstamo vencido — devuelve cuanto antes"
+              : `Devolver antes del ${new Date(dueDate).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" })}`
+            }
+          </p>
+          <p className="text-xs text-text-muted italic">
+            Devuelve el ítem al bibliotecario en el mostrador
+          </p>
+        </>
+      )}
+
+      {/* Botón cancelar (solo QUEUED y RESERVED) */}
+      {(status === "QUEUED" || status === "RESERVED") && onCancel && (
         <Button size="sm" variant="danger" onClick={onCancel}>
-          Cancelar solicitud
+          {status === "QUEUED" ? "Salir de la cola" : "Cancelar reserva"}
         </Button>
       )}
     </Card>

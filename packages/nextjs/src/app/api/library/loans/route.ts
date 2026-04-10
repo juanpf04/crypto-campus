@@ -3,7 +3,7 @@ import { listLoans, requestLoan } from "@/actions/library";
 
 export async function GET(req: NextRequest) {
 	try {
-		const status = req.nextUrl.searchParams.get("status") as "REQUESTED" | "APPROVED" | "REJECTED" | "RETURNED" | "OVERDUE" | null;
+		const status = req.nextUrl.searchParams.get("status") as "QUEUED" | "RESERVED" | "PICKED_UP" | "RETURNED" | "CANCELLED" | null;
 		const itemId = req.nextUrl.searchParams.get("itemId") || undefined;
 
 		const limit = req.nextUrl.searchParams.get("limit");

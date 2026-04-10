@@ -223,7 +223,7 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
 
       {/* Ver carrito completo */}
       <Link
-        href="/dashboard/student/shop/cart"
+        href="/student/shop/cart"
         onClick={() => onClose()}
         className="w-full text-center text-sm text-text-muted hover:text-primary transition-colors cursor-pointer underline block"
       >

@@ -80,7 +80,7 @@ contract IntegrationTest is Test {
         vm.prank(student1);
         libraryManager.requestLoan(1);
         vm.prank(librarian);
-        libraryManager.approveLoan(1);
+        libraryManager.confirmPickup(1);
 
         printer.print(student1, 15);
 
@@ -112,7 +112,7 @@ contract IntegrationTest is Test {
         vm.prank(student1);
         libraryManager.requestLoan(1);
         vm.prank(librarian);
-        libraryManager.approveLoan(1);
+        libraryManager.confirmPickup(1);
 
         // Verificar que student1 tiene el NFT del libro y se bloqueo el deposito.
         assertEq(libraryManager.balanceOf(student1, 1), 1);
@@ -213,7 +213,7 @@ contract IntegrationTest is Test {
         vm.prank(student1);
         libraryManager.requestLoan(1);
         vm.prank(librarian);
-        libraryManager.approveLoan(1);
+        libraryManager.confirmPickup(1);
 
         // El deposito fue retenido.
         assertEq(libraryToken.balanceOf(student1), 9);
@@ -247,9 +247,9 @@ contract IntegrationTest is Test {
         libraryManager.requestLoan(1);
 
         vm.prank(librarian);
-        libraryManager.approveLoan(1); // prestamo de student1
+        libraryManager.confirmPickup(1); // prestamo de student1
         vm.prank(librarian);
-        libraryManager.approveLoan(2); // prestamo de student2
+        libraryManager.confirmPickup(2); // prestamo de student2
 
         // Ambos tienen NFTs del libro.
         assertEq(libraryManager.balanceOf(student1, 1), 1);
@@ -266,6 +266,6 @@ contract IntegrationTest is Test {
         assertEq(libraryManager.balanceOf(student2, 1), 1);
 
         LibraryManager.Loan memory loan2 = libraryManager.getLoanInfo(2);
-        assertTrue(loan2.status == LibraryManager.LoanStatus.Approved);
+        assertTrue(loan2.status == LibraryManager.LoanStatus.PickedUp);
     }
 }

@@ -25,7 +25,7 @@ interface LibraryItemCardProps {
   availableCopies?: number;
   onRequestLoan: () => void;
   requesting?: boolean;
-  /** Base URL para el detalle (por defecto /dashboard/student/library) */
+  /** Base URL para el detalle (por defecto /student/library) */
   detailBase?: string;
 }
 
@@ -40,7 +40,7 @@ export function LibraryItemCard({
   availableCopies,
   onRequestLoan,
   requesting,
-  detailBase = "/dashboard/student/library",
+  detailBase = "/student/library",
 }: LibraryItemCardProps) {
   return (
     <Link href={`${detailBase}/${id}`} className="block group">

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listPendingRequests } from "@/actions/library";
+import { listPendingPickups } from "@/actions/library";
 
 export async function GET(req: NextRequest) {
 	try {
 		const limit = req.nextUrl.searchParams.get("limit");
 		const offset = req.nextUrl.searchParams.get("offset");
 
-		const requests = await listPendingRequests({
+		const requests = await listPendingPickups({
 			limit: limit ? parseInt(limit) : undefined,
 			offset: offset ? parseInt(offset) : undefined,
 		});

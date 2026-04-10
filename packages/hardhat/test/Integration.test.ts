@@ -91,7 +91,7 @@ describe("Integration", async function () {
         await badgeSystem.write.createReward([1n, 2n, 10n], { account: professor.account });
 
         await libraryManager.write.requestLoan([1n], { account: student1.account });
-        await libraryManager.write.approveLoan([1n], { account: librarian.account });
+        await libraryManager.write.confirmPickup([1n], { account: librarian.account });
 
         await printer.write.print([student1.account.address, 15n]);
         await campusShop.write.purchase([1n], { account: student2.account });
@@ -116,7 +116,7 @@ describe("Integration", async function () {
 
         // student1 requests and gets loan approved (deposit of 1 LibraryToken taken)
         await libraryManager.write.requestLoan([1n], { account: student1.account });
-        await libraryManager.write.approveLoan([1n], { account: librarian.account });
+        await libraryManager.write.confirmPickup([1n], { account: librarian.account });
 
         // Verify: student has the book NFT and lost 1 deposit token
         assert.equal(await libraryManager.read.balanceOf([student1.account.address, 1n]), 1n);
@@ -247,7 +247,7 @@ describe("Integration", async function () {
         // Add book, request and approve loan
         await libraryManager.write.addBook([2n], { account: librarian.account });
         await libraryManager.write.requestLoan([1n], { account: student1.account });
-        await libraryManager.write.approveLoan([1n], { account: librarian.account });
+        await libraryManager.write.confirmPickup([1n], { account: librarian.account });
 
         // Student has 9 tokens (1 held as deposit)
         assert.equal(await libraryToken.read.balanceOf([student1.account.address]), 9n);
@@ -308,8 +308,8 @@ describe("Integration", async function () {
         await libraryManager.write.requestLoan([1n], { account: student2.account });
 
         // Both get approved
-        await libraryManager.write.approveLoan([1n], { account: librarian.account });
-        await libraryManager.write.approveLoan([2n], { account: librarian.account });
+        await libraryManager.write.confirmPickup([1n], { account: librarian.account });
+        await libraryManager.write.confirmPickup([2n], { account: librarian.account });
 
         // Verify both have the book and lost deposit
         assert.equal(await libraryManager.read.balanceOf([student1.account.address, 1n]), 1n);

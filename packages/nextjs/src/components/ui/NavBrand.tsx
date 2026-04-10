@@ -9,7 +9,7 @@ interface NavBrandProps {
   className?: string;
 }
 
-export function NavBrand({ href = "/dashboard", collapsed = false, className }: NavBrandProps) {
+export function NavBrand({ href = "/", collapsed = false, className }: NavBrandProps) {
   return (
     <Link
       href={href}

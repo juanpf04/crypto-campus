@@ -8,21 +8,20 @@ import { getAddress, zeroAddress } from "viem";
 describe("Printer", async function () {
     const { viem } = await network.connect();
 
-    // Helper: despliega CampusRoles + Printer y registra un estudiante.
-    // Reutilizado en todos los describe para evitar repetir el deploy en cada test.
+    // Helper: despliega CampusRoles + Printer y registra un estudiante + librarian.
     async function deployWithStudent() {
         const campusRoles = await viem.deployContract("CampusRoles");
         const printer = await viem.deployContract("Printer", [campusRoles.address]);
-        const [, student] = await viem.getWalletClients();
+        const [admin, student, librarian, professor] = await viem.getWalletClients();
         const studentRole = await campusRoles.read.STUDENT_ROLE();
+        const librarianRole = await campusRoles.read.LIBRARIAN_ROLE();
+        const professorRole = await campusRoles.read.PROFESSOR_ROLE();
 
-        await campusRoles.write.registerUser([
-            student.account.address,
-            "TestStudent",
-            studentRole,
-        ]);
+        await campusRoles.write.registerUser([student.account.address, "TestStudent", studentRole]);
+        await campusRoles.write.registerUser([librarian.account.address, "TestLibrarian", librarianRole]);
+        await campusRoles.write.registerUser([professor.account.address, "TestProfessor", professorRole]);
 
-        return { campusRoles, printer, student, studentRole };
+        return { campusRoles, printer, admin, student, librarian, professor, studentRole };
     }
 
     // Helper: solo despliega contratos sin registrar estudiante.
@@ -46,7 +45,7 @@ describe("Printer", async function () {
 
 
     describe("Basic credits", function () {
-        it("Should return -1 credits for non-students", async function () {
+        it("Should return -1 credits for unregistered users", async function () {
             const { printer } = await deployOnly();
             const [, randomUser] = await viem.getWalletClients();
 
@@ -56,13 +55,30 @@ describe("Printer", async function () {
             );
         });
 
-        it("Should return -1 for admin (not a student)", async function () {
-            const { printer } = await deployOnly();
-            const [admin] = await viem.getWalletClients();
+        it("Should return max credits for admin (unlimited)", async function () {
+            const { printer, admin } = await deployWithStudent();
 
             assert.equal(
                 await printer.read.getCredits([admin.account.address]),
-                -1n,
+                BigInt("0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"), // type(int256).max
+            );
+        });
+
+        it("Should return max credits for librarian (unlimited)", async function () {
+            const { printer, librarian } = await deployWithStudent();
+
+            assert.equal(
+                await printer.read.getCredits([librarian.account.address]),
+                BigInt("0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+            );
+        });
+
+        it("Should return INITIAL_CREDITS for professor", async function () {
+            const { printer, professor } = await deployWithStudent();
+
+            assert.equal(
+                await printer.read.getCredits([professor.account.address]),
+                200n,
             );
         });
     });
@@ -152,12 +168,12 @@ describe("Printer", async function () {
             );
         });
 
-        it("Should allow printing all remaining credits", async function () {
+        it("Should allow printing all remaining credits (within limit)", async function () {
             const { printer, student } = await deployWithStudent();
 
-            await printer.write.setCredits([student.account.address, 200n]);
+            await printer.write.setCredits([student.account.address, 50n]);
 
-            await printer.write.print([student.account.address, 200n]);
+            await printer.write.print([student.account.address, 50n]);
 
             assert.equal(
                 await printer.read.getCredits([student.account.address]),
@@ -212,7 +228,7 @@ describe("Printer", async function () {
         it("Should track credits independently per student", async function () {
             const { campusRoles, printer, student: student1, studentRole } = await deployWithStudent();
 
-            const [, , student2] = await viem.getWalletClients();
+            const [, , , , student2] = await viem.getWalletClients();
             await campusRoles.write.registerUser([
                 student2.account.address,
                 "Student2",
@@ -237,7 +253,7 @@ describe("Printer", async function () {
         it("Should handle setCredits independently for multiple students", async function () {
             const { campusRoles, printer, student: student1, studentRole } = await deployWithStudent();
 
-            const [, , student2] = await viem.getWalletClients();
+            const [, , , , student2] = await viem.getWalletClients();
             await campusRoles.write.registerUser([
                 student2.account.address,
                 "Student2",
@@ -330,6 +346,74 @@ describe("Printer", async function () {
             );
         });
     });
+
+    describe("Unlimited credits (Admin/Librarian)", function () {
+        it("Should allow admin to print without consuming credits", async function () {
+            const { printer, admin } = await deployWithStudent();
+
+            // Admin prints — no credit deduction
+            await printer.write.print([admin.account.address, 30n]);
+
+            // Credits still unlimited
+            assert.equal(
+                await printer.read.getCredits([admin.account.address]),
+                BigInt("0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+            );
+        });
+
+        it("Should allow librarian to print without consuming credits", async function () {
+            const { printer, librarian } = await deployWithStudent();
+
+            await printer.write.print([librarian.account.address, 50n]);
+
+            assert.equal(
+                await printer.read.getCredits([librarian.account.address]),
+                BigInt("0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+            );
+        });
+
+        it("Should deduct credits for professor", async function () {
+            const { printer, professor } = await deployWithStudent();
+
+            await printer.write.print([professor.account.address, 30n]);
+
+            assert.equal(
+                await printer.read.getCredits([professor.account.address]),
+                170n, // 200 - 30
+            );
+        });
+    });
+
+
+    describe("MAX_PAGES_PER_JOB limit", function () {
+        it("Should allow printing exactly 50 pages", async function () {
+            const { printer, student } = await deployWithStudent();
+
+            await printer.write.print([student.account.address, 50n]);
+
+            assert.equal(
+                await printer.read.getCredits([student.account.address]),
+                150n, // 200 - 50
+            );
+        });
+
+        it("Should revert when printing more than 50 pages", async function () {
+            const { printer, student } = await deployWithStudent();
+
+            await assert.rejects(async () => {
+                await printer.write.print([student.account.address, 51n]);
+            });
+        });
+
+        it("Should enforce limit even for admin (unlimited credits)", async function () {
+            const { printer, admin } = await deployWithStudent();
+
+            await assert.rejects(async () => {
+                await printer.write.print([admin.account.address, 51n]);
+            });
+        });
+    });
+
 
     describe("Pausable", function () {
         it("Should allow admin to pause", async function () {

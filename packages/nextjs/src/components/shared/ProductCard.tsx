@@ -43,7 +43,7 @@ interface ProductCardProps {
   totalStock: number;
   category: string | null;
   variants: ProductVariant[];
-  /** URL base para el Link (default: /dashboard/student/shop/) */
+  /** URL base para el Link (default: /student/shop/) */
   linkBase?: string;
   /** Callback al añadir al carrito (1 unidad de la variante seleccionada) */
   onAddToCart?: (variantId: string) => void;
@@ -65,7 +65,7 @@ export function ProductCard({
   totalStock,
   category,
   variants,
-  linkBase = "/dashboard/student/shop/",
+  linkBase = "/student/shop/",
   onAddToCart,
   showAddToCart = true,
   adminMode = false,

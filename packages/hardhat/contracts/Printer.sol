@@ -7,8 +7,9 @@ import { CampusRoles } from "./CampusRoles.sol";
 /// @title Printer
 /// @author Juan Pablo Fernández <juanpf04@ucm.es>
 /// @author Arturo Gómez <argome04@ucm.es>
-/// @notice Contrato para gestionar creditos de impresion de estudiantes.
-/// @dev 1 credito = 1 pagina. Cada estudiante inicia con creditos por defecto.
+/// @notice Contrato para gestionar creditos de impresion del campus.
+/// @dev 1 credito = 1 pagina. Estudiantes y profesores usan creditos.
+///      Admin y Librarian tienen creditos ilimitados. Max 50 paginas por trabajo.
 contract Printer is Pausable {
 
     // ── State variables ─────────────────────────────────────────────────
@@ -16,51 +17,38 @@ contract Printer is Pausable {
     /// @notice Referencia al contrato de control de acceso del campus
     CampusRoles public immutable campusRoles;
 
-    /// @notice Creditos iniciales para estudiantes
+    /// @notice Creditos iniciales para estudiantes y profesores
     uint256 public constant INITIAL_CREDITS = 200;
 
-    /// @dev Creditos configurados por estudiante
+    /// @notice Maximo de paginas por trabajo de impresion
+    uint256 public constant MAX_PAGES_PER_JOB = 50;
+
+    /// @dev Creditos configurados por usuario
     mapping(address => uint256) private _credits;
 
-    /// @dev Indica si el estudiante ya fue configurado por un admin
+    /// @dev Indica si el usuario ya fue configurado por un admin
     mapping(address => bool) private _modified;
 
     // ── Events ──────────────────────────────────────────────────────────
 
     /// @notice Se emite cuando un admin fija creditos para un estudiante
-    /// @param student Direccion del estudiante
-    /// @param credits Nueva cantidad de creditos asignada
     event CreditsSet(address indexed student, uint256 credits);
 
     /// @notice Se emite cuando se ejecuta una impresion
-    /// @param student Direccion del estudiante
-    /// @param pages Cantidad de paginas impresas
-    /// @param remainingCredits Creditos restantes luego de imprimir
-    event PrintJobExecuted(address indexed student, uint256 pages, uint256 remainingCredits);
+    event PrintJobExecuted(address indexed user, uint256 pages, uint256 remainingCredits);
 
     // ── Errors ──────────────────────────────────────────────────────────
 
-    /// @notice El caller no tiene rol de administrador
     error NotAdmin();
-
-    /// @notice La direccion no pertenece a un estudiante
-    /// @param user Direccion que no es estudiante
     error NotStudent(address user);
-
-    /// @notice El estudiante no tiene creditos suficientes
-    /// @param available Creditos disponibles
-    /// @param requested Creditos requeridos
+    error NotRegistered(address user);
     error InsufficientCredits(uint256 available, uint256 requested);
-
-    /// @notice La cantidad de paginas debe ser mayor que cero
+    error ExceedsMaxPages(uint256 requested, uint256 max);
     error ZeroPages();
-
-    /// @notice La direccion proporcionada no puede ser la direccion cero
     error ZeroAddress();
 
     // ── Modifiers ───────────────────────────────────────────────────────
 
-    /// @notice Restringe la ejecucion a administradores del sistema
     modifier onlyAdmin() {
         if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender)) {
             revert NotAdmin();
@@ -68,12 +56,8 @@ contract Printer is Pausable {
         _;
     }
 
-    // ── Functions ───────────────────────────────────────────────────────
-
     // ── Constructor ─────────────────────────────────────────────────────
 
-    /// @notice Inicializa el contrato con el control de acceso del campus
-    /// @param _campusRoles Direccion del contrato CampusRoles
     constructor(address _campusRoles) {
         campusRoles = CampusRoles(_campusRoles);
     }
@@ -81,16 +65,11 @@ contract Printer is Pausable {
     // ── External functions ──────────────────────────────────────────────
 
     /// @notice Establece directamente los creditos de un estudiante
-    /// @dev Permite tanto anadir como quitar creditos
     /// @param student Direccion del estudiante
     /// @param credits Nueva cantidad de creditos
     function setCredits(address student, uint256 credits) external onlyAdmin whenNotPaused {
-        if (student == address(0)) {
-            revert ZeroAddress();
-        }
-        if (!campusRoles.isStudent(student)) {
-            revert NotStudent(student);
-        }
+        if (student == address(0)) revert ZeroAddress();
+        if (!campusRoles.isStudent(student)) revert NotStudent(student);
 
         _credits[student] = credits;
         _modified[student] = true;
@@ -98,60 +77,60 @@ contract Printer is Pausable {
         emit CreditsSet(student, credits);
     }
 
-    /// @notice Ejecuta una impresion en nombre de un estudiante
-    /// @dev Llamada por un admin para registrar consumo de paginas
-    /// @param student Direccion del estudiante
+    /// @notice Ejecuta una impresion en nombre de un usuario
+    /// @dev Admin y Librarian no gastan creditos. Max 50 paginas por trabajo.
+    /// @param user Direccion del usuario que imprime
     /// @param pages Cantidad de paginas a imprimir
-    function print(address student, uint256 pages) external onlyAdmin whenNotPaused {
-        if (student == address(0)) {
-            revert ZeroAddress();
-        }
-        if (!campusRoles.isStudent(student)) {
-            revert NotStudent(student);
-        }
-        if (pages == 0) {
-            revert ZeroPages();
-        }
+    function print(address user, uint256 pages) external onlyAdmin whenNotPaused {
+        if (user == address(0)) revert ZeroAddress();
+        if (pages == 0) revert ZeroPages();
+        if (pages > MAX_PAGES_PER_JOB) revert ExceedsMaxPages(pages, MAX_PAGES_PER_JOB);
 
-        uint256 available = _modified[student] ? _credits[student] : INITIAL_CREDITS;
-        if (available < pages) {
-            revert InsufficientCredits(available, pages);
-        }
+        // Admin y Librarian: creditos ilimitados
+        bool unlimited = campusRoles.hasRole(campusRoles.ADMIN_ROLE(), user) ||
+                         campusRoles.hasRole(campusRoles.LIBRARIAN_ROLE(), user);
 
-        uint256 remaining;
-        unchecked {
-            remaining = available - pages;
-        }
+        if (unlimited) {
+            emit PrintJobExecuted(user, pages, type(uint256).max);
+        } else {
+            // Estudiantes y profesores: sistema de creditos
+            if (!campusRoles.isRegistered(user)) revert NotRegistered(user);
 
-        _credits[student] = remaining;
-        if (!_modified[student]) {
-            _modified[student] = true;
-        }
+            uint256 available = _modified[user] ? _credits[user] : INITIAL_CREDITS;
+            if (available < pages) revert InsufficientCredits(available, pages);
 
-        emit PrintJobExecuted(student, pages, remaining);
+            uint256 remaining;
+            unchecked { remaining = available - pages; }
+
+            _credits[user] = remaining;
+            if (!_modified[user]) _modified[user] = true;
+
+            emit PrintJobExecuted(user, pages, remaining);
+        }
     }
 
     // ── External view functions ─────────────────────────────────────────
 
-    /// @notice Obtiene los creditos disponibles de un estudiante
-    /// @dev Devuelve -1 si la direccion no pertenece a un estudiante
-    /// @param student Direccion a consultar
-    /// @return Creditos actuales o -1 si no es estudiante
-    function getCredits(address student) external view returns (int256) {
-        if (!campusRoles.isStudent(student)) {
-            return -1;
+    /// @notice Obtiene los creditos disponibles de un usuario
+    /// @dev Admin/Librarian devuelven max. No registrados devuelven -1.
+    function getCredits(address user) external view returns (int256) {
+        // Admin y Librarian: ilimitados
+        if (campusRoles.hasRole(campusRoles.ADMIN_ROLE(), user) ||
+            campusRoles.hasRole(campusRoles.LIBRARIAN_ROLE(), user)) {
+            return type(int256).max;
         }
-        return int256(_modified[student] ? _credits[student] : INITIAL_CREDITS);
+        // Usuarios no registrados
+        if (!campusRoles.isRegistered(user)) return -1;
+        // Estudiantes y profesores
+        return int256(_modified[user] ? _credits[user] : INITIAL_CREDITS);
     }
 
     // ── Pausable ─────────────────────────────────────────────────────────
 
-    /// @notice Pausa el contrato (solo admin)
     function pause() external onlyAdmin {
         _pause();
     }
 
-    /// @notice Reanuda el contrato (solo admin)
     function unpause() external onlyAdmin {
         _unpause();
     }

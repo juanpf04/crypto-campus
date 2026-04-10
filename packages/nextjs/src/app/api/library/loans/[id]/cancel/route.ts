@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cancelLoanRequest } from "@/actions/library";
+import { cancelLoan } from "@/actions/library";
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function POST(_req: NextRequest, { params }: Params) {
 	try {
 		const { id } = await params;
-		const result = await cancelLoanRequest(id);
+		const result = await cancelLoan(id);
 		return NextResponse.json(result);
 	} catch (error) {
 		console.error("[POST /api/library/loans/[id]/cancel]", error);

@@ -13,10 +13,11 @@ export const LIBRARY_TYPE_OPTIONS = [
 
 export const LOAN_STATUS_OPTIONS = [
   { value: "ALL" as const, label: "Todos" },
-  { value: "REQUESTED" as const, label: "Pendientes" },
-  { value: "APPROVED" as const, label: "Activos" },
-  { value: "REJECTED" as const, label: "Rechazados" },
+  { value: "QUEUED" as const, label: "En cola" },
+  { value: "RESERVED" as const, label: "Reservados" },
+  { value: "PICKED_UP" as const, label: "Prestados" },
   { value: "RETURNED" as const, label: "Devueltos" },
+  { value: "CANCELLED" as const, label: "Cancelados" },
 ];
 
 export const TYPE_LABELS: Record<string, string> = {
@@ -34,4 +35,4 @@ export const TYPE_EMOJI: Record<string, string> = {
 };
 
 export type LibraryTypeFilter = "ALL" | "BOOK" | "BOARD_GAME" | "VIDEO_GAME" | "OTHER";
-export type LoanStatusFilter = "ALL" | "REQUESTED" | "APPROVED" | "REJECTED" | "RETURNED";
+export type LoanStatusFilter = "ALL" | "QUEUED" | "RESERVED" | "PICKED_UP" | "RETURNED" | "CANCELLED";

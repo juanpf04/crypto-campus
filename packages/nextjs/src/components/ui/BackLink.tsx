@@ -8,7 +8,7 @@
  * suavemente a la izquierda al hacer hover para dar feedback visual.
  *
  * Uso:
- *   <BackLink href="/dashboard/admin/users" label="Volver a usuarios" />
+ *   <BackLink href="/admin/users" label="Volver a usuarios" />
  */
 
 import Link from "next/link";

@@ -191,11 +191,11 @@ enum LibraryItemType {
 }
 
 enum LoanStatus {
-  REQUESTED
-  APPROVED
-  REJECTED
+  QUEUED
+  RESERVED
+  PICKED_UP
   RETURNED
-  OVERDUE
+  CANCELLED
 }
 
 // Cualquier elemento prestable de la biblioteca.
@@ -223,21 +223,23 @@ model LibraryItem {
   loans Loan[]
 }
 
-// Préstamo. loanId = ID en LibraryManager.
+// Préstamo con cola automática. loanId = ID en LibraryManager.
+// Flujo: QUEUED/RESERVED → PICKED_UP → RETURNED / CANCELLED.
 model Loan {
-  id            String     @id @default(cuid())
-  loanId        Int        @unique  // ID en el contrato LibraryManager
-  libraryItemId String
-  userId        String
-  status        LoanStatus @default(REQUESTED)
-  requestTxHash  String?
-  approveTxHash  String?
-  returnTxHash   String?
-  requestDate    DateTime   @default(now())
-  approvalDate   DateTime?
-  dueDate        DateTime?
-  returnDate     DateTime?
-  overdue        Boolean    @default(false)
+  id               String     @id @default(cuid())
+  loanId           Int        @unique  // ID en el contrato LibraryManager
+  libraryItemId    String
+  userId           String
+  status           LoanStatus @default(QUEUED)
+  requestTxHash    String?
+  pickupTxHash     String?
+  returnTxHash     String?
+  requestDate      DateTime   @default(now())
+  reservationDate  DateTime?
+  pickupDate       DateTime?
+  dueDate          DateTime?
+  returnDate       DateTime?
+  overdue          Boolean    @default(false)
 
   libraryItem LibraryItem @relation(fields: [libraryItemId], references: [id])
   user        User        @relation(fields: [userId], references: [id])

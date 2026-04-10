@@ -19,7 +19,7 @@ interface SidebarProps {
 
 /** Devuelve los grupos de navegación según el rol del usuario */
 function getNavGroups(role: UserRole) {
-  const base = "/dashboard";
+  const base = `/${role.toLowerCase()}`;
 
   switch (role) {
     case "STUDENT":
@@ -27,16 +27,15 @@ function getNavGroups(role: UserRole) {
         {
           title: "Principal",
           items: [
-            { href: base, icon: icons.home, label: "Dashboard" },
+            { href: base, icon: icons.home, label: "Panel" },
           ],
         },
         {
           title: "Servicios",
           items: [
-            { href: `${base}/student/printing`, icon: icons.print, label: "Impresión" },
-            { href: `${base}/student/library`, icon: icons.library, label: "Biblioteca" },
-            { href: `${base}/student/badges`, icon: icons.badge, label: "Insignias" },
-            { href: `${base}/student/shop`, icon: icons.shop, label: "Tienda" },
+            { href: `${base}/library`, icon: icons.library, label: "Biblioteca" },
+            { href: `${base}/badges`, icon: icons.badge, label: "Insignias" },
+            { href: `${base}/shop`, icon: icons.shop, label: "Tienda" },
           ],
         },
       ];
@@ -46,15 +45,15 @@ function getNavGroups(role: UserRole) {
         {
           title: "Principal",
           items: [
-            { href: base, icon: icons.home, label: "Dashboard" },
+            { href: base, icon: icons.home, label: "Panel" },
           ],
         },
         {
           title: "Gestión académica",
           items: [
-            { href: `${base}/professor/badges`, icon: icons.badge, label: "Insignias" },
-            { href: `${base}/professor/rewards`, icon: icons.reward, label: "Recompensas" },
-            { href: `${base}/professor/students`, icon: icons.student, label: "Alumnos" },
+            { href: `${base}/badges`, icon: icons.badge, label: "Insignias" },
+            { href: `${base}/rewards`, icon: icons.reward, label: "Recompensas" },
+            { href: `${base}/students`, icon: icons.student, label: "Alumnos" },
           ],
         },
       ];
@@ -64,15 +63,16 @@ function getNavGroups(role: UserRole) {
         {
           title: "Principal",
           items: [
-            { href: base, icon: icons.home, label: "Dashboard" },
+            { href: base, icon: icons.home, label: "Panel" },
           ],
         },
         {
           title: "Biblioteca",
           items: [
-            { href: `${base}/librarian/items`, icon: icons.items, label: "Catálogo" },
-            { href: `${base}/librarian/loans`, icon: icons.loans, label: "Préstamos" },
-            { href: `${base}/librarian/rooms`, icon: icons.rooms, label: "Salas" },
+            { href: `${base}/items`, icon: icons.items, label: "Catálogo" },
+            { href: `${base}/loans`, icon: icons.loans, label: "Préstamos" },
+            { href: `${base}/rooms`, icon: icons.rooms, label: "Salas" },
+            { href: `${base}/printing`, icon: icons.print, label: "Impresión" },
           ],
         },
       ];
@@ -82,32 +82,32 @@ function getNavGroups(role: UserRole) {
         {
           title: "Principal",
           items: [
-            { href: base, icon: icons.home, label: "Dashboard" },
+            { href: base, icon: icons.home, label: "Panel" },
           ],
         },
         {
           title: "Administración",
           items: [
-            { href: `${base}/admin/users`, icon: icons.users, label: "Usuarios" },
+            { href: `${base}/users`, icon: icons.users, label: "Usuarios" },
           ],
         },
         {
           title: "Biblioteca",
           items: [
-            { href: `${base}/admin/library`, icon: icons.library, label: "Biblioteca" },
+            { href: `${base}/library`, icon: icons.library, label: "Biblioteca" },
           ],
         },
         {
           title: "Tienda",
           items: [
-            { href: `${base}/admin/shop`, icon: icons.shop, label: "Tienda" },
+            { href: `${base}/shop`, icon: icons.shop, label: "Tienda" },
           ],
         },
         {
           title: "Otros",
           items: [
-            { href: `${base}/admin/badges`, icon: icons.badge, label: "Insignias" },
-            { href: `${base}/admin/printing`, icon: icons.print, label: "Impresión" },
+            { href: `${base}/badges`, icon: icons.badge, label: "Insignias" },
+            { href: `${base}/printing`, icon: icons.print, label: "Impresión" },
           ],
         },
       ];

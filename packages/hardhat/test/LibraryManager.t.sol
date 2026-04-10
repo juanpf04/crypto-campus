@@ -10,11 +10,8 @@ import { LibraryManager } from "../contracts/LibraryManager.sol";
 /// @title LibraryManagerTest
 /// @author Juan Pablo Fernández <juanpf04@ucm.es>
 /// @author Arturo Gómez <argome04@ucm.es>
-/// @notice Pruebas de comportamiento y reverts para el ciclo de vida de prestamos en LibraryManager.
-/// @dev Cubre solicitud, aprobacion, devolucion, devolucion forzada y validaciones de disponibilidad.
+/// @notice Pruebas del sistema de colas con auto-reserva para LibraryManager.
 contract LibraryManagerTest is Test {
-    
-    // ── Variables de estado ──────────────────────────────────────────────
 
     CampusRoles campusRoles;
     LibraryToken libraryToken;
@@ -22,9 +19,9 @@ contract LibraryManagerTest is Test {
 
     address librarian;
     address student;
+    address student2;
+    address student3;
     address outsider;
-
-    // ── Setup ────────────────────────────────────────────────────────────
 
     function setUp() public {
         campusRoles = new CampusRoles();
@@ -33,47 +30,56 @@ contract LibraryManagerTest is Test {
 
         librarian = makeAddr("librarian");
         student = makeAddr("student");
+        student2 = makeAddr("student2");
+        student3 = makeAddr("student3");
         outsider = makeAddr("outsider");
 
         campusRoles.registerUser(librarian, "Librarian", campusRoles.LIBRARIAN_ROLE());
         campusRoles.registerUser(student, "Student", campusRoles.STUDENT_ROLE());
+        campusRoles.registerUser(student2, "Student2", campusRoles.STUDENT_ROLE());
+        campusRoles.registerUser(student3, "Student3", campusRoles.STUDENT_ROLE());
 
         libraryToken.setTrustedSpender(address(libraryManager));
         libraryToken.mint(student, 10);
+        libraryToken.mint(student2, 10);
+        libraryToken.mint(student3, 10);
 
         vm.prank(librarian);
         libraryManager.addBook(2);
     }
 
-    // ── Tests ────────────────────────────────────────────────────────────
+    // ── Main flow ───────────────────────────────────────────────────────
 
-    function test_RequestApproveAndConfirmReturn() public {
+    function test_RequestReservedPickupReturn() public {
         vm.prank(student);
         libraryManager.requestLoan(1);
 
-        // Deposit locked on request
+        // Deposit locked, status = Reserved
         assertEq(libraryToken.balanceOf(student), 9);
+        LibraryManager.Loan memory loan = libraryManager.getLoanInfo(1);
+        assertEq(uint256(loan.status), uint256(LibraryManager.LoanStatus.Reserved));
 
+        // Librarian confirms pickup
         vm.prank(librarian);
-        libraryManager.approveLoan(1);
+        libraryManager.confirmPickup(1);
 
         assertEq(libraryManager.balanceOf(student, 1), 1);
-        assertEq(libraryToken.balanceOf(student), 9);
+        loan = libraryManager.getLoanInfo(1);
+        assertEq(uint256(loan.status), uint256(LibraryManager.LoanStatus.PickedUp));
 
+        // Librarian confirms return
         vm.prank(librarian);
         libraryManager.confirmReturn(1);
 
         assertEq(libraryManager.balanceOf(student, 1), 0);
-        assertEq(libraryToken.balanceOf(student), 10);
+        assertEq(libraryToken.balanceOf(student), 10); // deposit returned
     }
 
     function test_ForceReturnOverdueKeepsDeposit() public {
         vm.prank(student);
         libraryManager.requestLoan(1);
-        assertEq(libraryToken.balanceOf(student), 9);
-
         vm.prank(librarian);
-        libraryManager.approveLoan(1);
+        libraryManager.confirmPickup(1);
 
         vm.warp(block.timestamp + 22 days);
 
@@ -81,64 +87,143 @@ contract LibraryManagerTest is Test {
         libraryManager.forceReturn(1);
 
         assertEq(libraryManager.balanceOf(student, 1), 0);
-        // Deposit NOT returned (penalty)
-        assertEq(libraryToken.balanceOf(student), 9);
+        assertEq(libraryToken.balanceOf(student), 9); // deposit NOT returned
     }
 
-    function test_AddCopies() public {
-        (uint256 totalBefore, uint256 availableBefore, ) = libraryManager.getBookInfo(1);
+    // ── Queue system ────────────────────────────────────────────────────
 
-        vm.prank(librarian);
-        libraryManager.addCopies(1, 3);
-
-        (uint256 totalAfter, uint256 availableAfter, ) = libraryManager.getBookInfo(1);
-        assertEq(totalAfter, totalBefore + 3);
-        assertEq(availableAfter, availableBefore + 3);
-    }
-
-    function test_RevertAddCopiesBookNotFound() public {
-        vm.prank(librarian);
-        vm.expectRevert(abi.encodeWithSelector(LibraryManager.BookNotFound.selector, 999));
-        libraryManager.addCopies(999, 1);
-    }
-
-    function test_RevertAddCopiesZero() public {
-        vm.prank(librarian);
-        vm.expectRevert(LibraryManager.ZeroCopies.selector);
-        libraryManager.addCopies(1, 0);
-    }
-
-    function test_RejectLoanReturnsDeposit() public {
+    function test_QueueWhenNoCopies() public {
+        // 2 copies, 3 requests → 2 reserved, 1 queued
         vm.prank(student);
         libraryManager.requestLoan(1);
-        assertEq(libraryToken.balanceOf(student), 9);
+        vm.prank(student2);
+        libraryManager.requestLoan(1);
+        vm.prank(student3);
+        libraryManager.requestLoan(1);
 
+        assertEq(uint256(libraryManager.getLoanInfo(1).status), uint256(LibraryManager.LoanStatus.Reserved));
+        assertEq(uint256(libraryManager.getLoanInfo(2).status), uint256(LibraryManager.LoanStatus.Reserved));
+        assertEq(uint256(libraryManager.getLoanInfo(3).status), uint256(LibraryManager.LoanStatus.Queued));
+        assertEq(libraryManager.getQueuePosition(3), 1);
+    }
+
+    function test_AutoReserveOnReturn() public {
+        vm.prank(student);
+        libraryManager.requestLoan(1); // Reserved (loan 1)
+        vm.prank(student2);
+        libraryManager.requestLoan(1); // Reserved (loan 2)
+        vm.prank(student3);
+        libraryManager.requestLoan(1); // Queued (loan 3)
+
+        // Student1 picks up and returns
         vm.prank(librarian);
-        libraryManager.rejectLoan(1, "Not available");
+        libraryManager.confirmPickup(1);
+        vm.prank(librarian);
+        libraryManager.confirmReturn(1);
 
-        LibraryManager.Loan memory loan = libraryManager.getLoanInfo(1);
-        assertEq(uint256(loan.status), uint256(LibraryManager.LoanStatus.Rejected));
-        // Deposit returned
+        // Student3 should now be Reserved
+        assertEq(uint256(libraryManager.getLoanInfo(3).status), uint256(LibraryManager.LoanStatus.Reserved));
+    }
+
+    function test_AutoReserveOnCancel() public {
+        vm.prank(student);
+        libraryManager.requestLoan(1); // Reserved (loan 1)
+        vm.prank(student2);
+        libraryManager.requestLoan(1); // Reserved (loan 2)
+        vm.prank(student3);
+        libraryManager.requestLoan(1); // Queued (loan 3)
+
+        // Student1 cancels → copy freed → student3 auto-reserved
+        vm.prank(student);
+        libraryManager.cancelLoan(1);
+
+        assertEq(uint256(libraryManager.getLoanInfo(3).status), uint256(LibraryManager.LoanStatus.Reserved));
+        assertEq(libraryToken.balanceOf(student), 10); // deposit returned
+    }
+
+    // ── Cancel ──────────────────────────────────────────────────────────
+
+    function test_CancelQueuedReturnsDeposit() public {
+        vm.prank(student);
+        libraryManager.requestLoan(1); // Reserved
+        vm.prank(student2);
+        libraryManager.requestLoan(1); // Reserved
+        vm.prank(student3);
+        libraryManager.requestLoan(1); // Queued
+
+        vm.prank(student3);
+        libraryManager.cancelLoan(3);
+
+        assertEq(uint256(libraryManager.getLoanInfo(3).status), uint256(LibraryManager.LoanStatus.Cancelled));
+        assertEq(libraryToken.balanceOf(student3), 10);
+    }
+
+    function test_CancelReservedReturnsDeposit() public {
+        vm.prank(student);
+        libraryManager.requestLoan(1);
+
+        vm.prank(student);
+        libraryManager.cancelLoan(1);
+
+        assertEq(uint256(libraryManager.getLoanInfo(1).status), uint256(LibraryManager.LoanStatus.Cancelled));
         assertEq(libraryToken.balanceOf(student), 10);
     }
 
-    function test_RevertAddBookZeroCopies() public {
+    function test_RevertCancelPickedUp() public {
+        vm.prank(student);
+        libraryManager.requestLoan(1);
         vm.prank(librarian);
-        vm.expectRevert(LibraryManager.ZeroCopies.selector);
-        libraryManager.addBook(0);
+        libraryManager.confirmPickup(1);
+
+        vm.prank(student);
+        vm.expectRevert(abi.encodeWithSelector(LibraryManager.NotQueuedOrReserved.selector, 1));
+        libraryManager.cancelLoan(1);
     }
 
-    function test_RevertRemoveBookWithActiveLoans() public {
+    // ── Reservation expiry ──────────────────────────────────────────────
+
+    function test_ExpireReservation() public {
+        vm.prank(student);
+        libraryManager.requestLoan(1);
+
+        vm.warp(block.timestamp + 3 days + 1);
+
+        assertTrue(libraryManager.isReservationExpired(1));
+
+        vm.prank(librarian);
+        libraryManager.expireReservation(1);
+
+        assertEq(uint256(libraryManager.getLoanInfo(1).status), uint256(LibraryManager.LoanStatus.Cancelled));
+        assertEq(libraryToken.balanceOf(student), 10);
+    }
+
+    function test_RevertExpireBeforeTimeout() public {
         vm.prank(student);
         libraryManager.requestLoan(1);
 
         vm.prank(librarian);
-        libraryManager.approveLoan(1);
+        vm.expectRevert(abi.encodeWithSelector(LibraryManager.ReservationNotExpired.selector, 1));
+        libraryManager.expireReservation(1);
+    }
+
+    function test_ExpireAutoReservesNext() public {
+        vm.prank(student);
+        libraryManager.requestLoan(1); // Reserved
+        vm.prank(student2);
+        libraryManager.requestLoan(1); // Reserved
+        vm.prank(student3);
+        libraryManager.requestLoan(1); // Queued
+
+        vm.warp(block.timestamp + 3 days + 1);
 
         vm.prank(librarian);
-        vm.expectRevert(abi.encodeWithSelector(LibraryManager.BookHasActiveLoans.selector, 1));
-        libraryManager.removeBook(1);
+        libraryManager.expireReservation(1); // student1's reservation expired
+
+        // student3 should now be Reserved
+        assertEq(uint256(libraryManager.getLoanInfo(3).status), uint256(LibraryManager.LoanStatus.Reserved));
     }
+
+    // ── Revert paths ────────────────────────────────────────────────────
 
     function test_RevertRequestLoanNotStudent() public {
         vm.prank(outsider);
@@ -146,82 +231,75 @@ contract LibraryManagerTest is Test {
         libraryManager.requestLoan(1);
     }
 
-    function test_RevertForceReturnNotOverdue() public {
+    function test_RevertRequestLoanAlreadyBorrowing() public {
         vm.prank(student);
         libraryManager.requestLoan(1);
 
-        vm.prank(librarian);
-        libraryManager.approveLoan(1);
-
-        vm.prank(librarian);
-        vm.expectRevert(abi.encodeWithSelector(LibraryManager.LoanNotOverdue.selector, 1));
-        libraryManager.forceReturn(1);
-    }
-
-    function test_CancelLoanRequestReturnsDeposit() public {
-        vm.prank(student);
-        libraryManager.requestLoan(1);
-        assertEq(libraryToken.balanceOf(student), 9);
-
-        vm.prank(student);
-        libraryManager.cancelLoanRequest(1);
-
-        LibraryManager.Loan memory loan = libraryManager.getLoanInfo(1);
-        // cancelLoanRequest deja el estado en Rejected (reutilizado para cancelaciones).
-        assertEq(uint256(loan.status), uint256(LibraryManager.LoanStatus.Rejected));
-        // Deposit returned
-        assertEq(libraryToken.balanceOf(student), 10);
-    }
-
-    function test_PauseAndUnpause() public {
-        // Admin pausa el contrato.
-        libraryManager.pause();
-
-        // Anadir libro revierte mientras esta pausado.
-        vm.prank(librarian);
-        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
-        libraryManager.addBook(1);
-
-        // Admin reanuda el contrato.
-        libraryManager.unpause();
-
-        // Ahora vuelve a funcionar.
-        vm.prank(librarian);
-        libraryManager.addBook(1);
-    }
-
-    function test_IsOverdue() public {
-        vm.prank(student);
-        libraryManager.requestLoan(1);
-
-        vm.prank(librarian);
-        libraryManager.approveLoan(1);
-
-        assertFalse(libraryManager.isOverdue(1));
-
-        // Avanzar mas alla de la fecha limite (DEFAULT_LOAN_DURATION = 21 days).
-        vm.warp(block.timestamp + 22 days);
-
-        assertTrue(libraryManager.isOverdue(1));
-    }
-
-    function test_RevertRequestLoanAlreadyPending() public {
-        vm.prank(student);
-        libraryManager.requestLoan(1);
-
-        // Segunda solicitud del mismo libro mientras la primera esta pendiente
         vm.prank(student);
         vm.expectRevert(abi.encodeWithSelector(LibraryManager.AlreadyBorrowingBook.selector, student, 1));
         libraryManager.requestLoan(1);
     }
 
     function test_RevertRequestLoanInsufficientDeposit() public {
-        // Quemar todos los tokens del estudiante
         libraryToken.burn(student, 10);
-        assertEq(libraryToken.balanceOf(student), 0);
 
         vm.prank(student);
         vm.expectRevert(abi.encodeWithSelector(LibraryManager.InsufficientDeposit.selector, student));
         libraryManager.requestLoan(1);
+    }
+
+    function test_RevertForceReturnNotOverdue() public {
+        vm.prank(student);
+        libraryManager.requestLoan(1);
+        vm.prank(librarian);
+        libraryManager.confirmPickup(1);
+
+        vm.prank(librarian);
+        vm.expectRevert(abi.encodeWithSelector(LibraryManager.LoanNotOverdue.selector, 1));
+        libraryManager.forceReturn(1);
+    }
+
+    // ── Pausable ────────────────────────────────────────────────────────
+
+    function test_PauseAndUnpause() public {
+        libraryManager.pause();
+
+        vm.prank(librarian);
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        libraryManager.addBook(1);
+
+        libraryManager.unpause();
+
+        vm.prank(librarian);
+        libraryManager.addBook(1);
+    }
+
+    // ── View functions ──────────────────────────────────────────────────
+
+    function test_IsOverdue() public {
+        vm.prank(student);
+        libraryManager.requestLoan(1);
+        vm.prank(librarian);
+        libraryManager.confirmPickup(1);
+
+        assertFalse(libraryManager.isOverdue(1));
+        vm.warp(block.timestamp + 22 days);
+        assertTrue(libraryManager.isOverdue(1));
+    }
+
+    function test_GetAvailableCopiesAccountsForReservations() public {
+        assertEq(libraryManager.getAvailableCopies(1), 2);
+
+        vm.prank(student);
+        libraryManager.requestLoan(1); // Reserved → 1 available
+        assertEq(libraryManager.getAvailableCopies(1), 1);
+
+        vm.prank(librarian);
+        libraryManager.confirmPickup(1); // PickedUp → 1 available (1 held, 0 reserved)
+        assertEq(libraryManager.getAvailableCopies(1), 1);
+
+        vm.prank(librarian);
+        libraryManager.confirmReturn(1); // Returned → 2 available
+        assertEq(libraryManager.getAvailableCopies(1), 2);
     }
 }

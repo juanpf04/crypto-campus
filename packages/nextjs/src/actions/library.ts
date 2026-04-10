@@ -5,9 +5,9 @@
  * El contrato LibraryManager es genérico: el tipo de ítem se distingue solo en Prisma.
  *
  * Patrón de transacciones:
- * - Operaciones de LIBRARIAN/ADMIN (addItem, approveLoan, confirmReturn, etc.):
+ * - Operaciones de LIBRARIAN/ADMIN (addItem, confirmPickup, confirmReturn, etc.):
  *   firmadas por adminWalletClient (Account[0] de Hardhat).
- * - Operaciones de ESTUDIANTE (requestLoan, cancelLoanRequest):
+ * - Operaciones de ESTUDIANTE (requestLoan, cancelLoan):
  *   firmadas por la wallet custodial del estudiante.
  */
 
@@ -334,7 +334,7 @@ export async function getItem(itemId: string) {
 		where: { id: itemId },
 		include: {
 			loans: {
-				where: { status: { in: ["REQUESTED", "APPROVED"] } },
+				where: { status: { in: ["QUEUED", "RESERVED", "PICKED_UP"] } },
 				include: { user: { select: { id: true, name: true, email: true } } },
 				orderBy: { requestDate: "desc" },
 			},
@@ -354,7 +354,7 @@ export async function getItem(itemId: string) {
 		availableCopies = Number(result);
 	} catch {
 		// Si falla la lectura on-chain, estimamos desde Prisma
-		const activeLoans = item.loans.filter(l => l.status === "APPROVED").length;
+		const activeLoans = item.loans.filter(l => l.status === "RESERVED" || l.status === "PICKED_UP").length;
 		availableCopies = Math.max(0, item.totalCopies - activeLoans);
 	}
 
@@ -378,11 +378,36 @@ export async function getItemCategories() {
 	return categories.map(c => c.category).filter(Boolean) as string[];
 }
 
-// ── Préstamos ────────────────────────────────────────────────────────────
+// ── Préstamos (sistema de colas con auto-reserva) ───────────────────────
+
+/**
+ * Helper: procesa eventos LoanReserved de un receipt para actualizar
+ * préstamos auto-reservados en Prisma (de QUEUED a RESERVED).
+ */
+async function processQueueEvents(receipt: { logs: readonly { data: string; topics: readonly string[] }[] }) {
+	const { decodeEventLog } = await import("viem");
+	for (const log of receipt.logs) {
+		try {
+			const event = decodeEventLog({
+				abi: LIBRARY_MANAGER_ABI,
+				data: log.data as `0x${string}`,
+				topics: log.topics as [string, ...string[]],
+			});
+			if (event.eventName === "LoanReserved") {
+				const args = event.args as { loanId: bigint };
+				await prisma.loan.updateMany({
+					where: { loanId: Number(args.loanId), status: "QUEUED" },
+					data: { status: "RESERVED", reservationDate: new Date() },
+				});
+			}
+		} catch { /* log no es nuestro evento */ }
+	}
+}
 
 /**
  * Estudiante solicita un préstamo.
- * Firmado por la wallet del estudiante (on-chain verifica msg.sender).
+ * Si hay copias → RESERVED. Si no → QUEUED (cola de espera).
+ * En ambos casos se bloquea 1 LibraryToken como depósito.
  */
 export async function requestLoan(itemId: string) {
 	const session = await getSession();
@@ -392,17 +417,15 @@ export async function requestLoan(itemId: string) {
 		const item = await prisma.libraryItem.findUnique({ where: { id: itemId } });
 		if (!item || !item.active) throw new Error("Ítem no encontrado o inactivo");
 
-		// Verificar que no tenga ya un préstamo activo o pendiente de este ítem
 		const existingLoan = await prisma.loan.findFirst({
 			where: {
 				userId: session.userId!,
 				libraryItemId: item.id,
-				status: { in: ["REQUESTED", "APPROVED"] },
+				status: { in: ["QUEUED", "RESERVED", "PICKED_UP"] },
 			},
 		});
 		if (existingLoan) throw new Error("Ya tienes un préstamo activo o pendiente de este ítem");
 
-		// Leer nextLoanId antes
 		const nextLoanId = await publicClient.readContract({
 			address: CONTRACT_ADDRESSES.libraryManager as `0x${string}`,
 			abi: LIBRARY_MANAGER_ABI,
@@ -410,7 +433,6 @@ export async function requestLoan(itemId: string) {
 		}) as bigint;
 		const loanId = Number(nextLoanId);
 
-		// Firmar con wallet del estudiante
 		const { walletClient } = await getUserWalletClient(session.userId!);
 
 		const hash = await walletClient.writeContract({
@@ -420,22 +442,30 @@ export async function requestLoan(itemId: string) {
 			args: [BigInt(item.tokenId)],
 		});
 		const receipt = await publicClient.waitForTransactionReceipt({ hash });
+		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
 
-		if (receipt.status !== "success") {
-			throw new Error("La transacción fue revertida");
-		}
+		// Leer estado del préstamo on-chain para saber si quedó QUEUED o RESERVED
+		const loanInfo = await publicClient.readContract({
+			address: CONTRACT_ADDRESSES.libraryManager as `0x${string}`,
+			abi: LIBRARY_MANAGER_ABI,
+			functionName: "getLoanInfo",
+			args: [BigInt(loanId)],
+		}) as { status: number; reservationDate: bigint };
+
+		const isReserved = loanInfo.status === 2; // Reserved = 2
 
 		const loan = await prisma.loan.create({
 			data: {
 				loanId,
 				libraryItemId: item.id,
 				userId: session.userId!,
-				status: "REQUESTED",
+				status: isReserved ? "RESERVED" : "QUEUED",
 				requestTxHash: hash,
+				reservationDate: isReserved ? new Date() : null,
 			},
 		});
 
-		return { success: true, loan };
+		return { success: true, loan, queued: !isReserved };
 	} catch (error) {
 		if (error instanceof Error && error.message === "No autorizado") throw error;
 		throw new Error(`Error al solicitar préstamo: ${error instanceof Error ? error.message : "desconocido"}`);
@@ -443,9 +473,10 @@ export async function requestLoan(itemId: string) {
 }
 
 /**
- * Estudiante cancela su solicitud pendiente.
+ * Estudiante cancela su préstamo (QUEUED o RESERVED).
+ * Devuelve el depósito. Si era RESERVED, procesa la cola.
  */
-export async function cancelLoanRequest(loanPrismaId: string) {
+export async function cancelLoan(loanPrismaId: string) {
 	const session = await getSession();
 	ensureRole(session, ["STUDENT"]);
 
@@ -453,76 +484,70 @@ export async function cancelLoanRequest(loanPrismaId: string) {
 		const loan = await prisma.loan.findUnique({ where: { id: loanPrismaId } });
 		if (!loan) throw new Error("Préstamo no encontrado");
 		if (loan.userId !== session.userId) throw new Error("No autorizado");
-		if (loan.status !== "REQUESTED") throw new Error("Solo se pueden cancelar solicitudes pendientes");
+		if (loan.status !== "QUEUED" && loan.status !== "RESERVED")
+			throw new Error("Solo se pueden cancelar préstamos en cola o reservados");
 
 		const { walletClient } = await getUserWalletClient(session.userId!);
 
 		const hash = await walletClient.writeContract({
 			address: CONTRACT_ADDRESSES.libraryManager as `0x${string}`,
 			abi: LIBRARY_MANAGER_ABI,
-			functionName: "cancelLoanRequest",
+			functionName: "cancelLoan",
 			args: [BigInt(loan.loanId)],
 		});
 		const receipt = await publicClient.waitForTransactionReceipt({ hash });
-
-		if (receipt.status !== "success") {
-			throw new Error("La transacción fue revertida");
-		}
+		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
 
 		await prisma.loan.update({
 			where: { id: loanPrismaId },
-			data: { status: "REJECTED" },
+			data: { status: "CANCELLED" },
 		});
+
+		// Procesar auto-reservas de la cola
+		await processQueueEvents(receipt);
 
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && error.message === "No autorizado") throw error;
-		throw new Error(`Error al cancelar solicitud: ${error instanceof Error ? error.message : "desconocido"}`);
+		throw new Error(`Error al cancelar préstamo: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
 
 /**
- * Bibliotecario/admin aprueba un préstamo.
- * Bloquea 1 LibraryToken del estudiante y transfiere copia del ítem.
+ * Bibliotecario confirma la recogida física del ítem.
+ * Transfiere el libro al estudiante y arranca el plazo de 21 días.
  */
-export async function approveLoan(loanPrismaId: string) {
+export async function confirmPickup(loanPrismaId: string) {
 	const session = await getSession();
 	ensureRole(session, ["LIBRARIAN", "ADMIN"]);
 
 	try {
-		const loan = await prisma.loan.findUnique({
-			where: { id: loanPrismaId },
-			include: { libraryItem: true },
-		});
+		const loan = await prisma.loan.findUnique({ where: { id: loanPrismaId } });
 		if (!loan) throw new Error("Préstamo no encontrado");
-		if (loan.status !== "REQUESTED") throw new Error("Solo se pueden aprobar solicitudes pendientes");
+		if (loan.status !== "RESERVED") throw new Error("Solo se pueden recoger préstamos reservados");
 
 		const hash = await adminWalletClient.writeContract({
 			address: CONTRACT_ADDRESSES.libraryManager as `0x${string}`,
 			abi: LIBRARY_MANAGER_ABI,
-			functionName: "approveLoan",
+			functionName: "confirmPickup",
 			args: [BigInt(loan.loanId)],
 		});
 		const receipt = await publicClient.waitForTransactionReceipt({ hash });
+		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
 
-		if (receipt.status !== "success") {
-			throw new Error("La transacción fue revertida");
-		}
-
-		// Leer datos del préstamo on-chain para obtener dueDate
 		const loanInfo = await publicClient.readContract({
 			address: CONTRACT_ADDRESSES.libraryManager as `0x${string}`,
 			abi: LIBRARY_MANAGER_ABI,
 			functionName: "getLoanInfo",
 			args: [BigInt(loan.loanId)],
-		}) as { dueDate: bigint; approvalDate: bigint };
+		}) as { dueDate: bigint; pickupDate: bigint };
 
 		await prisma.loan.update({
 			where: { id: loanPrismaId },
 			data: {
-				status: "APPROVED",
-				approveTxHash: hash,
-				approvalDate: new Date(),
+				status: "PICKED_UP",
+				pickupTxHash: hash,
+				pickupDate: new Date(),
 				dueDate: new Date(Number(loanInfo.dueDate) * 1000),
 			},
 		});
@@ -530,49 +555,13 @@ export async function approveLoan(loanPrismaId: string) {
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && error.message === "No autorizado") throw error;
-		throw new Error(`Error al aprobar préstamo: ${error instanceof Error ? error.message : "desconocido"}`);
+		throw new Error(`Error al confirmar recogida: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
 
 /**
- * Bibliotecario/admin rechaza una solicitud.
- */
-export async function rejectLoan(loanPrismaId: string, reason: string) {
-	const session = await getSession();
-	ensureRole(session, ["LIBRARIAN", "ADMIN"]);
-
-	try {
-		const loan = await prisma.loan.findUnique({ where: { id: loanPrismaId } });
-		if (!loan) throw new Error("Préstamo no encontrado");
-		if (loan.status !== "REQUESTED") throw new Error("Solo se pueden rechazar solicitudes pendientes");
-
-		const hash = await adminWalletClient.writeContract({
-			address: CONTRACT_ADDRESSES.libraryManager as `0x${string}`,
-			abi: LIBRARY_MANAGER_ABI,
-			functionName: "rejectLoan",
-			args: [BigInt(loan.loanId), reason || "Rechazado"],
-		});
-		const receipt = await publicClient.waitForTransactionReceipt({ hash });
-
-		if (receipt.status !== "success") {
-			throw new Error("La transacción fue revertida");
-		}
-
-		await prisma.loan.update({
-			where: { id: loanPrismaId },
-			data: { status: "REJECTED" },
-		});
-
-		return { success: true };
-	} catch (error) {
-		if (error instanceof Error && error.message === "No autorizado") throw error;
-		throw new Error(`Error al rechazar préstamo: ${error instanceof Error ? error.message : "desconocido"}`);
-	}
-}
-
-/**
- * Bibliotecario confirma la devolución física de un ítem.
- * Devuelve depósito al estudiante.
+ * Bibliotecario confirma la devolución física.
+ * Devuelve depósito y procesa la cola.
  */
 export async function confirmReturn(loanPrismaId: string) {
 	const session = await getSession();
@@ -581,7 +570,7 @@ export async function confirmReturn(loanPrismaId: string) {
 	try {
 		const loan = await prisma.loan.findUnique({ where: { id: loanPrismaId } });
 		if (!loan) throw new Error("Préstamo no encontrado");
-		if (loan.status !== "APPROVED") throw new Error("Solo se pueden devolver préstamos activos");
+		if (loan.status !== "PICKED_UP") throw new Error("Solo se pueden devolver préstamos recogidos");
 
 		const hash = await adminWalletClient.writeContract({
 			address: CONTRACT_ADDRESSES.libraryManager as `0x${string}`,
@@ -590,10 +579,7 @@ export async function confirmReturn(loanPrismaId: string) {
 			args: [BigInt(loan.loanId)],
 		});
 		const receipt = await publicClient.waitForTransactionReceipt({ hash });
-
-		if (receipt.status !== "success") {
-			throw new Error("La transacción fue revertida");
-		}
+		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
 
 		const isOverdue = loan.dueDate ? new Date() > loan.dueDate : false;
 
@@ -607,6 +593,8 @@ export async function confirmReturn(loanPrismaId: string) {
 			},
 		});
 
+		await processQueueEvents(receipt);
+
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && error.message === "No autorizado") throw error;
@@ -615,8 +603,8 @@ export async function confirmReturn(loanPrismaId: string) {
 }
 
 /**
- * Bibliotecario fuerza la devolución de un préstamo atrasado.
- * El depósito NO se devuelve (penalización).
+ * Bibliotecario fuerza la devolución de un préstamo vencido.
+ * El depósito NO se devuelve (penalización). Procesa la cola.
  */
 export async function forceReturn(loanPrismaId: string) {
 	const session = await getSession();
@@ -625,7 +613,7 @@ export async function forceReturn(loanPrismaId: string) {
 	try {
 		const loan = await prisma.loan.findUnique({ where: { id: loanPrismaId } });
 		if (!loan) throw new Error("Préstamo no encontrado");
-		if (loan.status !== "APPROVED") throw new Error("Solo se pueden forzar devoluciones de préstamos activos");
+		if (loan.status !== "PICKED_UP") throw new Error("Solo se pueden forzar devoluciones de préstamos recogidos");
 
 		const hash = await adminWalletClient.writeContract({
 			address: CONTRACT_ADDRESSES.libraryManager as `0x${string}`,
@@ -634,10 +622,7 @@ export async function forceReturn(loanPrismaId: string) {
 			args: [BigInt(loan.loanId)],
 		});
 		const receipt = await publicClient.waitForTransactionReceipt({ hash });
-
-		if (receipt.status !== "success") {
-			throw new Error("La transacción fue revertida");
-		}
+		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
 
 		await prisma.loan.update({
 			where: { id: loanPrismaId },
@@ -649,6 +634,8 @@ export async function forceReturn(loanPrismaId: string) {
 			},
 		});
 
+		await processQueueEvents(receipt);
+
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && error.message === "No autorizado") throw error;
@@ -657,11 +644,47 @@ export async function forceReturn(loanPrismaId: string) {
 }
 
 /**
+ * Bibliotecario expira una reserva no recogida tras el timeout (3 días).
+ * Devuelve depósito y procesa la cola.
+ */
+export async function expireReservation(loanPrismaId: string) {
+	const session = await getSession();
+	ensureRole(session, ["LIBRARIAN", "ADMIN"]);
+
+	try {
+		const loan = await prisma.loan.findUnique({ where: { id: loanPrismaId } });
+		if (!loan) throw new Error("Préstamo no encontrado");
+		if (loan.status !== "RESERVED") throw new Error("Solo se pueden expirar reservas");
+
+		const hash = await adminWalletClient.writeContract({
+			address: CONTRACT_ADDRESSES.libraryManager as `0x${string}`,
+			abi: LIBRARY_MANAGER_ABI,
+			functionName: "expireReservation",
+			args: [BigInt(loan.loanId)],
+		});
+		const receipt = await publicClient.waitForTransactionReceipt({ hash });
+		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
+
+		await prisma.loan.update({
+			where: { id: loanPrismaId },
+			data: { status: "CANCELLED" },
+		});
+
+		await processQueueEvents(receipt);
+
+		return { success: true };
+	} catch (error) {
+		if (error instanceof Error && error.message === "No autorizado") throw error;
+		throw new Error(`Error al expirar reserva: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
+}
+
+/**
  * Lista todos los préstamos con filtros opcionales.
  * Acceso: LIBRARIAN, ADMIN.
  */
 export async function listLoans(filters?: {
-	status?: "REQUESTED" | "APPROVED" | "REJECTED" | "RETURNED" | "OVERDUE";
+	status?: "QUEUED" | "RESERVED" | "PICKED_UP" | "RETURNED" | "CANCELLED";
 	itemId?: string;
 	limit?: number;
 	offset?: number;
@@ -691,14 +714,14 @@ export async function listLoans(filters?: {
 }
 
 /**
- * Lista solicitudes pendientes (REQUESTED).
+ * Lista reservas pendientes de recogida (RESERVED).
  * Acceso: LIBRARIAN, ADMIN.
  */
-export async function listPendingRequests(filters?: { limit?: number; offset?: number }) {
+export async function listPendingPickups(filters?: { limit?: number; offset?: number }) {
 	const session = await getSession();
 	ensureRole(session, ["LIBRARIAN", "ADMIN"]);
 
-	const where = { status: "REQUESTED" as const };
+	const where = { status: "RESERVED" as const };
 
 	const [items, total] = await Promise.all([
 		prisma.loan.findMany({
@@ -707,7 +730,7 @@ export async function listPendingRequests(filters?: { limit?: number; offset?: n
 				libraryItem: { select: { id: true, title: true, type: true, tokenId: true, coverUrl: true } },
 				user: { select: { id: true, name: true, email: true } },
 			},
-			orderBy: { requestDate: "asc" },
+			orderBy: { reservationDate: "asc" },
 			...(filters?.limit ? { take: filters.limit } : {}),
 			...(filters?.offset ? { skip: filters.offset } : {}),
 		}),
@@ -718,7 +741,7 @@ export async function listPendingRequests(filters?: { limit?: number; offset?: n
 }
 
 /**
- * Obtiene los préstamos del estudiante actual.
+ * Obtiene los préstamos del estudiante actual con posición en cola.
  * Acceso: STUDENT.
  */
 export async function getMyLoans() {
@@ -733,7 +756,27 @@ export async function getMyLoans() {
 		orderBy: { requestDate: "desc" },
 	});
 
-	return loans;
+	// Para préstamos en cola, obtener la posición
+	const loansWithQueue = await Promise.all(
+		loans.map(async (loan) => {
+			if (loan.status === "QUEUED") {
+				try {
+					const pos = await publicClient.readContract({
+						address: CONTRACT_ADDRESSES.libraryManager as `0x${string}`,
+						abi: LIBRARY_MANAGER_ABI,
+						functionName: "getQueuePosition",
+						args: [BigInt(loan.loanId)],
+					}) as bigint;
+					return { ...loan, queuePosition: Number(pos) };
+				} catch {
+					return { ...loan, queuePosition: null };
+				}
+			}
+			return { ...loan, queuePosition: null };
+		}),
+	);
+
+	return loansWithQueue;
 }
 
 /**
@@ -745,7 +788,6 @@ export async function getLibraryBalance(userId?: string) {
 
 	const targetUserId = userId || session.userId!;
 
-	// Solo admin/librarian pueden ver el balance de otros
 	if (targetUserId !== session.userId) {
 		ensureRole(session, ["LIBRARIAN", "ADMIN"]);
 	}
@@ -778,16 +820,18 @@ export async function getLibraryStats() {
 	const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
 	const [
-		totalItems, activeItems, totalLoans, pendingRequests, activeLoans, overdueLoans,
+		totalItems, activeItems, totalLoans,
+		queuedLoans, pendingPickups, activeLoans, overdueLoans,
 		onTimeReturned, totalReturned,
 		itemsByType, topItemsRaw, recentLoansRaw, loansLast6Months,
 	] = await Promise.all([
 		prisma.libraryItem.count(),
 		prisma.libraryItem.count({ where: { active: true } }),
 		prisma.loan.count(),
-		prisma.loan.count({ where: { status: "REQUESTED" } }),
-		prisma.loan.count({ where: { status: "APPROVED" } }),
-		prisma.loan.count({ where: { status: "APPROVED", dueDate: { lt: now } } }),
+		prisma.loan.count({ where: { status: "QUEUED" } }),
+		prisma.loan.count({ where: { status: "RESERVED" } }),
+		prisma.loan.count({ where: { status: "PICKED_UP" } }),
+		prisma.loan.count({ where: { status: "PICKED_UP", dueDate: { lt: now } } }),
 		prisma.loan.count({ where: { status: "RETURNED", overdue: false } }),
 		prisma.loan.count({ where: { status: "RETURNED" } }),
 		prisma.libraryItem.groupBy({ by: ["type"], where: { active: true }, _count: true }),
@@ -811,7 +855,6 @@ export async function getLibraryStats() {
 		}),
 	]);
 
-	// Agrupar préstamos por mes (últimos 6 meses)
 	const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 	const loansByMonth: { month: string; count: number }[] = [];
 	for (let i = 5; i >= 0; i--) {
@@ -825,7 +868,6 @@ export async function getLibraryStats() {
 		loansByMonth.push({ month: label, count });
 	}
 
-	// Resolver títulos para top ítems
 	const topItemIds = topItemsRaw.map((t) => t.libraryItemId);
 	const topItemDetails = await prisma.libraryItem.findMany({
 		where: { id: { in: topItemIds } },
@@ -836,10 +878,8 @@ export async function getLibraryStats() {
 		return { title: item?.title ?? "Desconocido", type: item?.type ?? "OTHER", loanCount: t._count.id };
 	});
 
-	// Tasa de puntualidad
 	const onTimeRate = totalReturned > 0 ? Math.round((onTimeReturned / totalReturned) * 100) : 100;
 
-	// Actividad reciente
 	const recentLoans = recentLoansRaw.map((l) => ({
 		title: l.libraryItem.title,
 		userName: l.user.name,
@@ -851,7 +891,8 @@ export async function getLibraryStats() {
 		totalItems,
 		activeItems,
 		totalLoans,
-		pendingRequests,
+		queuedLoans,
+		pendingPickups,
 		activeLoans,
 		overdueLoans,
 		onTimeRate,

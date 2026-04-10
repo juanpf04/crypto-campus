@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { LoginForm, type LoginFormData } from "@/components/forms";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui";
 import { useToast } from "@/hooks/useToast";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { addToast } = useToast();
 
   async function handleLogin(data: LoginFormData) {
@@ -25,7 +26,15 @@ export default function LoginPage() {
     }
 
     addToast("Sesión iniciada correctamente", "success");
-    router.push("/dashboard");
+
+    // Redirigir a returnUrl si existe, o al panel del rol
+    const returnUrl = searchParams.get("returnUrl");
+    if (returnUrl) {
+      router.push(returnUrl);
+    } else {
+      const role = (json.user?.role as string)?.toLowerCase() || "student";
+      router.push(`/${role}`);
+    }
   }
 
   return (

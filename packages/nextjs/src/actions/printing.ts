@@ -283,7 +283,7 @@ export async function listPrinterLogsForAdmin(limit = 50, offset = 0, userId?: s
 	const safeOffset = Math.max(offset, 0);
 
 	const session = await getSession();
-	ensureRole(session, ["ADMIN"]);
+	ensureRole(session, ["ADMIN", "LIBRARIAN"]);
 
 	try {
 		// Si se pasa userId, filtrar solo los logs de ese usuario
@@ -316,7 +316,7 @@ export async function listPrinterLogsForAdmin(limit = 50, offset = 0, userId?: s
  */
 export async function listAllPrinters() {
 	const session = await getSession();
-	ensureRole(session, ["ADMIN"]);
+	ensureRole(session, ["ADMIN", "LIBRARIAN"]);
 
 	try {
 		return await prisma.printer.findMany({
@@ -336,7 +336,7 @@ export async function listAllPrinters() {
  */
 export async function createPrinter(input: CreatePrinterInput) {
 	const session = await getSession();
-	ensureRole(session, ["ADMIN"]);
+	ensureRole(session, ["ADMIN", "LIBRARIAN"]);
 
 	try {
 		const id = cleanString(input.id, "El identificador");
@@ -350,7 +350,7 @@ export async function createPrinter(input: CreatePrinterInput) {
 		});
 
 		// Revalidar caché de la ruta de administración
-		revalidatePath("/dashboard/admin/printing");
+		revalidatePath("/admin/printing");
 		return printer;
 	} catch (error) {
 		if (error instanceof Error && error.message.includes("Unique constraint failed")) {
@@ -369,7 +369,7 @@ export async function createPrinter(input: CreatePrinterInput) {
  */
 export async function updatePrinter(input: UpdatePrinterInput) {
 	const session = await getSession();
-	ensureRole(session, ["ADMIN"]);
+	ensureRole(session, ["ADMIN", "LIBRARIAN"]);
 
 	try {
 		const id = cleanString(input.id, "El identificador");
@@ -411,7 +411,7 @@ export async function updatePrinter(input: UpdatePrinterInput) {
 		});
 
 		// Revalidar caché
-		revalidatePath("/dashboard/admin/printing");
+		revalidatePath("/admin/printing");
 		return printer;
 	} catch (error) {
 		if (error instanceof Error && error.message.includes("Unique constraint failed")) {
@@ -532,6 +532,10 @@ async function executePrinterJob(
 	const pages = ensurePositiveInt(input.pages, "Las páginas");
 	const copies = ensurePositiveInt(input.copies ?? 1, "Las copias");
 	const pagesToPrint = pages * copies;
+
+	if (pagesToPrint > 50) {
+		throw new Error("Máximo 50 páginas por trabajo de impresión");
+	}
 
 	// Verificar que la impresora existe y está activa en BD
 	const printer = await prisma.printer.findUnique({
@@ -654,7 +658,7 @@ export async function executeMyPrintJob(input: ExecutePrintInput) {
 
 		// Ejecutar trabajo y luego revalidar caché de ruta de estudiante
 		const result = await executePrinterJob(user.id, user.address, input);
-		revalidatePath("/dashboard/student/printing");
+		revalidatePath("/student/library/printing");
 		return result;
 	} catch (error) {
 		throw new Error(`Error al ejecutar trabajo personal: ${error instanceof Error ? error.message : "desconocido"}`);
@@ -670,7 +674,7 @@ export async function executeMyPrintJob(input: ExecutePrintInput) {
  */
 export async function executePrintJobAsAdmin(input: ExecutePrintAsAdminInput) {
 	const session = await getSession();
-	ensureRole(session, ["ADMIN"]);
+	ensureRole(session, ["ADMIN", "LIBRARIAN"]);
 
 	try {
 		const user = await prisma.user.findUnique({
@@ -684,7 +688,7 @@ export async function executePrintJobAsAdmin(input: ExecutePrintAsAdminInput) {
 
 		// Ejecutar trabajo en nombre del usuario y revalidar caché de admin
 		const result = await executePrinterJob(user.id, user.address, input);
-		revalidatePath("/dashboard/admin/printing");
+		revalidatePath("/admin/printing");
 		return result;
 	} catch (error) {
 		throw new Error(`Error al ejecutar trabajo de impresión admin: ${error instanceof Error ? error.message : "desconocido"}`);
