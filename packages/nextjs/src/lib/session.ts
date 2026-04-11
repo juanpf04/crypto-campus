@@ -33,8 +33,9 @@ export const sessionOptions: SessionOptions = {
   password: process.env.SESSION_SECRET!, // Clave de cifrado (mín 32 chars)
   cookieName: "cryptocampus-session",    // Nombre de la cookie en el navegador
   cookieOptions: {
-    secure: false,    // false para desarrollo local (no HTTPS). En producción: true
+    secure: process.env.NODE_ENV === "production",    // false para desarrollo local (no HTTPS). En producción: true
     httpOnly: true,   // La cookie NO es accesible desde JavaScript del navegador (protege contra XSS)
     sameSite: "lax",  // Protección CSRF: la cookie solo se envía en navegación del mismo sitio
+    ttl: 1000 * 60 * 60 * 24, // Duración de la sesión: 1 día (en milisegundos)
   },
 };

@@ -1,203 +1,219 @@
 # RUTAS
 
-Este documento resume las rutas reales del proyecto Next.js.
+Este documento resume las rutas reales y activas del proyecto Next.js.
 
-- Solo se listan archivos `page.tsx` y `route.ts` que generan URLs funcionales.
-- Las carpetas de grupo como `(auth)` y `(main)` no aparecen en la URL final.
-- El acceso a `/dashboard/*` está protegido y redirigido por `src/proxy.ts` según la sesión y el rol. -> que se protegan 
-    por rol las rutas específicas
+- Se listan solo rutas generadas por `page.tsx` y `route.ts`.
+- Las carpetas de grupo `(auth)` y `(main)` no aparecen en la URL final.
+- Las rutas de rol se protegen en middleware (`src/proxy.ts`) y solo permiten acceso al rol correcto.
 
-## Páginas públicas
+## Protección por rol
+
+Rutas protegidas por middleware:
+
+- `/student/:path*` solo para `STUDENT`.
+- `/professor/:path*` solo para `PROFESSOR`.
+- `/librarian/:path*` solo para `LIBRARIAN`.
+- `/admin/:path*` solo para `ADMIN`.
+
+Comportamiento de acceso:
+
+- Usuario no autenticado intentando entrar en rutas de rol: redirección a `/login?returnUrl=...`.
+- Usuario autenticado intentando entrar en `/login` o `/register`: redirección a `/{suRol}`.
+- Usuario autenticado intentando entrar en la ruta de otro rol: redirección a `/{suRol}`.
+
+## Rutas públicas
 
 | Ruta | Propósito |
 | --- | --- |
-| `/` | Landing principal de CryptoCampus con accesos a inicio de sesión y registro. -> ELIMINAR
 | `/login` | Formulario de acceso para usuarios registrados. |
 | `/register` | Formulario de alta para estudiantes con email `@ucm.es`. |
 
-## Navegación de dashboard
+## Rutas principales por rol
 
 | Ruta | Propósito |
 | --- | --- |
-| `/dashboard -> /` | Página puente que consulta el rol y redirige al panel correspondiente. -> Si no estás logado, 
-que muestre la biblioteca, la tienda y las insignias y salga un mensaje de quien puede acceder a que, si entras a algun
-servicio te pide logearte o si te logeas desde abajo izqierda redirige a la visata que sea
-| `/dashboard/student -> /student` | Panel principal del estudiante. |
-| `/dashboard/professor  -> /professore` | Panel principal del profesor. |
-| `/dashboard/librarian -> /librarian` | Panel principal del bibliotecario. |
-| `/dashboard/admin -> /admin` | Panel principal del administrador. |
+| `/student` | Panel principal del estudiante. |
+| `/professor` | Panel principal del profesor. |
+| `/librarian` | Panel principal del bibliotecario. |
+| `/admin` | Panel principal del administrador. |
 
-en el resto quitar del /dashboard/ y ya
-
-## Dashboard del estudiante
+## Rutas del estudiante
 
 | Ruta | Propósito |
 | --- | --- |
-| `/dashboard/student/library` | Resumen y acceso a la biblioteca del estudiante. |
-| `/dashboard/student/library/[id]` | Detalle de un ítem de biblioteca y acción sobre ese recurso. |
-| `/dashboard/student/library/rooms` | Reserva de salas de estudio. |
-| `/dashboard/student/printing` | Gestión de impresión del estudiante y subida de archivos. |
-| `/dashboard/student/printing/history` | Historial de trabajos de impresión. |
-| `/dashboard/student/printing/history/[id]` | Detalle de un trabajo de impresión concreto. |
-| `/dashboard/student/shop` | Catálogo de la tienda para estudiantes. |
-| `/dashboard/student/shop/[id]` | Detalle de un producto de la tienda. |
-| `/dashboard/student/shop/cart` | Carrito de compra. |
-| `/dashboard/student/shop/orders` | Historial de pedidos del estudiante. |
-| `/dashboard/student/shop/orders/[id]` | Detalle de un pedido. |
-| `/dashboard/student/shop/orders/batch/[id]` | Detalle de un pedido agrupado. |
-| `/dashboard/student/shop/topup` | Recarga simulada de ShopTokens. |
+| `/student/library` | Resumen y acceso a biblioteca para estudiante. |
+| `/student/library/[id]` | Detalle de un ítem de biblioteca. |
+| `/student/library/rooms` | Reserva de salas de estudio. |
+| `/student/library/printing` | Gestión de impresión del estudiante. |
+| `/student/library/printing/history` | Historial de trabajos de impresión. |
+| `/student/library/printing/history/[id]` | Detalle de un trabajo de impresión. |
+| `/student/shop` | Catálogo de la tienda para estudiante. |
+| `/student/shop/[id]` | Detalle de producto de tienda. |
+| `/student/shop/cart` | Carrito de compra. |
+| `/student/shop/orders` | Historial de pedidos. |
+| `/student/shop/orders/[id]` | Detalle de pedido individual. |
+| `/student/shop/orders/batch/[id]` | Detalle de pedido agrupado. |
+| `/student/shop/topup` | Recarga simulada de saldo/tokens de tienda. |
 
-## Dashboard del profesor
-
-| Ruta | Propósito |
-| --- | --- |
-| `/dashboard/professor` | Panel principal del profesor con métricas de insignias, tareas y recompensas. |
-
-## Dashboard del bibliotecario
+## Rutas del profesor
 
 | Ruta | Propósito |
 | --- | --- |
-| `/dashboard/librarian` | Panel principal del bibliotecario. |
-| `/dashboard/librarian/items` | Gestión de ítems de biblioteca. |
-| `/dashboard/librarian/items/new` | Alta de un nuevo ítem de biblioteca. |
-| `/dashboard/librarian/items/[id]/edit` | Edición de un ítem de biblioteca existente. |
-| `/dashboard/librarian/loans` | Gestión general de préstamos. |
-| `/dashboard/librarian/loans/requests` | Revisión de solicitudes de préstamo pendientes. |
-| `/dashboard/librarian/rooms` | Gestión de salas. |
-| `/dashboard/librarian/rooms/new` | Alta de una nueva sala. |
-| `/dashboard/librarian/rooms/[id]/edit` | Edición de una sala existente. |
+| `/professor` | Panel del profesor para insignias, tareas y recompensas. |
 
-## Dashboard del administrador
+## Rutas del bibliotecario
 
 | Ruta | Propósito |
 | --- | --- |
-| `/dashboard/admin` | Panel principal del administrador. |
-| `/dashboard/admin/library` | Vista general de administración de biblioteca. |
-| `/dashboard/admin/library/items` | Gestión completa de ítems de biblioteca. |
-| `/dashboard/admin/library/items/new` | Creación de un ítem de biblioteca. |
-| `/dashboard/admin/library/items/[id]/edit` | Edición de un ítem de biblioteca. |
-| `/dashboard/admin/library/loans` | Gestión de préstamos de biblioteca. |
-| `/dashboard/admin/library/loans/requests` | Solicitudes de préstamo pendientes de aprobación. |
-| `/dashboard/admin/library/rooms` | Gestión completa de salas. |
-| `/dashboard/admin/library/rooms/new` | Creación de una sala. |
-| `/dashboard/admin/library/rooms/[id]/edit` | Edición de una sala. |
-| `/dashboard/admin/library/tokens` | Administración de LibraryTokens de estudiantes. |
-| `/dashboard/admin/printing` | Vista general de impresión. |
-| `/dashboard/admin/printing/credits` | Asignación y control de créditos de impresión. |
-| `/dashboard/admin/printing/printers` | Gestión de impresoras registradas. |
-| `/dashboard/admin/printing/printers/new` | Alta de una impresora. |
-| `/dashboard/admin/printing/printers/[id]/edit` | Edición de una impresora. |
-| `/dashboard/admin/users` | Gestión de usuarios del sistema. |
-| `/dashboard/admin/users/new` | Creación de usuarios con cualquier rol permitido. |
-| `/dashboard/admin/shop` | Vista general de administración de tienda. |
-| `/dashboard/admin/shop/products` | Gestión completa de productos. |
-| `/dashboard/admin/shop/products/new` | Creación de un producto o grupo de producto. |
-| `/dashboard/admin/shop/products/[id]` | Detalle de un producto. |
-| `/dashboard/admin/shop/products/[id]/edit` | Edición de un producto. |
-| `/dashboard/admin/shop/products/[id]/edit-group` | Edición de datos compartidos del grupo del producto. |
-| `/dashboard/admin/shop/products/[id]/add-variant` | Alta de una nueva variante del producto. |
-| `/dashboard/admin/shop/products/variants/[id]/edit` | Edición de una variante concreta. |
-| `/dashboard/admin/shop/orders` | Gestión de pedidos de la tienda. |
-| `/dashboard/admin/shop/orders/[id]` | Detalle de un pedido. |
-| `/dashboard/admin/shop/orders/batch/[id]` | Detalle de un pedido agrupado. |
-| `/dashboard/admin/shop/tokens` | Administración de ShopTokens. |
-| `/dashboard/admin/shop/transactions` | Registro unificado de compras, recargas y devoluciones. |
+| `/librarian` | Panel principal del bibliotecario. |
+| `/librarian/items` | Gestión de ítems de biblioteca. |
+| `/librarian/items/new` | Alta de ítem de biblioteca. |
+| `/librarian/items/[id]/edit` | Edición de ítem de biblioteca. |
+| `/librarian/loans` | Gestión general de préstamos. |
+| `/librarian/loans/pickups` | Gestión de préstamos pendientes de recogida. |
+| `/librarian/loans/returns` | Gestión de devoluciones. |
+| `/librarian/rooms` | Gestión de salas. |
+| `/librarian/rooms/new` | Alta de sala. |
+| `/librarian/rooms/[id]/edit` | Edición de sala. |
+| `/librarian/printing` | Panel de impresión del bibliotecario. |
+| `/librarian/printing/print` | Flujo operativo para lanzar impresión. |
+| `/librarian/printing/history` | Historial de trabajos de impresión. |
+| `/librarian/printing/history/[id]` | Detalle de trabajo de impresión. |
+| `/librarian/printing/printers` | Gestión de impresoras. |
+| `/librarian/printing/printers/new` | Alta de impresora. |
+| `/librarian/printing/printers/[id]/edit` | Edición de impresora. |
+
+## Rutas del administrador
+
+| Ruta | Propósito |
+| --- | --- |
+| `/admin` | Panel principal del administrador. |
+| `/admin/users` | Gestión de usuarios del sistema. |
+| `/admin/users/new` | Alta de usuario con rol. |
+| `/admin/library` | Vista general de administración de biblioteca. |
+| `/admin/library/items` | Gestión de ítems de biblioteca. |
+| `/admin/library/items/new` | Alta de ítem de biblioteca. |
+| `/admin/library/items/[id]/edit` | Edición de ítem de biblioteca. |
+| `/admin/library/loans` | Gestión global de préstamos. |
+| `/admin/library/loans/requests` | Solicitudes de préstamo pendientes. |
+| `/admin/library/rooms` | Gestión de salas. |
+| `/admin/library/rooms/new` | Alta de sala. |
+| `/admin/library/rooms/[id]/edit` | Edición de sala. |
+| `/admin/library/tokens` | Administración de LibraryTokens. |
+| `/admin/printing` | Vista general de impresión. |
+| `/admin/printing/credits` | Gestión de créditos de impresión. |
+| `/admin/printing/printers` | Gestión de impresoras. |
+| `/admin/printing/printers/new` | Alta de impresora. |
+| `/admin/printing/printers/[id]/edit` | Edición de impresora. |
+| `/admin/shop` | Vista general de administración de tienda. |
+| `/admin/shop/products` | Gestión de productos. |
+| `/admin/shop/products/new` | Alta de producto o grupo. |
+| `/admin/shop/products/[id]` | Detalle de producto. |
+| `/admin/shop/products/[id]/edit` | Edición de producto. |
+| `/admin/shop/products/[id]/edit-group` | Edición de grupo de producto. |
+| `/admin/shop/products/[id]/add-variant` | Alta de variante. |
+| `/admin/shop/products/variants/[id]/edit` | Edición de variante. |
+| `/admin/shop/orders` | Gestión de pedidos. |
+| `/admin/shop/orders/[id]` | Detalle de pedido. |
+| `/admin/shop/orders/batch/[id]` | Detalle de pedido agrupado. |
+| `/admin/shop/tokens` | Administración de ShopTokens. |
+| `/admin/shop/transactions` | Historial unificado de transacciones. |
 
 ## API de autenticación
 
 | Ruta | Métodos | Propósito |
 | --- | --- | --- |
-| `/api/auth/login` | `POST` | Inicia sesión y crea la cookie de sesión. |
-| `/api/auth/logout` | `POST` | Cierra la sesión activa. |
+| `/api/auth/login` | `POST` | Inicia sesión y crea cookie de sesión. |
+| `/api/auth/logout` | `POST` | Cierra sesión y elimina cookie. |
 | `/api/auth/me` | `GET` | Devuelve el usuario autenticado actual. |
-| `/api/auth/register` | `POST` | Registra un estudiante con wallet, tokens iniciales y sesión en base de datos. |
+| `/api/auth/register` | `POST` | Registra estudiante, wallet y datos iniciales. |
 
 ## API de administración
 
 | Ruta | Métodos | Propósito |
 | --- | --- | --- |
-| `/api/admin/users` | `GET`, `POST` | Lista usuarios o crea un usuario con cualquier rol permitido. |
+| `/api/admin/users` | `GET`, `POST` | Lista usuarios o crea usuario con rol. |
 
 ## API de biblioteca
 
 | Ruta | Métodos | Propósito |
 | --- | --- | --- |
-| `/api/library/balance` | `GET` | Devuelve el balance de LibraryTokens del usuario autenticado. |
-| `/api/library/balance/[userId]` | `GET` | Devuelve el balance de LibraryTokens de un usuario concreto. |
-| `/api/library/items` | `GET`, `POST` | Lista ítems de biblioteca o crea un nuevo ítem. |
-| `/api/library/items/[id]` | `GET`, `PUT`, `DELETE`, `PATCH` | Consulta, actualiza, desactiva o reactiva un ítem. |
-| `/api/library/loans` | `GET`, `POST` | Lista préstamos o solicita un nuevo préstamo. |
-| `/api/library/loans/my` | `GET` | Devuelve los préstamos del usuario autenticado. |
-| `/api/library/loans/requests` | `GET` | Lista solicitudes de préstamo pendientes. |
-| `/api/library/loans/[id]/approve` | `POST` | Aprueba una solicitud de préstamo. |
-| `/api/library/loans/[id]/reject` | `POST` | Rechaza una solicitud de préstamo. |
-| `/api/library/loans/[id]/return` | `POST` | Confirma la devolución de un préstamo. |
-| `/api/library/loans/[id]/cancel` | `POST` | Cancela una solicitud de préstamo. |
-| `/api/library/loans/[id]/force-return` | `POST` | Fuerza la devolución de un préstamo. |
-| `/api/library/stats` | `GET` | Devuelve estadísticas agregadas de biblioteca. |
-| `/api/library/tokens` | `GET`, `POST` | Lista balances de estudiantes o mintea LibraryTokens. |
+| `/api/library/balance` | `GET` | Balance de LibraryTokens del usuario actual. |
+| `/api/library/balance/[userId]` | `GET` | Balance de LibraryTokens de usuario específico. |
+| `/api/library/items` | `GET`, `POST` | Lista ítems o crea ítem. |
+| `/api/library/items/[id]` | `GET`, `PUT`, `DELETE`, `PATCH` | Consulta, actualiza, desactiva o reactiva ítem. |
+| `/api/library/loans` | `GET`, `POST` | Lista préstamos o solicita préstamo. |
+| `/api/library/loans/my` | `GET` | Préstamos del usuario autenticado. |
+| `/api/library/loans/requests` | `GET` | Solicitudes pendientes de préstamo. |
+| `/api/library/loans/[id]/pickup` | `POST` | Marca préstamo como recogido. |
+| `/api/library/loans/[id]/return` | `POST` | Confirma devolución de préstamo. |
+| `/api/library/loans/[id]/cancel` | `POST` | Cancela solicitud de préstamo. |
+| `/api/library/loans/[id]/force-return` | `POST` | Fuerza devolución administrativa. |
+| `/api/library/loans/[id]/expire` | `POST` | Marca solicitud/préstamo como expirado según reglas. |
+| `/api/library/stats` | `GET` | Estadísticas agregadas de biblioteca. |
+| `/api/library/tokens` | `GET`, `POST` | Lista balances o mintea LibraryTokens. |
 
 ## API de salas
 
 | Ruta | Métodos | Propósito |
 | --- | --- | --- |
-| `/api/rooms` | `GET`, `POST` | Lista salas o crea una nueva sala. |
-| `/api/rooms/[id]` | `GET`, `PUT`, `DELETE` | Consulta, actualiza o elimina una sala. |
-| `/api/rooms/[id]/availability` | `GET` | Devuelve disponibilidad de una sala para una fecha concreta. |
-| `/api/rooms/bookings` | `GET`, `POST` | Lista reservas o crea una nueva reserva. |
-| `/api/rooms/bookings/my` | `GET` | Devuelve las reservas del usuario autenticado. |
-| `/api/rooms/bookings/[id]/cancel` | `POST` | Cancela una reserva existente. |
-| `/api/rooms/stats` | `GET` | Devuelve estadísticas de uso de salas. |
+| `/api/rooms` | `GET`, `POST` | Lista salas o crea sala. |
+| `/api/rooms/[id]` | `GET`, `PUT`, `DELETE` | Consulta, actualiza o elimina sala. |
+| `/api/rooms/[id]/availability` | `GET` | Disponibilidad de sala para una fecha. |
+| `/api/rooms/bookings` | `GET`, `POST` | Lista reservas o crea reserva. |
+| `/api/rooms/bookings/my` | `GET` | Reservas del usuario autenticado. |
+| `/api/rooms/bookings/[id]/cancel` | `POST` | Cancela reserva existente. |
+| `/api/rooms/stats` | `GET` | Estadísticas de uso de salas. |
 
 ## API de impresión
 
 | Ruta | Métodos | Propósito |
 | --- | --- | --- |
-| `/api/printer` | `GET`, `POST` | Lista impresoras activas o registra una nueva impresora. |
-| `/api/printer/admin` | `GET` | Lista todas las impresoras, activas e inactivas. |
-| `/api/printer/[id]` | `PUT` | Actualiza una impresora existente. |
-| `/api/printer/config` | `GET` | Devuelve la configuración del sistema de impresión. |
-| `/api/printer/credits` | `GET`, `POST` | Consulta créditos propios o asigna créditos a un estudiante. |
-| `/api/printer/credits/[userId]` | `GET` | Devuelve los créditos de impresión de un usuario concreto. |
-| `/api/printer/execute` | `POST` | Ejecuta un trabajo de impresión para el usuario autenticado. |
-| `/api/printer/execute/admin` | `POST` | Ejecuta un trabajo de impresión en nombre de otro usuario. |
-| `/api/printer/files/[filename]` | `GET` | Sirve un archivo subido para impresión. |
-| `/api/printer/logs` | `GET` | Lista los trabajos de impresión del usuario autenticado. |
-| `/api/printer/logs/[id]` | `GET` | Devuelve el detalle de un trabajo de impresión. |
-| `/api/printer/logs/admin` | `GET` | Lista todos los trabajos de impresión del sistema. |
-| `/api/printer/upload` | `POST` | Sube un archivo temporal para imprimirlo después. |
+| `/api/printer` | `GET`, `POST` | Lista impresoras activas o crea impresora. |
+| `/api/printer/admin` | `GET` | Lista todas las impresoras (activas/inactivas). |
+| `/api/printer/[id]` | `PUT` | Actualiza impresora existente. |
+| `/api/printer/config` | `GET` | Obtiene configuración del sistema de impresión. |
+| `/api/printer/credits` | `GET`, `POST` | Consulta créditos propios o asigna créditos a usuario. |
+| `/api/printer/credits/[userId]` | `GET` | Consulta créditos de usuario concreto. |
+| `/api/printer/execute` | `POST` | Ejecuta impresión del usuario autenticado. |
+| `/api/printer/execute/admin` | `POST` | Ejecuta impresión en nombre de otro usuario. |
+| `/api/printer/files/[filename]` | `GET` | Sirve archivo subido para impresión. |
+| `/api/printer/logs` | `GET` | Historial de impresión del usuario autenticado. |
+| `/api/printer/logs/[id]` | `GET` | Detalle de trabajo de impresión. |
+| `/api/printer/logs/admin` | `GET` | Historial global de impresión (admin). |
+| `/api/printer/upload` | `POST` | Sube archivo temporal para imprimir. |
 
 ## API de tienda
 
 | Ruta | Métodos | Propósito |
 | --- | --- | --- |
-| `/api/shop/balance` | `GET` | Devuelve el balance de ShopTokens del usuario autenticado. |
-| `/api/shop/balance/[userId]` | `GET` | Devuelve el balance de ShopTokens de un usuario concreto. |
-| `/api/shop/cart` | `GET`, `POST`, `PATCH`, `DELETE` | Obtiene, modifica, elimina o vacía el carrito del usuario. |
-| `/api/shop/categories` | `GET` | Lista las categorías disponibles de la tienda. |
-| `/api/shop/checkout` | `POST` | Procesa el checkout completo del carrito. |
-| `/api/shop/images` | `POST` | Sube imágenes para productos de la tienda. |
-| `/api/shop/orders` | `GET` | Lista los pedidos del usuario autenticado. |
-| `/api/shop/orders/[id]` | `GET` | Devuelve el detalle de un pedido individual. |
-| `/api/shop/orders/[id]/deliver` | `PUT` | Marca un pedido como entregado. |
-| `/api/shop/orders/[id]/return` | `PUT` | Solicita o procesa la devolución de un pedido. |
-| `/api/shop/orders/admin` | `GET` | Lista pedidos con vista administrativa. |
-| `/api/shop/purchase` | `POST` | Compra rápida sin pasar por el carrito. |
-| `/api/shop/products` | `GET`, `POST` | Lista productos activos o crea un producto nuevo. |
-| `/api/shop/products/[id]` | `GET`, `PUT`, `DELETE`, `PATCH` | Consulta, actualiza, desactiva o reactiva un producto. |
-| `/api/shop/products/admin` | `GET` | Lista productos para administración. |
-| `/api/shop/products/groups` | `POST` | Crea un grupo de producto con su primera variante. |
-| `/api/shop/products/groups/[groupKey]` | `GET`, `PUT`, `PATCH` | Consulta, actualiza o activa/desactiva un grupo de producto. |
-| `/api/shop/products/groups/[groupKey]/variants` | `POST` | Crea una nueva variante dentro de un grupo de producto. |
-| `/api/shop/products/variants/[id]` | `PUT`, `PATCH` | Actualiza o activa/desactiva una variante concreta. |
-| `/api/shop/stats` | `GET` | Devuelve estadísticas de la tienda. |
-| `/api/shop/tokens` | `POST` | Mintea ShopTokens para un usuario. |
-| `/api/shop/topup-simulated` | `POST` | Simula una recarga de saldo de la tienda. |
-| `/api/shop/transactions` | `GET` | Devuelve el log unificado de compras, recargas y devoluciones. |
-| `/api/shop/batches` | `GET` | Lista los pedidos agrupados del usuario autenticado. |
-| `/api/shop/batches/[id]` | `GET`, `PUT` | Consulta el detalle de un pedido agrupado o lo marca como entregado. |
-| `/api/shop/batches/admin` | `GET` | Lista todos los pedidos agrupados con vista administrativa. |
+| `/api/shop/balance` | `GET` | Balance de ShopTokens del usuario actual. |
+| `/api/shop/balance/[userId]` | `GET` | Balance de ShopTokens de usuario específico. |
+| `/api/shop/cart` | `GET`, `POST`, `PATCH`, `DELETE` | Obtiene y gestiona carrito. |
+| `/api/shop/categories` | `GET` | Lista categorías de tienda. |
+| `/api/shop/checkout` | `POST` | Procesa checkout completo de carrito. |
+| `/api/shop/images` | `POST` | Sube imágenes para productos. |
+| `/api/shop/orders` | `GET` | Lista pedidos del usuario autenticado. |
+| `/api/shop/orders/[id]` | `GET` | Detalle de pedido individual. |
+| `/api/shop/orders/[id]/deliver` | `PUT` | Marca pedido como entregado. |
+| `/api/shop/orders/[id]/return` | `PUT` | Solicita/procesa devolución de pedido. |
+| `/api/shop/orders/admin` | `GET` | Lista pedidos en vista administrativa. |
+| `/api/shop/purchase` | `POST` | Compra rápida sin carrito. |
+| `/api/shop/products` | `GET`, `POST` | Lista productos o crea producto. |
+| `/api/shop/products/[id]` | `GET`, `PUT`, `DELETE`, `PATCH` | Consulta y gestiona estado de producto. |
+| `/api/shop/products/admin` | `GET` | Lista productos en modo administración. |
+| `/api/shop/products/groups` | `POST` | Crea grupo de producto y variante inicial. |
+| `/api/shop/products/groups/[groupKey]` | `GET`, `PUT`, `PATCH` | Consulta/edita/activa-desactiva grupo. |
+| `/api/shop/products/groups/[groupKey]/variants` | `POST` | Crea variante en grupo de producto. |
+| `/api/shop/products/variants/[id]` | `PUT`, `PATCH` | Edita o activa/desactiva variante. |
+| `/api/shop/stats` | `GET` | Estadísticas agregadas de tienda. |
+| `/api/shop/tokens` | `POST` | Mintea ShopTokens para usuario. |
+| `/api/shop/topup-simulated` | `POST` | Recarga simulada de saldo. |
+| `/api/shop/transactions` | `GET` | Log unificado de transacciones. |
+| `/api/shop/batches` | `GET` | Lista pedidos agrupados del usuario. |
+| `/api/shop/batches/[id]` | `GET`, `PUT` | Detalle de batch o marcar entregado. |
+| `/api/shop/batches/admin` | `GET` | Lista batches globales en modo admin. |
 
-## Nota rápida
+## Mantenimiento
 
-Si se añaden nuevas páginas o endpoints, basta con completar este archivo con la nueva ruta real y su propósito. Mantenerlo alineado con `src/app` ayuda a revisar navegación, permisos y cobertura funcional sin recorrer todo el árbol del proyecto.
+Si se añade o elimina una ruta en `src/app`, actualizar este documento en el mismo cambio para mantenerlo sincronizado.

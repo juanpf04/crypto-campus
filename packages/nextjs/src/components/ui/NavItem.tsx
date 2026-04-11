@@ -15,7 +15,8 @@ interface NavItemProps {
 
 export function NavItem({ href, icon, label, collapsed = false, className }: NavItemProps) {
   const pathname = usePathname();
-  const isActive = pathname === href || pathname.startsWith(href + "/");
+  const isNestedRoute = href.split("/").filter(Boolean).length > 1;
+  const isActive = pathname === href || (isNestedRoute && pathname.startsWith(href + "/"));
 
   return (
     <Link

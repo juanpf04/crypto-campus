@@ -8,15 +8,14 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getIronSession } from "iron-session";
-import { SessionData, sessionOptions } from "@/lib/session";
+import { getRequestSession } from "@/lib/auth";
 
 /** Carpetas de rol que requieren autenticación y coincidencia con session.role */
 const ROLE_FOLDERS = ["student", "professor", "librarian", "admin"] as const;
 
 export default async function proxy(req: NextRequest) {
   const res = NextResponse.next();
-  const session = await getIronSession<SessionData>(req, res, sessionOptions);
+  const session = await getRequestSession(req, res);
   const isAuthenticated = !!session.userId;
   const { pathname } = req.nextUrl;
 
@@ -31,7 +30,7 @@ export default async function proxy(req: NextRequest) {
   }
 
   // Regla 2: Ya autenticado → no mostrar login/register
-  if ((pathname === "/login" || pathname === "/register") && isAuthenticated) {
+    if ((pathname === "/" || pathname === "/login" || pathname === "/register") && isAuthenticated) {
     const role = (session.role as string)?.toLowerCase() || "student";
     return NextResponse.redirect(new URL(`/${role}`, req.url));
   }
@@ -51,6 +50,7 @@ export default async function proxy(req: NextRequest) {
 
 export const config = {
   matcher: [
+    "/",
     "/student/:path*",
     "/professor/:path*",
     "/librarian/:path*",

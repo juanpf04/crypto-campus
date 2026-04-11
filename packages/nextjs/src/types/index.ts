@@ -23,6 +23,13 @@
 
 export type UserRole = "STUDENT" | "PROFESSOR" | "LIBRARIAN" | "ADMIN";
 
+export interface AuthUser {
+  id: string;      // UUID en PostgreSQL
+  email: string;   // Email institucional (@ucm.es)
+  name: string;    // Nombre completo
+  role: UserRole;  // Rol autenticado para autorización/UI
+}
+
 export interface SessionUser {
   id: string;      // UUID en PostgreSQL
   email: string;   // Email institucional (@ucm.es)

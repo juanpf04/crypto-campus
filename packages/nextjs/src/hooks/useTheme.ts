@@ -9,5 +9,7 @@ import { useContext } from "react";
 import { ThemeContext } from "@/contexts/ThemeContext";
 
 export function useTheme() {
-  return useContext(ThemeContext);
+  const ctx = useContext(ThemeContext);
+  if (!ctx) throw new Error("useTheme debe usarse dentro de <ThemeProvider>");
+  return ctx;
 }

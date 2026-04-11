@@ -36,7 +36,7 @@ export function UserMenu({ name, role, collapsed = false, className }: UserMenuP
     setLoggingOut(true);
     try {
       await fetch("/api/auth/logout", { method: "POST" });
-      router.push("/login");
+      router.replace("/");
     } catch {
       setLoggingOut(false);
     }

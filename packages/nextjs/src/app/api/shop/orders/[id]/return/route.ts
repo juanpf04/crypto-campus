@@ -7,9 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getIronSession } from "iron-session";
-import { cookies } from "next/headers";
-import { sessionOptions, type SessionData } from "@/lib/session";
+import { getSession } from "@/lib/auth";
 import { processReturn, requestReturn } from "@/actions/shop";
 
 type Params = { params: Promise<{ id: string }> };
@@ -19,14 +17,14 @@ export async function PUT(_req: NextRequest, { params }: Params) {
 		const { id } = await params;
 
 		// Determinar qué acción ejecutar según el rol del caller
-		const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-
-		let order;
-		if (session.role === "ADMIN") {
-			order = await processReturn(id);
-		} else {
-			order = await requestReturn(id);
+		const session = await getSession();
+		if (!session.userId) {
+			throw new Error("No autorizado");
 		}
+
+		const order = session.role === "ADMIN"
+			? await processReturn(id)
+			: await requestReturn(id);
 
 		return NextResponse.json(order);
 	} catch (error) {

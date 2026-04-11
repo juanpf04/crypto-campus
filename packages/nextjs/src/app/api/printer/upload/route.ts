@@ -10,12 +10,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getIronSession } from "iron-session";
-import { cookies } from "next/headers";
-import { sessionOptions, type SessionData } from "@/lib/session";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { randomUUID } from "crypto";
+import { getSession, ensureAuthenticated } from "@/lib/auth";
 
 const ALLOWED_TYPES = [
 	"application/pdf",
@@ -35,10 +33,8 @@ const UPLOAD_DIR = join(process.cwd(), "uploads", "prints");
 export async function POST(req: NextRequest) {
 	try {
 		// Verificar autenticación
-		const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-		if (!session.userId) {
-			return NextResponse.json({ error: "No autorizado" }, { status: 403 });
-		}
+		const session = await getSession();
+		ensureAuthenticated(session);
 
 		const formData = await req.formData();
 		const file = formData.get("file") as File | null;

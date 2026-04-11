@@ -1,28 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { Spinner } from "@/components/ui/Spinner";
-import type { UserRole } from "@/types";
-
-interface UserData {
-  name: string;
-  role: UserRole;
-}
+import { useAuthUser } from "@/hooks/useAuthUser";
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<UserData | null>(null);
+  const { user, loading } = useAuthUser();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/auth/me")
-      .then((res) => res.json())
-      .then((data) => setUser(data.user))
-      .catch(() => {});
-  }, []);
-
-  if (!user) {
+  if (loading || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-bg">
         <Spinner size="lg" />

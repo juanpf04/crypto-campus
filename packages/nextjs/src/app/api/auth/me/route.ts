@@ -1,26 +1,10 @@
 import { NextResponse } from "next/server";
-import { getIronSession } from "iron-session";
-import { cookies } from "next/headers";
-import { sessionOptions, SessionData } from "@/lib/session";
+import { getSession, ensureAuthenticated } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
-  // ─── 1. Leer la sesión de la cookie ───
-  // Si el usuario está logueado, la cookie contiene userId, address y role
-  // cifrados. Si no hay sesión o expiró, userId será undefined.
-  const session = await getIronSession<SessionData>(
-    await cookies(),
-    sessionOptions
-  );
-
-  // ─── 2. Comprobar si hay sesión activa ───
-  // Si no hay userId en la sesión, el usuario no está autenticado.
-  if (!session.userId) {
-    return NextResponse.json(
-      { error: "No autenticado" },
-      { status: 401 }
-    );
-  }
+  const session = await getSession();
+  ensureAuthenticated(session);
 
   // ─── 3. Obtener los datos actualizados del usuario ───
   // Aunque la sesión tiene datos, consultamos la DB para tener

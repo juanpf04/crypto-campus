@@ -12,12 +12,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getIronSession } from "iron-session";
-import { cookies } from "next/headers";
 import { hash } from "bcryptjs";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { parseEther } from "viem";
-import { sessionOptions, SessionData } from "@/lib/session";
+import { getSession, ensureAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
 import { adminWalletClient, publicClient } from "@/lib/viem";
@@ -29,25 +27,11 @@ import {
   ROLES,
 } from "@/lib/contracts";
 
-/** Verificar que la sesión activa es de un ADMIN */
-async function requireAdmin() {
-  const session = await getIronSession<SessionData>(
-    await cookies(),
-    sessionOptions,
-  );
-  if (!session.userId || session.role !== "ADMIN") {
-    return null;
-  }
-  return session;
-}
-
 // ─── GET: Listar usuarios ───────────────────────────────────────────
 
 export async function GET() {
-  const session = await requireAdmin();
-  if (!session) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
-  }
+  const session = await getSession();
+  ensureAdmin(session);
 
   const users = await prisma.user.findMany({
     select: {
@@ -75,10 +59,8 @@ const ROLE_MAP: Record<string, `0x${string}`> = {
 };
 
 export async function POST(req: NextRequest) {
-  const session = await requireAdmin();
-  if (!session) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
-  }
+  const session = await getSession();
+  ensureAdmin(session);
 
   const { name, email, password, role } = await req.json();
 

@@ -15,7 +15,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { BackLink } from "@/components/ui/BackLink";
 
 export default function LibrarianPrintingPage() {
-  const { user, loading: authLoading } = useAuthUser();
+  const { loading: authLoading } = useAuthUser();
   const [stats, setStats] = useState({
     activePrinters: "—" as string | number,
     totalPrinters: "—" as string | number,

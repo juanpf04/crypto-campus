@@ -11,35 +11,17 @@
 
 "use server";
 
-import { getIronSession } from "iron-session";
-import { cookies } from "next/headers";
 import { createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { hardhat } from "viem/chains";
 import { prisma } from "@/lib/prisma";
-import { sessionOptions, type SessionData } from "@/lib/session";
 import { decrypt } from "@/lib/crypto";
 import { adminWalletClient, publicClient } from "@/lib/viem";
+import { getSession, ensureRole } from "@/lib/auth";
 import {
 	CONTRACT_ADDRESSES,
 	ROOM_BOOKING_ABI,
 } from "@/lib/contracts";
-
-// ── Tipos ────────────────────────────────────────────────────────────────
-
-type Role = "STUDENT" | "PROFESSOR" | "LIBRARIAN" | "ADMIN";
-
-// ── Helpers internos ─────────────────────────────────────────────────────
-
-async function getSession() {
-	return getIronSession<SessionData>(await cookies(), sessionOptions);
-}
-
-function ensureRole(session: SessionData, allowed: Role[]) {
-	if (!session.userId || !session.role || !allowed.includes(session.role as Role)) {
-		throw new Error("No autorizado");
-	}
-}
 
 function ensurePositiveInt(value: number, fieldName: string): number {
 	if (!Number.isInteger(value) || value <= 0) {
@@ -133,7 +115,7 @@ export async function addRoom(input: {
 				description: input.description?.trim() || null,
 				location: input.location?.trim() || null,
 				capacity,
-				amenities: input.amenities || null,
+				amenities: input.amenities || undefined,
 				imageUrl: input.imageUrl?.trim() || null,
 				txHash: hash,
 			},

@@ -18,15 +18,13 @@
 
 "use server";
 
-import { getIronSession } from "iron-session";
-import { cookies } from "next/headers";
 import { createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { hardhat } from "viem/chains";
 import { prisma } from "@/lib/prisma";
-import { sessionOptions, type SessionData } from "@/lib/session";
 import { decrypt } from "@/lib/crypto";
 import { adminWalletClient, publicClient } from "@/lib/viem";
+import { getSession, ensureRole } from "@/lib/auth";
 import {
 	CONTRACT_ADDRESSES,
 	CAMPUS_SHOP_ABI,
@@ -34,8 +32,6 @@ import {
 } from "@/lib/contracts";
 
 // ── Tipos ────────────────────────────────────────────────────────────────
-
-type Role = "STUDENT" | "PROFESSOR" | "LIBRARIAN" | "ADMIN";
 
 type ProductVariantSummary = {
 	id: string;
@@ -52,8 +48,9 @@ type ProductVariantSummary = {
 type ProductGroupSummary = {
 	groupKey: string;
 	name: string;
-	category: string | null;
 	description: string | null;
+	category: string | null;
+	price: number;
 	minPrice: number;
 	maxPrice: number;
 	totalStock: number;
@@ -185,23 +182,6 @@ function validateSimulatedCardInput(input: SimulatedCardInput) {
 		cardLast4: cardNumber.slice(-4),
 		cardBrand: getCardBrand(cardNumber),
 	};
-}
-
-/**
- * Obtiene la sesión del usuario actual desde la cookie cifrada.
- */
-async function getSession() {
-	return getIronSession<SessionData>(await cookies(), sessionOptions);
-}
-
-/**
- * Verifica que el usuario tiene sesión activa y rol permitido.
- * @throws Error si no autenticado o sin permisos.
- */
-function ensureRole(session: SessionData, allowed: Role[]) {
-	if (!session.userId || !session.role || !allowed.includes(session.role as Role)) {
-		throw new Error("No autorizado");
-	}
 }
 
 /**
@@ -363,6 +343,7 @@ export async function listGroupedProducts(category?: string): Promise<ProductGro
 					name: baseName,
 					category: product.base?.category ?? product.category,
 					description: product.base?.description ?? product.description,
+					price: product.price,
 					minPrice: product.price,
 					maxPrice: product.price,
 					totalStock: Math.max(product.stock, 0),
@@ -457,6 +438,7 @@ export async function listAllGroupedProducts(category?: string) {
 					name: baseName,
 					category: product.base?.category ?? product.category,
 					description: product.base?.description ?? product.description,
+					price: product.price,
 					minPrice: product.price,
 					maxPrice: product.price,
 					totalStock: Math.max(product.stock, 0),

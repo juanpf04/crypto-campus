@@ -26,10 +26,7 @@ interface ThemeContextValue {
   setThemeId: (id: string) => void;
 }
 
-export const ThemeContext = createContext<ThemeContextValue>({
-  themeId: DEFAULT_THEME_ID,
-  setThemeId: () => {},
-});
+export const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 const STORAGE_KEY = "theme-id";
 

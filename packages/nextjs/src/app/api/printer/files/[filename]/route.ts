@@ -10,9 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getIronSession } from "iron-session";
-import { cookies } from "next/headers";
-import { sessionOptions, type SessionData } from "@/lib/session";
+import { getSession, ensureAuthenticated } from "@/lib/auth";
 import { readFile, stat } from "fs/promises";
 import { join } from "path";
 import { PrismaClient } from "@prisma/client";
@@ -42,10 +40,8 @@ export async function GET(
   { params }: { params: Promise<{ filename: string }> },
 ) {
   // Verificar autenticación
-  const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-  if (!session.userId) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
-  }
+  const session = await getSession();
+  ensureAuthenticated(session);
 
   const { filename } = await params;
 

@@ -18,15 +18,11 @@
 
 "use server";
 
-import { getIronSession } from "iron-session";
-import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { sessionOptions, type SessionData } from "@/lib/session";
 import { adminWalletClient, publicClient } from "@/lib/viem";
+import { getSession, ensureRole } from "@/lib/auth";
 import { CONTRACT_ADDRESSES, PRINTER_ABI } from "@/lib/contracts";
-
-type Role = "STUDENT" | "PROFESSOR" | "LIBRARIAN" | "ADMIN";
 
 export interface CreatePrinterInput {
 	id: string;
@@ -66,14 +62,6 @@ export interface ExecutePrintAsAdminInput extends ExecutePrintInput {
 }
 
 /**
- * Obtiene la sesión del usuario actual desde la cookie cifrada.
- * @returns Sesión del usuario logueado o sesión vacía si no está autenticado.
- */
-async function getSession() {
-	return getIronSession<SessionData>(await cookies(), sessionOptions);
-}
-
-/**
  * Valida que un valor sea un entero positivo (> 0).
  * Usado para páginas, copias y otros campos que no pueden ser cero.
  * @throws Error si no es entero positivo.
@@ -95,16 +83,6 @@ function ensureNonNegativeInt(value: number, fieldName: string): number {
 		throw new Error(`${fieldName} debe ser un entero no negativo`);
 	}
 	return value;
-}
-
-/**
- * Verifica que el usuario actual tiene sesión activa y rol permitido.
- * @throws Error si no está autenticado o carece de permisos.
- */
-function ensureRole(session: SessionData, allowed: Role[]) {
-	if (!session.userId || !session.role || !allowed.includes(session.role as Role)) {
-		throw new Error("No autorizado");
-	}
 }
 
 /**
