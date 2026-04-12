@@ -12,7 +12,7 @@ import { CampusRoles } from "./CampusRoles.sol";
 /// @notice Token ERC-20 de pago para la tienda del campus
 /// @dev Se gana por actividades del campus y se usa en CampusShop.
 contract ShopToken is ERC20, Pausable {
-    
+
     // ── State variables ─────────────────────────────────────────────────
 
     /// @notice Referencia al control de acceso del campus
@@ -51,15 +51,6 @@ contract ShopToken is ERC20, Pausable {
         campusRoles = CampusRoles(_campusRoles);
     }
 
-    // ── Public pure functions ───────────────────────────────────────────
-
-    /// @notice Decimales del token
-    /// @dev Se usa 0 para manejar unidades enteras
-    /// @return Cantidad de decimales
-    function decimals() public pure override returns (uint8) {
-        return 0;
-    }
-
     // ── External functions ──────────────────────────────────────────────
 
     /// @notice Configura el spender de confianza
@@ -88,8 +79,6 @@ contract ShopToken is ERC20, Pausable {
         _burn(from, amount);
     }
 
-    // ── Pausable ─────────────────────────────────────────────────────────
-
     /// @notice Pausa el contrato (solo admin)
     function pause() external onlyAdmin {
         _pause();
@@ -98,6 +87,15 @@ contract ShopToken is ERC20, Pausable {
     /// @notice Reanuda el contrato (solo admin)
     function unpause() external onlyAdmin {
         _unpause();
+    }
+
+    // ── Public pure functions ───────────────────────────────────────────
+
+    /// @notice Decimales del token
+    /// @dev Se usa 0 para manejar unidades enteras
+    /// @return Cantidad de decimales
+    function decimals() public pure override returns (uint8) {
+        return 0;
     }
 
     // ── Public view functions ───────────────────────────────────────────

@@ -20,52 +20,10 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { getSession, ensureRole } from "@/lib/action-utils";
 import { adminWalletClient, publicClient } from "@/lib/viem";
-import { getSession, ensureRole } from "@/lib/auth";
 import { CONTRACT_ADDRESSES, PRINTER_ABI } from "@/lib/contracts";
 
-export interface CreatePrinterInput {
-	id: string;
-	name: string;
-	location: string;
-	floor?: string;
-}
-
-export interface UpdatePrinterInput {
-	id: string;
-	name?: string;
-	location?: string;
-	floor?: string;
-	active?: boolean;
-}
-
-export interface ExecutePrintInput {
-	printerId: string;
-	filename: string;
-	pages: number;
-	copies?: number;
-	// Campos del simulador de impresión
-	color?: boolean;
-	duplex?: boolean;
-	orientation?: "portrait" | "landscape";
-	paperSize?: "A4" | "A5" | "A3";
-	pageRangeFrom?: number | null;
-	pageRangeTo?: number | null;
-	pagesPerSheet?: number;
-	filePages?: number;
-	fileSize?: number;
-	filePath?: string | null;
-}
-
-export interface ExecutePrintAsAdminInput extends ExecutePrintInput {
-	userId: string;
-}
-
-/**
- * Valida que un valor sea un entero positivo (> 0).
- * Usado para páginas, copias y otros campos que no pueden ser cero.
- * @throws Error si no es entero positivo.
- */
 function ensurePositiveInt(value: number, fieldName: string): number {
 	if (!Number.isInteger(value) || value <= 0) {
 		throw new Error(`${fieldName} debe ser un entero positivo`);

@@ -12,7 +12,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 		console.error("[GET /api/rooms/[id]]", error);
 		const message = error instanceof Error ? error.message : "Error al obtener sala";
 		const status = message.includes("no encontrada") ? 404
-			: message === "No autorizado" ? 403 : 500;
+			: message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}
 }
@@ -27,7 +27,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
 		console.error("[PUT /api/rooms/[id]]", error);
 		const message = error instanceof Error ? error.message : "Error al actualizar sala";
 		const status = message.includes("no encontrada") ? 404
-			: message === "No autorizado" ? 403 : 500;
+			: message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}
 }
@@ -41,7 +41,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
 		console.error("[DELETE /api/rooms/[id]]", error);
 		const message = error instanceof Error ? error.message : "Error al eliminar sala";
 		const status = message.includes("no encontrada") ? 404
-			: message === "No autorizado" ? 403 : 500;
+			: message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}
 }

@@ -30,8 +30,10 @@ import {
 // ─── GET: Listar usuarios ───────────────────────────────────────────
 
 export async function GET() {
-  const session = await getSession();
-  ensureAdmin(session);
+  const session = await requireAdmin();
+  if (!session) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
 
   const users = await prisma.user.findMany({
     select: {
@@ -59,8 +61,10 @@ const ROLE_MAP: Record<string, `0x${string}`> = {
 };
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
-  ensureAdmin(session);
+  const session = await requireAdmin();
+  if (!session) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
 
   const { name, email, password, role } = await req.json();
 

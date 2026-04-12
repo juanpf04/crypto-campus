@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
 	} catch (error) {
 		console.error("[POST /api/printer/execute/admin]", error);
 		const message = error instanceof Error ? error.message : "Error al ejecutar trabajo de impresión admin";
-		const status = message === "No autorizado" ? 403 : 500;
+		const status = message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}
 }

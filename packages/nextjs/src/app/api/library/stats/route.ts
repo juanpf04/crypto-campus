@@ -8,7 +8,7 @@ export async function GET() {
 	} catch (error) {
 		console.error("[GET /api/library/stats]", error);
 		const message = error instanceof Error ? error.message : "Error al obtener estadísticas";
-		const status = message === "No autorizado" ? 403 : 500;
+		const status = message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}
 }

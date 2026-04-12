@@ -12,7 +12,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
 		console.error("[POST /api/library/loans/[id]/return]", error);
 		const message = error instanceof Error ? error.message : "Error al confirmar devolución";
 		const status = message.includes("no encontrado") ? 404
-			: message === "No autorizado" ? 403 : 500;
+			: message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}
 }

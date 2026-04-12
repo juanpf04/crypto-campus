@@ -35,6 +35,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
     /// @notice Deposito en token requerido por prestamo
     uint256 public constant DEPOSIT_PER_LOAN = 1;
 
+    /// @notice Datos de un libro en el catalogo
     struct Book {
         uint256 totalCopies;
         bool exists;
@@ -43,6 +44,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
     /// @notice Estados posibles de un prestamo
     enum LoanStatus { None, Queued, Reserved, PickedUp, Returned, Cancelled }
 
+    /// @notice Datos de un prestamo
     struct Loan {
         uint256 bookId;
         address student;
@@ -55,22 +57,36 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
     }
 
     // ── State variables ─────────────────────────────────────────────────
+
+    /// @notice Contador autoincremental de libros
     uint256 public nextBookId = 1;
     mapping(uint256 => Book) private _books;
 
+    /// @notice Contador autoincremental de prestamos
     uint256 public nextLoanId = 1;
     mapping(uint256 => Loan) private _loans;
 
-    // student => bookId => active loanId (0 = no active loan)
+    /// @notice Prestamo activo de un estudiante para un libro (0 = ninguno)
     mapping(address => mapping(uint256 => uint256)) public activeLoanByStudentAndBook;
-    // student => array of all loan IDs (historical)
+    /// @dev Historico de IDs de prestamos de cada estudiante
     mapping(address => uint256[]) private _studentLoanIds;
-    // bookId => count of picked-up loans (books physically with students)
+    /// @notice Cantidad de prestamos recogidos (libros fisicamente con estudiantes) por libro
     mapping(uint256 => uint256) public activeLoansForBook;
-    // bookId => count of reserved copies (assigned but not yet picked up)
+    /// @notice Cantidad de copias reservadas (pendientes de recogida) por libro
     mapping(uint256 => uint256) public reservedCopiesForBook;
-    // bookId => queue of loan IDs waiting for a copy (FIFO)
+    /// @dev Cola FIFO de prestamos esperando una copia por libro
     mapping(uint256 => uint256[]) private _bookQueue;
+
+    // ── Events ──────────────────────────────────────────────────────────
+    event BookAdded(uint256 indexed bookId, uint256 copies);
+    event BookCopiesAdded(uint256 indexed bookId, uint256 additionalCopies);
+    event BookRemoved(uint256 indexed bookId);
+    event LoanRequested(uint256 indexed loanId, address indexed student, uint256 indexed bookId, bool queued);
+    event LoanReserved(uint256 indexed loanId, address indexed student, uint256 indexed bookId);
+    event LoanPickedUp(uint256 indexed loanId, address indexed librarian, uint40 dueDate);
+    event LoanReturned(uint256 indexed loanId, address indexed student, uint256 indexed bookId, bool overdue);
+    event LoanCancelled(uint256 indexed loanId, address indexed student);
+    event ReservationExpired(uint256 indexed loanId, address indexed student);
 
     // ── Errors ──────────────────────────────────────────────────────────
     error NotLibrarian();
@@ -90,27 +106,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
     error ReservationNotExpired(uint256 loanId);
     error NotQueuedOrReserved(uint256 loanId);
 
-    // ── Events ──────────────────────────────────────────────────────────
-    event BookAdded(uint256 indexed bookId, uint256 copies);
-    event BookCopiesAdded(uint256 indexed bookId, uint256 additionalCopies);
-    event BookRemoved(uint256 indexed bookId);
-    event LoanRequested(uint256 indexed loanId, address indexed student, uint256 indexed bookId, bool queued);
-    event LoanReserved(uint256 indexed loanId, address indexed student, uint256 indexed bookId);
-    event LoanPickedUp(uint256 indexed loanId, address indexed librarian, uint40 dueDate);
-    event LoanReturned(uint256 indexed loanId, address indexed student, uint256 indexed bookId, bool overdue);
-    event LoanCancelled(uint256 indexed loanId, address indexed student);
-    event ReservationExpired(uint256 indexed loanId, address indexed student);
-
     // ── Modifiers ───────────────────────────────────────────────────────
-
-    constructor(
-        address _campusRoles,
-        address _libraryToken,
-        string memory uri_
-    ) ERC1155(uri_) {
-        campusRoles = CampusRoles(_campusRoles);
-        libraryToken = LibraryToken(_libraryToken);
-    }
 
     modifier onlyLibrarian() {
         if (
@@ -125,6 +121,21 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
             revert NotStudent();
         _;
     }
+
+    // ── Functions ───────────────────────────────────────────────────────
+
+    // ── Constructor ─────────────────────────────────────────────────────
+
+    constructor(
+        address _campusRoles,
+        address _libraryToken,
+        string memory uri_
+    ) ERC1155(uri_) {
+        campusRoles = CampusRoles(_campusRoles);
+        libraryToken = LibraryToken(_libraryToken);
+    }
+
+    // ── External functions ──────────────────────────────────────────────
 
     // ── Book management ─────────────────────────────────────────────────
 
@@ -392,7 +403,84 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
         _processQueue(bookId);
     }
 
-    // ── Internal ────────────────────────────────────────────────────────
+    /// @notice Pausa el contrato (solo admin)
+    function pause() external {
+        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender))
+            revert NotAdmin();
+        _pause();
+    }
+
+    /// @notice Reanuda el contrato (solo admin)
+    function unpause() external {
+        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender))
+            revert NotAdmin();
+        _unpause();
+    }
+
+    // ── External view functions ─────────────────────────────────────────
+
+    /// @notice Devuelve copias totales, disponibles y existencia de un libro
+    function getBookInfo(uint256 bookId) external view returns (
+        uint256 totalCopies,
+        uint256 availableCopies,
+        bool exists_
+    ) {
+        Book storage book = _books[bookId];
+        uint256 held = balanceOf(address(this), bookId);
+        uint256 reserved = reservedCopiesForBook[bookId];
+        return (
+            book.totalCopies,
+            held > reserved ? held - reserved : 0,
+            book.exists
+        );
+    }
+
+    /// @notice Devuelve los datos completos de un prestamo
+    function getLoanInfo(uint256 loanId) external view returns (Loan memory) {
+        return _loans[loanId];
+    }
+
+    /// @notice Devuelve el array historico de IDs de prestamos de un estudiante
+    function getStudentLoans(address student) external view returns (uint256[] memory) {
+        return _studentLoanIds[student];
+    }
+
+    /// @notice Comprueba si un prestamo recogido ha superado la fecha limite
+    function isOverdue(uint256 loanId) external view returns (bool) {
+        Loan storage loan = _loans[loanId];
+        return loan.status == LoanStatus.PickedUp && block.timestamp > loan.dueDate;
+    }
+
+    /// @notice Comprueba si una reserva ha superado el timeout de recogida
+    function isReservationExpired(uint256 loanId) external view returns (bool) {
+        Loan storage loan = _loans[loanId];
+        return loan.status == LoanStatus.Reserved &&
+               block.timestamp > loan.reservationDate + RESERVATION_TIMEOUT;
+    }
+
+    /// @notice Devuelve la posicion en la cola de espera de un prestamo (1-indexed, 0 si no esta en cola)
+    function getQueuePosition(uint256 loanId) external view returns (uint256 position) {
+        Loan storage loan = _loans[loanId];
+        if (loan.status != LoanStatus.Queued) return 0;
+
+        uint256[] storage queue = _bookQueue[loan.bookId];
+        uint256 pos = 1;
+        for (uint256 i = 0; i < queue.length; i++) {
+            if (queue[i] == loanId) return pos;
+            if (queue[i] != 0 && _loans[queue[i]].status == LoanStatus.Queued) pos++;
+        }
+        return 0;
+    }
+
+    /// @notice Devuelve cuantos prestamos hay en cola de espera para un libro
+    function getQueueLength(uint256 bookId) external view returns (uint256 count) {
+        uint256[] storage queue = _bookQueue[bookId];
+        for (uint256 i = 0; i < queue.length; i++) {
+            if (queue[i] != 0 && _loans[queue[i]].status == LoanStatus.Queued) count++;
+        }
+    }
+
+    // ── Internal functions ───────────────────────────────────────────────
 
     /**
      * @dev Procesa la cola de espera de un libro.
@@ -422,78 +510,6 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
             emit LoanReserved(queuedLoanId, loan.student, bookId);
         }
     }
-
-    // ── Pausable ─────────────────────────────────────────────────────────
-
-    function pause() external {
-        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender))
-            revert NotAdmin();
-        _pause();
-    }
-
-    function unpause() external {
-        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender))
-            revert NotAdmin();
-        _unpause();
-    }
-
-    // ── View functions ──────────────────────────────────────────────────
-
-    function getBookInfo(uint256 bookId) external view returns (
-        uint256 totalCopies,
-        uint256 availableCopies,
-        bool exists_
-    ) {
-        Book storage book = _books[bookId];
-        uint256 held = balanceOf(address(this), bookId);
-        uint256 reserved = reservedCopiesForBook[bookId];
-        return (
-            book.totalCopies,
-            held > reserved ? held - reserved : 0,
-            book.exists
-        );
-    }
-
-    function getLoanInfo(uint256 loanId) external view returns (Loan memory) {
-        return _loans[loanId];
-    }
-
-    function getStudentLoans(address student) external view returns (uint256[] memory) {
-        return _studentLoanIds[student];
-    }
-
-    function isOverdue(uint256 loanId) external view returns (bool) {
-        Loan storage loan = _loans[loanId];
-        return loan.status == LoanStatus.PickedUp && block.timestamp > loan.dueDate;
-    }
-
-    function isReservationExpired(uint256 loanId) external view returns (bool) {
-        Loan storage loan = _loans[loanId];
-        return loan.status == LoanStatus.Reserved &&
-               block.timestamp > loan.reservationDate + RESERVATION_TIMEOUT;
-    }
-
-    function getQueuePosition(uint256 loanId) external view returns (uint256 position) {
-        Loan storage loan = _loans[loanId];
-        if (loan.status != LoanStatus.Queued) return 0;
-
-        uint256[] storage queue = _bookQueue[loan.bookId];
-        uint256 pos = 1;
-        for (uint256 i = 0; i < queue.length; i++) {
-            if (queue[i] == loanId) return pos;
-            if (queue[i] != 0 && _loans[queue[i]].status == LoanStatus.Queued) pos++;
-        }
-        return 0;
-    }
-
-    function getQueueLength(uint256 bookId) external view returns (uint256 count) {
-        uint256[] storage queue = _bookQueue[bookId];
-        for (uint256 i = 0; i < queue.length; i++) {
-            if (queue[i] != 0 && _loans[queue[i]].status == LoanStatus.Queued) count++;
-        }
-    }
-
-    // ── Internal overrides ──────────────────────────────────────────────
 
     function _update(
         address from,

@@ -333,7 +333,7 @@ describe("Integration", async function () {
         assert.equal(await libraryManager.read.balanceOf([student2.account.address, 1n]), 1n);
         assert.equal(await libraryToken.read.balanceOf([student2.account.address]), 9n);
         const loan2 = await libraryManager.read.getLoanInfo([2n]);
-        assert.equal(loan2.status, 2); // Approved (still active)
+        assert.equal(loan2.status, 3); // PickedUp (still active)
 
         // Contract should have 2 copies now (1 returned + 1 not loaned)
         assert.equal(await libraryManager.read.balanceOf([libraryManager.address, 1n]), 2n);

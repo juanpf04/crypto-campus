@@ -12,8 +12,19 @@ import {
   SHOP_TOKEN_ABI,
   ROLES,
 } from "@/lib/contracts";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
+  // ─── 0. Rate limiting ───
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.ip || "unknown";
+  const { allowed, resetIn } = checkRateLimit(ip, 5, 60_000); // 5 registros por minuto
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Demasiados intentos. Inténtalo de nuevo en unos segundos." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(resetIn / 1000)) } }
+    );
+  }
+
   // ─── 1. Leer el body del request ───
   // El frontend envía: { email, password, name }
   const { email, password, name } = await req.json();

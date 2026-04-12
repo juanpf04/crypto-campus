@@ -23,8 +23,8 @@ import { privateKeyToAccount } from "viem/accounts";
 import { hardhat } from "viem/chains";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
+import { getSession, ensureRole } from "@/lib/action-utils";
 import { adminWalletClient, publicClient } from "@/lib/viem";
-import { getSession, ensureRole } from "@/lib/auth";
 import {
 	CONTRACT_ADDRESSES,
 	CAMPUS_SHOP_ABI,
@@ -573,7 +573,7 @@ export async function addProduct(input: {
 
 		return { ...product, txHash: hash };
 	} catch (error) {
-		if (error instanceof Error && error.message === "No autorizado") throw error;
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al crear producto: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -1240,7 +1240,7 @@ export async function mintShopTokens(userId: string, amount: number) {
 	try {
 		return await mintShopTokensInternal(userId, amount);
 	} catch (error) {
-		if (error instanceof Error && error.message === "No autorizado") throw error;
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al mintear tokens: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }

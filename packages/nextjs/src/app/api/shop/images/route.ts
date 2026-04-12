@@ -21,8 +21,10 @@ const UPLOAD_DIR = path.join(process.cwd(), "public", "images", "shop");
 export async function POST(req: NextRequest) {
   try {
     // Verificar sesión admin
-    const session = await getSession();
-    ensureAdmin(session);
+    const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
+    if (!session.userId || session.role !== "ADMIN") {
+      return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+    }
 
     const formData = await req.formData();
     const file = formData.get("file") as File | null;

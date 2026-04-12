@@ -8,7 +8,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 		return NextResponse.json(result);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Error al expirar reserva";
-		const status = message === "No autorizado" ? 403 : 500;
+		const status = message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		if (status === 500) console.error("[POST /api/library/loans/[id]/expire]", error);
 		return NextResponse.json({ error: message }, { status });
 	}

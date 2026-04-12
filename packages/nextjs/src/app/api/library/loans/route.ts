@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 	} catch (error) {
 		console.error("[GET /api/library/loans]", error);
 		const message = error instanceof Error ? error.message : "Error al listar préstamos";
-		const status = message === "No autorizado" ? 403 : 500;
+		const status = message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}
 }
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Error al solicitar préstamo";
 		const isValidation = message.includes("Ya tienes") || message.includes("no encontrado") || message.includes("inactivo");
-		const status = message === "No autorizado" ? 403 : isValidation ? 400 : 500;
+		const status = message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : isValidation ? 400 : 500;
 		if (status === 500) console.error("[POST /api/library/loans]", error);
 		return NextResponse.json({ error: message }, { status });
 	}

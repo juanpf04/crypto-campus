@@ -19,3 +19,7 @@ export { LibraryItemCard } from "./LibraryItemCard";
 export { LoanCard } from "./LoanCard";
 export { BookingCard } from "./BookingCard";
 export { RoomSelectorCard } from "./RoomSelectorCard";
+export { BadgeCard } from "./BadgeCard";
+export { RewardCard } from "./RewardCard";
+export { UseRequestCard } from "./UseRequestCard";
+export { TaskCompletionIndicator } from "./TaskCompletionIndicator";

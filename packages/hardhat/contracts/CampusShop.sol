@@ -73,6 +73,18 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard, Pausable {
     ///      para evitar colisiones sin necesidad de un contador separado.
     uint256 public constant RETURN_RECEIPT_OFFSET = 1_000_000;
 
+    // ── Events ──────────────────────────────────────────────────────────
+
+    event ProductAdded(uint256 indexed productId, uint256 price, uint256 stock);
+    event ProductUpdated(uint256 indexed productId, uint256 newPrice, uint256 newStock);
+    event ProductDeactivated(uint256 indexed productId);
+    event ProductReactivated(uint256 indexed productId);
+    event OrderCreated(uint256 indexed orderId, address indexed buyer, uint256 indexed productId, uint256 pricePaid);
+    event OrderDelivered(uint256 indexed orderId);
+    event OrderReturned(uint256 indexed orderId, address indexed buyer, uint256 refundAmount);
+    event ReturnReceiptMinted(uint256 indexed orderId, address indexed buyer, uint256 returnTokenId);
+    event BatchPurchase(uint256 indexed batchId, address indexed buyer, uint256 totalPaid, uint256 itemCount);
+
     // ── Errors ──────────────────────────────────────────────────────────
     error NotAdmin();
     error NotStudent();
@@ -86,27 +98,6 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard, Pausable {
     error ZeroPrice();
     error ProductAlreadyInState(uint256 productId, bool active);
     error EmptyBatch();
-
-    // ── Events ──────────────────────────────────────────────────────────
-
-    event ProductAdded(uint256 indexed productId, uint256 price, uint256 stock);
-    event ProductUpdated(uint256 indexed productId, uint256 newPrice, uint256 newStock);
-    event ProductDeactivated(uint256 indexed productId);
-    event ProductReactivated(uint256 indexed productId);
-    event OrderCreated(uint256 indexed orderId, address indexed buyer, uint256 indexed productId, uint256 pricePaid);
-    event OrderDelivered(uint256 indexed orderId);
-    event OrderReturned(uint256 indexed orderId, address indexed buyer, uint256 refundAmount);
-    event ReturnReceiptMinted(uint256 indexed orderId, address indexed buyer, uint256 returnTokenId);
-    event BatchPurchase(uint256 indexed batchId, address indexed buyer, uint256 totalPaid, uint256 itemCount);
-
-    constructor(
-        address _campusRoles,
-        address _shopToken,
-        string memory uri_
-    ) ERC1155(uri_) {
-        campusRoles = CampusRoles(_campusRoles);
-        shopToken = ShopToken(_shopToken);
-    }
 
     // ── Modifiers ───────────────────────────────────────────────────────
     modifier onlyAdmin() {
@@ -122,6 +113,17 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard, Pausable {
     }
 
     // ── Functions ───────────────────────────────────────────────────────
+
+    // ── Constructor ─────────────────────────────────────────────────────
+
+    constructor(
+        address _campusRoles,
+        address _shopToken,
+        string memory uri_
+    ) ERC1155(uri_) {
+        campusRoles = CampusRoles(_campusRoles);
+        shopToken = ShopToken(_shopToken);
+    }
 
     // ── External functions ──────────────────────────────────────────────
 
@@ -399,8 +401,6 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard, Pausable {
         emit ReturnReceiptMinted(orderId, buyer, returnTokenId);
         emit OrderReturned(orderId, buyer, refund);
     }
-
-    // ── Pausable ─────────────────────────────────────────────────────────
 
     /// @notice Pausa el contrato (solo admin)
     function pause() external onlyAdmin {

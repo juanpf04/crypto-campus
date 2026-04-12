@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
 	} catch (error) {
 		console.error("[POST /api/shop/tokens]", error);
 		const message = error instanceof Error ? error.message : "Error al mintear tokens";
-		const status = message === "No autorizado" ? 403
+		const status = message === "No autenticado" ? 401 : message === "No autorizado" ? 403
 			: message === "Usuario no encontrado" ? 404 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}

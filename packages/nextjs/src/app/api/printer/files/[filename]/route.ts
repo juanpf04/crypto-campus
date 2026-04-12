@@ -40,8 +40,10 @@ export async function GET(
   { params }: { params: Promise<{ filename: string }> },
 ) {
   // Verificar autenticación
-  const session = await getSession();
-  ensureAuthenticated(session);
+  const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
+  if (!session.userId) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
 
   const { filename } = await params;
 
@@ -58,7 +60,7 @@ export async function GET(
     if (log) {
       const user = await prisma.user.findUnique({ where: { id: session.userId } });
       if (log.userId !== session.userId && user?.role !== "ADMIN") {
-        return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+        return NextResponse.json({ error: "No autenticado" }, { status: 401 });
       }
     }
   } finally {

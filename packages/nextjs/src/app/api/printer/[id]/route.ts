@@ -21,7 +21,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 	} catch (error) {
 		console.error("[PUT /api/printer/[id]]", error);
 		const message = error instanceof Error ? error.message : "Error al actualizar impresora";
-		const status = message === "No autorizado" ? 403 : 500;
+		const status = message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}
 }

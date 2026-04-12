@@ -15,7 +15,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ use
 	} catch (error) {
 		console.error("[GET /api/printer/credits/[userId]]", error);
 		const message = error instanceof Error ? error.message : "Error al obtener créditos del estudiante";
-		const status = message === "No autorizado" ? 403 : 500;
+		const status = message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}
 }

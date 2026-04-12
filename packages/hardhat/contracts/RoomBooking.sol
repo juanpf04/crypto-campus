@@ -16,9 +16,11 @@ contract RoomBooking is ReentrancyGuard, Pausable {
 
     CampusRoles public immutable campusRoles;
 
+    /// @notice Datos de una sala de estudio
     struct Room {
         uint256 capacity;
         bool active;
+        bool exists;
     }
 
     struct Booking {
@@ -44,6 +46,14 @@ contract RoomBooking is ReentrancyGuard, Pausable {
     /// @notice student => date => bookingId (0 = no booking that day)
     mapping(address => mapping(uint256 => uint256)) public studentDailyBooking;
 
+    // ── Events ──────────────────────────────────────────────────────────
+
+    event RoomAdded(uint256 indexed roomId, uint256 capacity);
+    event RoomUpdated(uint256 indexed roomId, uint256 capacity, bool active);
+    event RoomRemoved(uint256 indexed roomId);
+    event RoomBooked(uint256 indexed bookingId, uint256 indexed roomId, address indexed student, uint256 date, uint8 startHour, uint8 duration);
+    event BookingCancelled(uint256 indexed bookingId, address indexed cancelledBy);
+
     // ── Errors ──────────────────────────────────────────────────────────
 
     error NotLibrarian();
@@ -60,14 +70,7 @@ contract RoomBooking is ReentrancyGuard, Pausable {
     error NotBookingOwnerOrLibrarian(uint256 bookingId, address caller);
     error RoomHasActiveBookings(uint256 roomId);
     error ZeroCapacity();
-
-    // ── Events ──────────────────────────────────────────────────────────
-
-    event RoomAdded(uint256 indexed roomId, uint256 capacity);
-    event RoomUpdated(uint256 indexed roomId, uint256 capacity, bool active);
-    event RoomRemoved(uint256 indexed roomId);
-    event RoomBooked(uint256 indexed bookingId, uint256 indexed roomId, address indexed student, uint256 date, uint8 startHour, uint8 duration);
-    event BookingCancelled(uint256 indexed bookingId, address indexed cancelledBy);
+    error InvalidHourRange(uint8 fromHour, uint8 toHour);
 
     // ── Modifiers ───────────────────────────────────────────────────────
 
@@ -102,7 +105,8 @@ contract RoomBooking is ReentrancyGuard, Pausable {
 
         _rooms[roomId] = Room({
             capacity: capacity,
-            active: true
+            active: true,
+            exists: true
         });
 
         emit RoomAdded(roomId, capacity);
@@ -110,7 +114,7 @@ contract RoomBooking is ReentrancyGuard, Pausable {
 
     /// @notice Actualiza capacidad y estado activo de una sala
     function updateRoom(uint256 roomId, uint256 capacity, bool active) external onlyLibrarian whenNotPaused {
-        if (!_rooms[roomId].active && _rooms[roomId].capacity == 0) revert RoomNotFound(roomId);
+        if (!_rooms[roomId].exists) revert RoomNotFound(roomId);
         if (capacity == 0) revert ZeroCapacity();
 
         _rooms[roomId].capacity = capacity;
@@ -121,7 +125,7 @@ contract RoomBooking is ReentrancyGuard, Pausable {
 
     /// @notice Desactiva una sala permanentemente
     function removeRoom(uint256 roomId) external onlyLibrarian {
-        if (_rooms[roomId].capacity == 0) revert RoomNotFound(roomId);
+        if (!_rooms[roomId].exists) revert RoomNotFound(roomId);
 
         _rooms[roomId].active = false;
 
@@ -142,7 +146,7 @@ contract RoomBooking is ReentrancyGuard, Pausable {
         uint8 duration
     ) external onlyStudent whenNotPaused nonReentrant returns (uint256 bookingId) {
         // Validar sala
-        if (_rooms[roomId].capacity == 0) revert RoomNotFound(roomId);
+        if (!_rooms[roomId].exists) revert RoomNotFound(roomId);
         if (!_rooms[roomId].active) revert RoomNotActive(roomId);
 
         // Validar duracion
@@ -215,21 +219,21 @@ contract RoomBooking is ReentrancyGuard, Pausable {
         emit BookingCancelled(bookingId, msg.sender);
     }
 
-    // ── Pausable ────────────────────────────────────────────────────────
-
+    /// @notice Pausa el contrato (solo admin)
     function pause() external {
         if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender))
             revert NotAdmin();
         _pause();
     }
 
+    /// @notice Reanuda el contrato (solo admin)
     function unpause() external {
         if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender))
             revert NotAdmin();
         _unpause();
     }
 
-    // ── View functions ──────────────────────────────────────────────────
+    // ── External view functions ─────────────────────────────────────────
 
     function getRoomInfo(uint256 roomId) external view returns (uint256 capacity, bool active) {
         Room storage room = _rooms[roomId];
@@ -257,7 +261,7 @@ contract RoomBooking is ReentrancyGuard, Pausable {
         uint8 fromHour,
         uint8 toHour
     ) external view returns (bool[] memory available) {
-        require(toHour > fromHour && toHour <= 24, "Invalid hour range");
+        if (toHour <= fromHour || toHour > 24) revert InvalidHourRange(fromHour, toHour);
         uint8 count = toHour - fromHour;
         available = new bool[](count);
         for (uint8 i = 0; i < count; i++) {

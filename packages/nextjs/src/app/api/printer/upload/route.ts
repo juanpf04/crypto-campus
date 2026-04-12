@@ -33,8 +33,10 @@ const UPLOAD_DIR = join(process.cwd(), "uploads", "prints");
 export async function POST(req: NextRequest) {
 	try {
 		// Verificar autenticación
-		const session = await getSession();
-		ensureAuthenticated(session);
+		const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
+		if (!session.userId) {
+			return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+		}
 
 		const formData = await req.formData();
 		const file = formData.get("file") as File | null;

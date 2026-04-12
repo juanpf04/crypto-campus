@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 	} catch (error) {
 		console.error("[GET /api/shop/orders]", error);
 		const message = error instanceof Error ? error.message : "Error al listar pedidos";
-		const status = message === "No autorizado" ? 403 : 500;
+		const status = message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}
 }

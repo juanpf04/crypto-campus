@@ -199,8 +199,8 @@ contract IntegrationTest is Test {
         // Admin elimina a student1.
         campusRoles.removeUser(student1);
 
-        // Imprimir para usuario eliminado debe revertir con NotStudent.
-        vm.expectRevert(abi.encodeWithSelector(Printer.NotStudent.selector, student1));
+        // Imprimir para usuario eliminado debe revertir con NotRegistered.
+        vm.expectRevert(abi.encodeWithSelector(Printer.NotRegistered.selector, student1));
         printer.print(student1, 5);
     }
 

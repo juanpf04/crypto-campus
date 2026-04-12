@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 	} catch (error) {
 		console.error("[GET /api/rooms]", error);
 		const message = error instanceof Error ? error.message : "Error al listar salas";
-		const status = message === "No autorizado" ? 403 : 500;
+		const status = message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}
 }
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
 	} catch (error) {
 		console.error("[POST /api/rooms]", error);
 		const message = error instanceof Error ? error.message : "Error al crear sala";
-		const status = message === "No autorizado" ? 403 : 500;
+		const status = message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}
 }

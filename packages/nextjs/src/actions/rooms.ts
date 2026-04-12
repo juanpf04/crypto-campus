@@ -16,12 +16,14 @@ import { privateKeyToAccount } from "viem/accounts";
 import { hardhat } from "viem/chains";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
+import { getSession, ensureRole } from "@/lib/action-utils";
 import { adminWalletClient, publicClient } from "@/lib/viem";
-import { getSession, ensureRole } from "@/lib/auth";
 import {
 	CONTRACT_ADDRESSES,
 	ROOM_BOOKING_ABI,
 } from "@/lib/contracts";
+
+// ── Helpers internos ─────────────────────────────────────────────────────
 
 function ensurePositiveInt(value: number, fieldName: string): number {
 	if (!Number.isInteger(value) || value <= 0) {
@@ -123,7 +125,7 @@ export async function addRoom(input: {
 
 		return { success: true, room };
 	} catch (error) {
-		if (error instanceof Error && error.message === "No autorizado") throw error;
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al crear sala: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -186,7 +188,7 @@ export async function updateRoom(
 
 		return { success: true, room };
 	} catch (error) {
-		if (error instanceof Error && error.message === "No autorizado") throw error;
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al actualizar sala: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -221,7 +223,7 @@ export async function removeRoom(roomPrismaId: string) {
 
 		return { success: true };
 	} catch (error) {
-		if (error instanceof Error && error.message === "No autorizado") throw error;
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al eliminar sala: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -231,7 +233,7 @@ export async function removeRoom(roomPrismaId: string) {
  */
 export async function listRooms(activeOnly = true, limit?: number, offset?: number) {
 	const session = await getSession();
-	if (!session.userId) throw new Error("No autorizado");
+	if (!session.userId) throw new Error("No autenticado");
 
 	const where = activeOnly ? { active: true } : {};
 
@@ -253,7 +255,7 @@ export async function listRooms(activeOnly = true, limit?: number, offset?: numb
  */
 export async function getRoom(roomPrismaId: string) {
 	const session = await getSession();
-	if (!session.userId) throw new Error("No autorizado");
+	if (!session.userId) throw new Error("No autenticado");
 
 	const room = await prisma.room.findUnique({
 		where: { id: roomPrismaId },
@@ -353,7 +355,7 @@ export async function bookRoom(
 
 		return { success: true, booking };
 	} catch (error) {
-		if (error instanceof Error && error.message === "No autorizado") throw error;
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al reservar sala: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -363,7 +365,7 @@ export async function bookRoom(
  */
 export async function cancelBooking(bookingPrismaId: string) {
 	const session = await getSession();
-	if (!session.userId) throw new Error("No autorizado");
+	if (!session.userId) throw new Error("No autenticado");
 
 	try {
 		const booking = await prisma.roomBooking.findUnique({ where: { id: bookingPrismaId } });
@@ -406,7 +408,7 @@ export async function cancelBooking(bookingPrismaId: string) {
 
 		return { success: true };
 	} catch (error) {
-		if (error instanceof Error && error.message === "No autorizado") throw error;
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al cancelar reserva: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -417,7 +419,7 @@ export async function cancelBooking(bookingPrismaId: string) {
  */
 export async function getRoomAvailability(roomPrismaId: string, date: string) {
 	const session = await getSession();
-	if (!session.userId) throw new Error("No autorizado");
+	if (!session.userId) throw new Error("No autenticado");
 
 	const room = await prisma.room.findUnique({ where: { id: roomPrismaId } });
 	if (!room) throw new Error("Sala no encontrada");

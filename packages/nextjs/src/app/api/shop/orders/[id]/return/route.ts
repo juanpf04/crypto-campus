@@ -31,7 +31,7 @@ export async function PUT(_req: NextRequest, { params }: Params) {
 		console.error("[PUT /api/shop/orders/[id]/return]", error);
 		const message = error instanceof Error ? error.message : "Error al procesar devolución";
 		const status = message === "Pedido no encontrado" ? 404
-			: message === "No autorizado" ? 403
+			: message === "No autenticado" ? 401 : message === "No autorizado" ? 403
 			: message === "El pedido ya fue devuelto" || message.startsWith("Solo se pueden") || message === "El plazo de devolución de 30 días ha expirado" ? 409
 			: 500;
 		return NextResponse.json({ error: message }, { status });

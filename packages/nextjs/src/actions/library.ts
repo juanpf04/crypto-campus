@@ -19,15 +19,15 @@ import { hardhat } from "viem/chains";
 import type { LoanStatus as PrismaLoanStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
+import { getSession, ensureRole, logPrismaRecovery } from "@/lib/action-utils";
 import { adminWalletClient, publicClient } from "@/lib/viem";
-import { getSession, ensureRole } from "@/lib/auth";
 import {
 	CONTRACT_ADDRESSES,
 	LIBRARY_MANAGER_ABI,
 	LIBRARY_TOKEN_ABI,
 } from "@/lib/contracts";
 
-type LoanStatusCompat = PrismaLoanStatus | "QUEUED" | "RESERVED" | "PICKED_UP" | "RETURNED" | "CANCELLED";
+// ── Helpers internos ─────────────────────────────────────────────────────
 
 function ensurePositiveInt(value: number, fieldName: string): number {
 	if (!Number.isInteger(value) || value <= 0) {
@@ -128,7 +128,7 @@ export async function addItem(input: {
 
 		return { success: true, item, txHash: hash };
 	} catch (error) {
-		if (error instanceof Error && error.message === "No autorizado") throw error;
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al crear ítem: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -176,7 +176,7 @@ export async function updateItem(
 
 		return { success: true, item };
 	} catch (error) {
-		if (error instanceof Error && error.message === "No autorizado") throw error;
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al actualizar ítem: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -214,7 +214,7 @@ export async function addCopies(itemId: string, amount: number) {
 
 		return { success: true, item, txHash: hash };
 	} catch (error) {
-		if (error instanceof Error && error.message === "No autorizado") throw error;
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al añadir copias: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -238,7 +238,7 @@ export async function deactivateItem(itemId: string) {
 
 		return { success: true };
 	} catch (error) {
-		if (error instanceof Error && error.message === "No autorizado") throw error;
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al desactivar ítem: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -262,7 +262,7 @@ export async function reactivateItem(itemId: string) {
 
 		return { success: true };
 	} catch (error) {
-		if (error instanceof Error && error.message === "No autorizado") throw error;
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al reactivar ítem: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -280,7 +280,7 @@ export async function listItems(filters?: {
 	offset?: number;
 }) {
 	const session = await getSession();
-	if (!session.userId) throw new Error("No autorizado");
+	if (!session.userId) throw new Error("No autenticado");
 
 	const where: Record<string, unknown> = {};
 	if (filters?.type) where.type = filters.type;
@@ -313,7 +313,7 @@ export async function listItems(filters?: {
  */
 export async function getItem(itemId: string) {
 	const session = await getSession();
-	if (!session.userId) throw new Error("No autorizado");
+	if (!session.userId) throw new Error("No autenticado");
 
 	const item = await prisma.libraryItem.findUnique({
 		where: { id: itemId },
@@ -351,7 +351,7 @@ export async function getItem(itemId: string) {
  */
 export async function getItemCategories() {
 	const session = await getSession();
-	if (!session.userId) throw new Error("No autorizado");
+	if (!session.userId) throw new Error("No autenticado");
 
 	const categories = await prisma.libraryItem.findMany({
 		where: { active: true, category: { not: null } },
@@ -439,20 +439,26 @@ export async function requestLoan(itemId: string) {
 
 		const isReserved = loanInfo.status === 2; // Reserved = 2
 
-		const loan = await prisma.loan.create({
-			data: {
-				loanId,
-				libraryItemId: item.id,
-				userId: session.userId!,
-				status: (isReserved ? "RESERVED" : "QUEUED") as LoanStatusCompat,
-				requestTxHash: hash,
-				reservationDate: isReserved ? new Date() : null,
-			},
-		});
+		let loan;
+		try {
+			loan = await prisma.loan.create({
+				data: {
+					loanId,
+					libraryItemId: item.id,
+					userId: session.userId!,
+					status: isReserved ? "RESERVED" : "QUEUED",
+					requestTxHash: hash,
+					reservationDate: isReserved ? new Date() : null,
+				},
+			});
+		} catch (dbError) {
+			logPrismaRecovery("requestLoan", hash, dbError);
+			throw new Error(`Error al guardar en base de datos. TxHash: ${hash}`);
+		}
 
 		return { success: true, loan, queued: !isReserved };
 	} catch (error) {
-		if (error instanceof Error && error.message === "No autorizado") throw error;
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al solicitar préstamo: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -493,7 +499,7 @@ export async function cancelLoan(loanPrismaId: string) {
 
 		return { success: true };
 	} catch (error) {
-		if (error instanceof Error && error.message === "No autorizado") throw error;
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al cancelar préstamo: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -539,7 +545,7 @@ export async function confirmPickup(loanPrismaId: string) {
 
 		return { success: true };
 	} catch (error) {
-		if (error instanceof Error && error.message === "No autorizado") throw error;
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al confirmar recogida: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -582,7 +588,7 @@ export async function confirmReturn(loanPrismaId: string) {
 
 		return { success: true };
 	} catch (error) {
-		if (error instanceof Error && error.message === "No autorizado") throw error;
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al confirmar devolución: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -623,7 +629,7 @@ export async function forceReturn(loanPrismaId: string) {
 
 		return { success: true };
 	} catch (error) {
-		if (error instanceof Error && error.message === "No autorizado") throw error;
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al forzar devolución: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -659,7 +665,7 @@ export async function expireReservation(loanPrismaId: string) {
 
 		return { success: true };
 	} catch (error) {
-		if (error instanceof Error && error.message === "No autorizado") throw error;
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al expirar reserva: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -769,7 +775,7 @@ export async function getMyLoans() {
  */
 export async function getLibraryBalance(userId?: string) {
 	const session = await getSession();
-	if (!session.userId) throw new Error("No autorizado");
+	if (!session.userId) throw new Error("No autenticado");
 
 	const targetUserId = userId || session.userId!;
 
@@ -957,7 +963,7 @@ export async function mintLibraryTokens(userId: string, amount: number) {
 
 		return { success: true, balance: Number(finalBalance) };
 	} catch (error) {
-		if (error instanceof Error && error.message === "No autorizado") throw error;
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al asignar tokens: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }

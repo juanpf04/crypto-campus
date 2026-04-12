@@ -18,7 +18,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 		console.error("[GET /api/shop/orders/[id]]", error);
 		const message = error instanceof Error ? error.message : "Error al obtener pedido";
 		const status = message === "Pedido no encontrado" ? 404
-			: message === "No autorizado" ? 403 : 500;
+			: message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}
 }

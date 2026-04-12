@@ -22,7 +22,7 @@ export async function GET() {
   } catch (error) {
     console.error("[GET /api/shop/cart]", error);
     const message = error instanceof Error ? error.message : "Error al obtener carrito";
-    const status = message === "No autorizado" ? 403 : 500;
+    const status = message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("[POST /api/shop/cart]", error);
     const message = error instanceof Error ? error.message : "Error al agregar al carrito";
-    const status = message === "No autorizado" ? 403
+    const status = message === "No autenticado" ? 401 : message === "No autorizado" ? 403
       : message === "Producto no disponible" ? 404
       : message === "Stock insuficiente" ? 409
       : 500;
@@ -64,7 +64,7 @@ export async function PATCH(req: NextRequest) {
   } catch (error) {
     console.error("[PATCH /api/shop/cart]", error);
     const message = error instanceof Error ? error.message : "Error al actualizar item";
-    const status = message === "No autorizado" ? 403
+    const status = message === "No autenticado" ? 401 : message === "No autorizado" ? 403
       : message === "Item de carrito no encontrado" ? 404
       : message === "Stock insuficiente" ? 409
       : 500;
@@ -93,7 +93,7 @@ export async function DELETE(req: NextRequest) {
   } catch (error) {
     console.error("[DELETE /api/shop/cart]", error);
     const message = error instanceof Error ? error.message : "Error al eliminar item";
-    const status = message === "No autorizado" ? 403
+    const status = message === "No autenticado" ? 401 : message === "No autorizado" ? 403
       : message === "Item de carrito no encontrado" ? 404
       : 500;
     return NextResponse.json({ error: message }, { status });

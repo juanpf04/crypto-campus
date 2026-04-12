@@ -18,7 +18,7 @@ export async function PUT(_req: NextRequest, { params }: Params) {
 		console.error("[PUT /api/shop/orders/[id]/deliver]", error);
 		const message = error instanceof Error ? error.message : "Error al marcar como entregado";
 		const status = message === "Pedido no encontrado" ? 404
-			: message === "No autorizado" ? 403
+			: message === "No autenticado" ? 401 : message === "No autorizado" ? 403
 			: message.startsWith("Solo se pueden") ? 409 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}

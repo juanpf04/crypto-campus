@@ -46,14 +46,6 @@ contract LibraryToken is ERC20, Pausable {
         campusRoles = CampusRoles(_campusRoles);
     }
 
-    // ── Public pure functions ───────────────────────────────────────────
-
-    /// @notice Decimales del token
-    /// @dev Se usa 0 para manejar unidades enteras
-    function decimals() public pure override returns (uint8) {
-        return 0;
-    }
-
     // ── External functions ──────────────────────────────────────────────
 
     /// @notice Configura el spender de confianza
@@ -87,8 +79,6 @@ contract LibraryToken is ERC20, Pausable {
         _burn(from, amount);
     }
 
-    // ── Pausable ─────────────────────────────────────────────────────────
-
     /// @notice Pausa el contrato (solo admin)
     function pause() external onlyAdmin {
         _pause();
@@ -97,6 +87,14 @@ contract LibraryToken is ERC20, Pausable {
     /// @notice Reanuda el contrato (solo admin)
     function unpause() external onlyAdmin {
         _unpause();
+    }
+
+    // ── Public pure functions ───────────────────────────────────────────
+
+    /// @notice Decimales del token
+    /// @dev Se usa 0 para manejar unidades enteras
+    function decimals() public pure override returns (uint8) {
+        return 0;
     }
 
     // ── Public view functions ───────────────────────────────────────────

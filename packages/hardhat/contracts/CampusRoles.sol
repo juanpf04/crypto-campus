@@ -189,6 +189,16 @@ contract CampusRoles is AccessControl, Pausable {
         emit UserRoleChanged(user, oldRole, newRole, userData);
     }
 
+    /// @notice Pausa el contrato (solo admin)
+    function pause() external onlyRole(ADMIN_ROLE) {
+        _pause();
+    }
+
+    /// @notice Reanuda el contrato (solo admin)
+    function unpause() external onlyRole(ADMIN_ROLE) {
+        _unpause();
+    }
+
     // ── External view functions ─────────────────────────────────────────
 
     /// @notice Indica si un usuario tiene rol de estudiante
@@ -247,19 +257,7 @@ contract CampusRoles is AccessControl, Pausable {
         return _userRecords[user].role != NO_ROLE;
     }
 
-    // ── Pausable ─────────────────────────────────────────────────────────
-
-    /// @notice Pausa el contrato (solo admin)
-    function pause() external onlyRole(ADMIN_ROLE) {
-        _pause();
-    }
-
-    /// @notice Reanuda el contrato (solo admin)
-    function unpause() external onlyRole(ADMIN_ROLE) {
-        _unpause();
-    }
-
-    // ── Bloqueo de AccessControl directo ─────────────────────────────────
+    // ── Public pure functions ────────────────────────────────────────────
 
     /// @dev Bloqueado: usar registerUser/changeRole en su lugar
     function grantRole(bytes32, address) public pure override {

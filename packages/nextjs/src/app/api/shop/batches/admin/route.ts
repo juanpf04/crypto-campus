@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Error desconocido";
-    if (msg === "No autorizado") return NextResponse.json({ error: msg }, { status: 403 });
+    if (msg === "No autenticado" || msg === "No autorizado") return NextResponse.json({ error: msg }, { status: 403 });
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

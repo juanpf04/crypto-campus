@@ -4,8 +4,19 @@ import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { sessionOptions, SessionData } from "@/lib/session";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
+  // ─── 0. Rate limiting ───
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.ip || "unknown";
+  const { allowed, resetIn } = checkRateLimit(ip);
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Demasiados intentos. Inténtalo de nuevo en unos segundos." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(resetIn / 1000)) } }
+    );
+  }
+
   // ─── 1. Leer el body del request ───
   // El frontend envía: { email, password }
   const { email, password } = await req.json();

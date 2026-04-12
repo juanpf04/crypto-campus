@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("[POST /api/shop/topup-simulated]", error);
     const message = error instanceof Error ? error.message : "Error al recargar saldo";
-    const status = message === "No autorizado" ? 403
+    const status = message === "No autenticado" ? 401 : message === "No autorizado" ? 403
       : message.includes("invalida") || message.includes("invalido") || message.includes("expirada") ? 400
       : message.includes("limite") ? 429
       : 500;

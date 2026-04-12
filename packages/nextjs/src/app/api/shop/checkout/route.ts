@@ -25,7 +25,7 @@ export async function POST() {
 		if (message.includes("Saldo insuficiente")) {
 			return NextResponse.json({ error: message }, { status: 402 });
 		}
-		if (message === "No autorizado") {
+		if (message === "No autenticado" || message === "No autorizado") {
 			return NextResponse.json({ error: message }, { status: 403 });
 		}
 

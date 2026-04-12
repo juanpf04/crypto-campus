@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
 	} catch (error) {
 		console.error("[GET /api/rooms/bookings]", error);
 		const message = error instanceof Error ? error.message : "Error al listar reservas";
-		const status = message === "No autorizado" ? 403 : 500;
+		const status = message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}
 }
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
 	} catch (error) {
 		console.error("[POST /api/rooms/bookings]", error);
 		const message = error instanceof Error ? error.message : "Error al reservar sala";
-		const status = message === "No autorizado" ? 403
+		const status = message === "No autenticado" ? 401 : message === "No autorizado" ? 403
 			: message.includes("inválida") ? 400
 			: message.includes("ocupad") ? 409
 			: message.includes("ya") ? 409 : 500;

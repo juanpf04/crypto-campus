@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 	} catch (error) {
 		console.error("[GET /api/library/loans/requests]", error);
 		const message = error instanceof Error ? error.message : "Error al listar solicitudes";
-		const status = message === "No autorizado" ? 403 : 500;
+		const status = message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}
 }

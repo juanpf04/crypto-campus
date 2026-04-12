@@ -12,7 +12,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 		console.error("[GET /api/library/items/[id]]", error);
 		const message = error instanceof Error ? error.message : "Error al obtener ítem";
 		const status = message.includes("no encontrado") ? 404
-			: message === "No autorizado" ? 403 : 500;
+			: message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}
 }
@@ -27,7 +27,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
 		console.error("[PUT /api/library/items/[id]]", error);
 		const message = error instanceof Error ? error.message : "Error al actualizar ítem";
 		const status = message.includes("no encontrado") ? 404
-			: message === "No autorizado" ? 403 : 500;
+			: message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}
 }
@@ -41,7 +41,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
 		console.error("[DELETE /api/library/items/[id]]", error);
 		const message = error instanceof Error ? error.message : "Error al desactivar ítem";
 		const status = message.includes("no encontrado") ? 404
-			: message === "No autorizado" ? 403 : 500;
+			: message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}
 }
@@ -55,7 +55,7 @@ export async function PATCH(_req: NextRequest, { params }: Params) {
 		console.error("[PATCH /api/library/items/[id]]", error);
 		const message = error instanceof Error ? error.message : "Error al reactivar ítem";
 		const status = message.includes("no encontrado") ? 404
-			: message === "No autorizado" ? 403 : 500;
+			: message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}
 }

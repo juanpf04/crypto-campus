@@ -80,6 +80,26 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
     mapping(uint256 => UseRequest) private _useRequests;
     mapping(address => uint256[]) private _studentUseRequests;
 
+    // ── Events ──────────────────────────────────────────────────────────
+    event BadgeTypeCreated(uint256 indexed badgeTypeId, address indexed professor);
+    event TaskCreated(uint256 indexed taskId, uint256 indexed badgeTypeId, address indexed professor);
+    event TaskDeactivated(uint256 indexed taskId);
+    event BadgeAwarded(uint256 indexed taskId, address indexed student, uint256 indexed badgeTypeId, uint256 amount);
+    event RewardCreated(uint256 indexed rewardId, uint256 badgeCost, uint256 supply, address indexed professor);
+    event RewardDeactivated(uint256 indexed rewardId);
+    event RewardRedeemed(
+        uint256 indexed rewardId,
+        address indexed student,
+        uint256 indexed badgeTypeId,
+        uint256 badgesBurned,
+        uint256 redemptionId
+    );
+    event RewardTokenMinted(uint256 indexed rewardId, address indexed student, uint256 tokenId);
+    event UseRequestCreated(uint256 indexed requestId, address indexed student, uint256 indexed rewardId);
+    event UseRequestCancelled(uint256 indexed requestId);
+    event UseRequestApproved(uint256 indexed requestId, address indexed student, uint256 indexed rewardId);
+    event UseRequestRejected(uint256 indexed requestId);
+
     // ── Errors ──────────────────────────────────────────────────────────
     error NotProfessor();
     error NotStudent();
@@ -103,34 +123,17 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
     error InsufficientRewardTokens(uint256 rewardId);
     error NotAdmin();
 
-    // ── Events ──────────────────────────────────────────────────────────
-    event BadgeTypeCreated(uint256 indexed badgeTypeId, address indexed professor);
-    event TaskCreated(uint256 indexed taskId, uint256 indexed badgeTypeId, address indexed professor);
-    event TaskDeactivated(uint256 indexed taskId);
-    event BadgeAwarded(uint256 indexed taskId, address indexed student, uint256 indexed badgeTypeId, uint256 amount);
-    event RewardCreated(uint256 indexed rewardId, uint256 badgeCost, uint256 supply, address indexed professor);
-    event RewardDeactivated(uint256 indexed rewardId);
-    event RewardRedeemed(
-        uint256 indexed rewardId,
-        address indexed student,
-        uint256 indexed badgeTypeId,
-        uint256 badgesBurned,
-        uint256 redemptionId
-    );
-    event RewardTokenMinted(uint256 indexed rewardId, address indexed student, uint256 tokenId);
-    event UseRequestCreated(uint256 indexed requestId, address indexed student, uint256 indexed rewardId);
-    event UseRequestCancelled(uint256 indexed requestId);
-    event UseRequestApproved(uint256 indexed requestId, address indexed student, uint256 indexed rewardId);
-    event UseRequestRejected(uint256 indexed requestId);
-
     // ── Modifiers ───────────────────────────────────────────────────────
-
-    constructor(address _campusRoles, string memory uri_) ERC1155(uri_) {
-        campusRoles = CampusRoles(_campusRoles);
-    }
 
     modifier onlyProfessor() {
         if (!campusRoles.hasRole(campusRoles.PROFESSOR_ROLE(), msg.sender))
+            revert NotProfessor();
+        _;
+    }
+
+    modifier onlyProfessorOrAdmin() {
+        if (!campusRoles.hasRole(campusRoles.PROFESSOR_ROLE(), msg.sender) &&
+            !campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender))
             revert NotProfessor();
         _;
     }
@@ -143,6 +146,12 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
 
     // ── Functions ───────────────────────────────────────────────────────
 
+    // ── Constructor ─────────────────────────────────────────────────────
+
+    constructor(address _campusRoles, string memory uri_) ERC1155(uri_) {
+        campusRoles = CampusRoles(_campusRoles);
+    }
+
     // ── External functions ──────────────────────────────────────────────
 
     // ── Badge type management ───────────────────────────────────────────
@@ -150,7 +159,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
     /**
      * @dev Crea un nuevo tipo de insignia.
      */
-    function createBadgeType() external onlyProfessor whenNotPaused returns (uint256 badgeTypeId) {
+    function createBadgeType() external onlyProfessorOrAdmin whenNotPaused returns (uint256 badgeTypeId) {
         badgeTypeId = nextBadgeTypeId;
         unchecked { ++nextBadgeTypeId; }
 
@@ -171,7 +180,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
     function createTask(
         uint256 badgeTypeId,
         uint256 rewardAmount
-    ) external onlyProfessor whenNotPaused returns (uint256 taskId) {
+    ) external onlyProfessorOrAdmin whenNotPaused returns (uint256 taskId) {
         if (!_badgeTypes[badgeTypeId].exists) revert BadgeTypeNotFound(badgeTypeId);
         if (_badgeTypes[badgeTypeId].creator != msg.sender)
             revert NotBadgeTypeOwner(badgeTypeId, msg.sender);
@@ -193,7 +202,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
     /**
      * @dev Desactiva una tarea (solo su creador).
      */
-    function deactivateTask(uint256 taskId) external onlyProfessor {
+    function deactivateTask(uint256 taskId) external onlyProfessorOrAdmin {
         Task storage task = _tasks[taskId];
         if (task.professor == address(0)) revert TaskNotFound(taskId);
         if (task.professor != msg.sender) revert NotTaskOwner(taskId, msg.sender);
@@ -207,7 +216,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
     /**
      * @dev Otorga insignias a un estudiante por completar una tarea.
      */
-    function awardBadge(uint256 taskId, address student) external onlyProfessor whenNotPaused {
+    function awardBadge(uint256 taskId, address student) external onlyProfessorOrAdmin whenNotPaused {
         Task storage task = _tasks[taskId];
         if (task.professor == address(0)) revert TaskNotFound(taskId);
         if (task.professor != msg.sender) revert NotTaskOwner(taskId, msg.sender);
@@ -234,7 +243,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
         uint256 badgeTypeId,
         uint256 badgeCost,
         uint256 supply
-    ) external onlyProfessor returns (uint256 rewardId) {
+    ) external onlyProfessorOrAdmin returns (uint256 rewardId) {
         if (!_badgeTypes[badgeTypeId].exists) revert BadgeTypeNotFound(badgeTypeId);
         if (badgeCost == 0) revert ZeroCost();
 
@@ -256,7 +265,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
     /**
      * @dev Desactiva una recompensa (solo su creador).
      */
-    function deactivateReward(uint256 rewardId) external onlyProfessor {
+    function deactivateReward(uint256 rewardId) external onlyProfessorOrAdmin {
         Reward storage reward = _rewards[rewardId];
         if (reward.professor == address(0)) revert RewardNotFound(rewardId);
         if (reward.professor != msg.sender) revert NotRewardOwner(rewardId, msg.sender);
@@ -353,7 +362,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
      * @dev El profesor aprueba el uso: quema el token de recompensa del estudiante.
      *      Solo puede aprobarlo el profesor que creó la recompensa.
      */
-    function approveUseRequest(uint256 requestId) external onlyProfessor {
+    function approveUseRequest(uint256 requestId) external onlyProfessorOrAdmin {
         UseRequest storage req = _useRequests[requestId];
         if (req.student == address(0)) revert UseRequestNotFound(requestId);
         if (req.status != UseRequestStatus.Pending)
@@ -377,7 +386,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
      * @dev El profesor rechaza la solicitud de uso. El token queda con el estudiante.
      *      Solo puede rechazarlo el profesor que creó la recompensa.
      */
-    function rejectUseRequest(uint256 requestId) external onlyProfessor {
+    function rejectUseRequest(uint256 requestId) external onlyProfessorOrAdmin {
         UseRequest storage req = _useRequests[requestId];
         if (req.student == address(0)) revert UseRequestNotFound(requestId);
         if (req.status != UseRequestStatus.Pending)
@@ -389,8 +398,6 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
         req.status = UseRequestStatus.Rejected;
         emit UseRequestRejected(requestId);
     }
-
-    // ── Pausable ─────────────────────────────────────────────────────────
 
     /// @notice Pausa el contrato (solo admin)
     function pause() external {

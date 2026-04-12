@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
 		return NextResponse.json(result, { status: 201 });
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Error al realizar la compra";
-		const status = message === "No autorizado" ? 403
+		const status = message === "No autenticado" ? 401 : message === "No autorizado" ? 403
 			: message === "Producto no encontrado" ? 404
 			: message === "Producto no disponible" || message.startsWith("Stock insuficiente") ? 409
 			: message.startsWith("Saldo insuficiente") ? 402

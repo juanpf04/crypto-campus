@@ -109,6 +109,16 @@ contract Printer is Pausable {
         }
     }
 
+    /// @notice Pausa el contrato (solo admin)
+    function pause() external onlyAdmin {
+        _pause();
+    }
+
+    /// @notice Reanuda el contrato (solo admin)
+    function unpause() external onlyAdmin {
+        _unpause();
+    }
+
     // ── External view functions ─────────────────────────────────────────
 
     /// @notice Obtiene los creditos disponibles de un usuario
@@ -123,15 +133,5 @@ contract Printer is Pausable {
         if (!campusRoles.isRegistered(user)) return -1;
         // Estudiantes y profesores
         return int256(_modified[user] ? _credits[user] : INITIAL_CREDITS);
-    }
-
-    // ── Pausable ─────────────────────────────────────────────────────────
-
-    function pause() external onlyAdmin {
-        _pause();
-    }
-
-    function unpause() external onlyAdmin {
-        _unpause();
     }
 }

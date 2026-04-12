@@ -18,7 +18,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 		console.error("[GET /api/rooms/[id]/availability]", error);
 		const message = error instanceof Error ? error.message : "Error al obtener disponibilidad";
 		const status = message.includes("no encontrada") ? 404
-			: message === "No autorizado" ? 403 : 500;
+			: message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		return NextResponse.json({ error: message }, { status });
 	}
 }
