@@ -1,0 +1,27 @@
+# Forzar que todos los archivos de texto se guarden en el repositorio con LF
+* text=auto eol=lf
+
+# Archivos de código y configuración (asegurar LF)
+*.sol text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.mjs text eol=lf
+
+# Archivos binarios (Git no debe modificar)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.gif binary
+*.webp binary
+*.pdf binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary

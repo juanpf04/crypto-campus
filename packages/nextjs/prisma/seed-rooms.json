@@ -1,58 +1,78 @@
 [
   {
-    "name": "Sala 1",
-    "description": "Sala grande para grupos de trabajo y reuniones.",
-    "location": "Planta baja, Biblioteca",
-    "capacity": 10,
-    "amenities": { "projector": true, "whiteboard": true, "powerOutlets": true, "airConditioning": true }
-  },
-  {
-    "name": "Sala 2",
-    "description": "Sala pequeña para estudio individual o en pareja.",
-    "location": "Primera planta, Biblioteca",
+    "name": "Sala 01",
+    "description": "Capacidad para 2-4 personas. Equipada con conexiones eléctricas. Accesible a usuarios con diversidad funcional. Enchufes.",
+    "location": "Planta 1, Biblioteca",
     "capacity": 4,
-    "amenities": { "whiteboard": true, "powerOutlets": true, "airConditioning": true }
+    "amenities": {
+      "powerOutlets": true,
+      "accessible": true
+    }
   },
   {
-    "name": "Sala 3",
-    "description": "Sala de estudio en grupo.",
-    "location": "Primera planta, Biblioteca",
-    "capacity": 6,
-    "amenities": { "whiteboard": true, "powerOutlets": true, "airConditioning": true }
+    "name": "Sala 02",
+    "description": "Capacidad para 2-7 personas. Equipada con una pizarra, proyector HDMI / VGA, conexiones eléctricas y puntos de red. Aire acondicionado. Accesible a usuarios con diversidad funcional. Enchufes.",
+    "location": "Planta 1, Biblioteca",
+    "capacity": 7,
+    "amenities": {
+      "whiteboard": true,
+      "projector": true,
+      "networkPoints": true,
+      "powerOutlets": true,
+      "airConditioning": true,
+      "accessible": true
+    }
   },
   {
-    "name": "Sala 4",
-    "description": "Sala de estudio en grupo.",
-    "location": "Primera planta, Biblioteca",
-    "capacity": 6,
-    "amenities": { "whiteboard": true, "powerOutlets": true, "airConditioning": true }
+    "name": "Sala 03",
+    "description": "Capacidad para 2-7 personas. Equipada con pizarra, proyector HDMI / VGA, conexiones eléctricas y puntos de red. Aire acondicionado. Accesible a usuarios con diversidad funcional. Enchufes.",
+    "location": "Planta 1, Biblioteca",
+    "capacity": 7,
+    "amenities": {
+      "whiteboard": true,
+      "projector": true,
+      "networkPoints": true,
+      "powerOutlets": true,
+      "airConditioning": true,
+      "accessible": true
+    }
   },
   {
-    "name": "Sala 5",
-    "description": "Sala de estudio en grupo.",
-    "location": "Primera planta, Biblioteca",
-    "capacity": 6,
-    "amenities": { "whiteboard": true, "powerOutlets": true, "airConditioning": true }
+    "name": "Sala 04",
+    "description": "Capacidad para 2-7 personas. Equipada con pizarra, proyector HDMI / VGA, conexiones eléctricas y puntos de red. Aire acondicionado. Accesible a usuarios con diversidad funcional. Enchufes.",
+    "location": "Planta 1, Biblioteca",
+    "capacity": 7,
+    "amenities": {
+      "whiteboard": true,
+      "projector": true,
+      "networkPoints": true,
+      "powerOutlets": true,
+      "airConditioning": true,
+      "accessible": true
+    }
   },
   {
-    "name": "Sala 6",
-    "description": "Sala de estudio en grupo.",
-    "location": "Primera planta, Biblioteca",
-    "capacity": 6,
-    "amenities": { "whiteboard": true, "powerOutlets": true, "airConditioning": true }
+    "name": "Sala 05",
+    "description": "Capacidad para 2-8 personas. Equipada con conexiones eléctricas. Accesible a usuarios con diversidad funcional. Enchufes.",
+    "location": "Planta 1, Biblioteca",
+    "capacity": 8,
+    "amenities": {
+      "powerOutlets": true,
+      "accessible": true
+    }
   },
   {
-    "name": "Sala 7",
-    "description": "Sala de estudio en grupo.",
-    "location": "Primera planta, Biblioteca",
-    "capacity": 6,
-    "amenities": { "whiteboard": true, "powerOutlets": true, "airConditioning": true }
-  },
-  {
-    "name": "Sala 8",
-    "description": "Sala de estudio en grupo.",
-    "location": "Primera planta, Biblioteca",
-    "capacity": 6,
-    "amenities": { "whiteboard": true, "powerOutlets": true, "airConditioning": true }
+    "name": "Sala 06",
+    "description": "El uso de esta sala estará supeditado a las necesidades docentes de la Facultad. Capacidad para 3-8 personas. Equipada con una pizarra, proyector HDMI / VGA, conexiones eléctricas y puntos de red. Aire acondicionado. Accesible a usuarios con diversidad funcional. Enchufes.",
+    "location": "Planta baja, Biblioteca",
+    "capacity": 8,
+    "amenities": {
+      "whiteboard": true,
+      "projector": true,
+      "networkPoints": true,
+      "powerOutlets": true,
+      "airConditioning": true,
+      "accessible": true
+    }
   }
 ]

@@ -1,363 +1,195 @@
 [
   {
     "type": "BOOK",
-    "title": "Introduction to Algorithms",
-    "creator": "Thomas H. Cormen, Charles E. Leiserson, Ronald L. Rivest, Clifford Stein",
-    "description": "El libro de referencia en algoritmos y estructuras de datos, conocido como CLRS. Cubre desde ordenación y grafos hasta programación dinámica y NP-completitud.",
-    "category": "Algoritmos",
-    "copies": 5,
-    "physicalLocation": "Planta 1, Estantería A1",
-    "metadata": { "isbn": "978-0262033848", "publisher": "MIT Press", "year": 2009, "pages": 1312 }
-  },
-  {
-    "type": "BOOK",
-    "title": "The Art of Computer Programming, Vol. 1",
-    "creator": "Donald E. Knuth",
-    "description": "La obra maestra de Knuth sobre algoritmos fundamentales. Referencia obligada en ciencia de la computación.",
-    "category": "Algoritmos",
-    "copies": 2,
-    "physicalLocation": "Planta 1, Estantería A1",
-    "metadata": { "isbn": "978-0201896831", "publisher": "Addison-Wesley", "year": 2011, "pages": 672 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Algorithm Design",
-    "creator": "Jon Kleinberg, Éva Tardos",
-    "description": "Diseño y análisis de algoritmos con enfoque en técnicas de resolución de problemas reales.",
-    "category": "Algoritmos",
+    "title": "Fundamentos de contabilidad",
+    "creator": "Ángel Muñoz Merchante",
+    "description": "Fundamentos de contabilidad con enfoque en marco conceptual, ciclo contable y Plan General Contable.",
+    "category": "Gestión Empresarial",
     "copies": 3,
     "physicalLocation": "Planta 1, Estantería A1",
-    "metadata": { "isbn": "978-0321295354", "publisher": "Pearson", "year": 2005, "pages": 864 }
+    "metadata": {
+      "isbn": "9788480048668",
+      "isbn10": "8480048662",
+      "publisher": "Centro de Estudios Ramón Areces",
+      "year": 2009,
+      "language": "Español"
+    }
   },
   {
     "type": "BOOK",
-    "title": "Algorithms",
-    "creator": "Robert Sedgewick, Kevin Wayne",
-    "description": "Enfoque práctico en algoritmos con implementaciones en Java. Complemento ideal para cursos de programación.",
-    "category": "Algoritmos",
-    "copies": 4,
-    "physicalLocation": "Planta 1, Estantería A1",
-    "metadata": { "isbn": "978-0321573513", "publisher": "Addison-Wesley", "year": 2011, "pages": 976 }
+    "title": "Análisis básico de circuitos eléctricos y electrónicos",
+    "creator": "Txelo Ruiz Vázquez et al.",
+    "description": "Introducción a circuitos eléctricos y electrónicos para fundamentos de electricidad y electrónica.",
+    "category": "Fundamentos de electricidad y electrónica",
+    "copies": 3,
+    "physicalLocation": "Planta 1, Estantería A2",
+    "metadata": {
+      "isbn": "9788420540443",
+      "isbn10": "8420540447",
+      "publisher": "Pearson Educación",
+      "year": 2010,
+      "language": "Español"
+    }
   },
   {
     "type": "BOOK",
-    "title": "Operating System Concepts",
-    "creator": "Abraham Silberschatz, Peter B. Galvin, Greg Gagne",
-    "description": "El clásico de sistemas operativos. Cubre procesos, hilos, memoria, almacenamiento y sistemas distribuidos.",
-    "category": "Sistemas Operativos",
-    "copies": 5,
-    "physicalLocation": "Planta 1, Estantería B2",
-    "metadata": { "isbn": "978-1119800361", "publisher": "Wiley", "year": 2018, "pages": 976 }
+    "title": "Cálculo en una variable",
+    "creator": "Venancio Tomeo Perucha, Isaías Uña Juárez, Jesús San Martín Moreno",
+    "description": "Cálculo en una variable con problemas y ejercicios: límites, derivadas, integrales y series.",
+    "category": "Cálculo",
+    "copies": 3,
+    "physicalLocation": "Planta 1, Estantería B1",
+    "metadata": {
+      "isbn": "9788492812363",
+      "isbn10": "8492812362",
+      "publisher": "Garceta",
+      "year": 2015,
+      "language": "Español"
+    }
   },
   {
     "type": "BOOK",
-    "title": "Modern Operating Systems",
-    "creator": "Andrew S. Tanenbaum, Herbert Bos",
-    "description": "Sistemas operativos modernos: procesos, memoria, E/S, seguridad. Con estudios de caso de Linux y Windows.",
-    "category": "Sistemas Operativos",
+    "title": "Cálculo en una variable",
+    "creator": "Venancio Tomeo Perucha, Isaías Uña Juárez, Jesús San Martín Moreno",
+    "description": "Cálculo en una variable con problemas y ejercicios. Misma obra clasificada en Álgebra Lineal.",
+    "category": "Álgebra Lineal",
     "copies": 3,
     "physicalLocation": "Planta 1, Estantería B2",
-    "metadata": { "isbn": "978-0133591620", "publisher": "Pearson", "year": 2014, "pages": 1136 }
+    "metadata": {
+      "isbn": "9788492812363",
+      "isbn10": "8492812362",
+      "publisher": "Garceta",
+      "year": 2015,
+      "language": "Español"
+    }
   },
   {
     "type": "BOOK",
-    "title": "Operating Systems: Design and Implementation",
-    "creator": "Andrew S. Tanenbaum, Albert S. Woodhull",
-    "description": "Diseño e implementación de SO basado en MINIX. Ideal para entender los internos de un sistema operativo.",
-    "category": "Sistemas Operativos",
-    "copies": 2,
-    "physicalLocation": "Planta 1, Estantería B2",
-    "metadata": { "isbn": "978-0131429383", "publisher": "Prentice Hall", "year": 2006, "pages": 1080 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Database System Concepts",
-    "creator": "Abraham Silberschatz, Henry F. Korth, S. Sudarshan",
-    "description": "Texto fundamental de bases de datos: modelo relacional, SQL, diseño, transacciones y NoSQL.",
-    "category": "Bases de Datos",
-    "copies": 4,
-    "physicalLocation": "Planta 1, Estantería C3",
-    "metadata": { "isbn": "978-0078022159", "publisher": "McGraw-Hill", "year": 2019, "pages": 1376 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Fundamentals of Database Systems",
-    "creator": "Ramez Elmasri, Shamkant B. Navathe",
-    "description": "Fundamentos de bases de datos: modelado ER, normalización, SQL, recuperación y distribución.",
-    "category": "Bases de Datos",
+    "title": "Matemática discreta y lógica matemática",
+    "creator": "María Teresa Hortalá González, Javier Leach Albert, Mario Rodríguez Artalejo",
+    "description": "Matemática discreta y lógica matemática: inducción, combinatoria, grafos y lógica de primer orden.",
+    "category": "Matemática discreta y Lógica matemática",
     "copies": 3,
-    "physicalLocation": "Planta 1, Estantería C3",
-    "metadata": { "isbn": "978-0133970777", "publisher": "Pearson", "year": 2015, "pages": 1280 }
+    "physicalLocation": "Planta 1, Estantería C1",
+    "metadata": {
+      "isbn": "9788474919349",
+      "isbn10": "8474919347",
+      "publisher": "Editorial Complutense",
+      "year": 2011,
+      "language": "Español"
+    }
   },
   {
     "type": "BOOK",
-    "title": "Computer Networks",
-    "creator": "Andrew S. Tanenbaum, David J. Wetherall",
-    "description": "Redes de computadores desde la capa física hasta la capa de aplicación. Referencia clásica.",
-    "category": "Redes",
-    "copies": 4,
-    "physicalLocation": "Planta 2, Estantería D1",
-    "metadata": { "isbn": "978-0132126953", "publisher": "Pearson", "year": 2011, "pages": 960 }
+    "title": "Matemática discreta para informáticos: ejercicios resueltos",
+    "creator": "Rafael Caballero Roldán et al.",
+    "description": "Ejercicios resueltos de matemática discreta para informática: combinatoria, grafos y teoría de números.",
+    "category": "Matemática discreta y Lógica matemática",
+    "copies": 3,
+    "physicalLocation": "Planta 1, Estantería C2",
+    "metadata": {
+      "isbn": "9788483223949",
+      "isbn10": "8483223945",
+      "publisher": "Pearson Educación",
+      "year": 2013,
+      "language": "Español"
+    }
   },
   {
     "type": "BOOK",
-    "title": "Computer Networking: A Top-Down Approach",
-    "creator": "James F. Kurose, Keith W. Ross",
-    "description": "Enfoque top-down de redes: aplicación, transporte, red, enlace. Con labs con Wireshark.",
-    "category": "Redes",
+    "title": "Programming: principles and practice using C++",
+    "creator": "Bjarne Stroustrup",
+    "description": "Introducción completa a programación con C++11 y C++14 desde fundamentos hasta diseño y pruebas.",
+    "category": "Fundamentos de la Programación",
     "copies": 3,
     "physicalLocation": "Planta 2, Estantería D1",
-    "metadata": { "isbn": "978-0133594140", "publisher": "Pearson", "year": 2016, "pages": 864 }
+    "metadata": {
+      "isbn": "9780321992789",
+      "isbn10": "0321992784",
+      "publisher": "Addison-Wesley",
+      "year": 2015,
+      "language": "Inglés"
+    }
   },
   {
     "type": "BOOK",
-    "title": "Software Engineering",
-    "creator": "Ian Sommerville",
-    "description": "Ingeniería del software completa: requisitos, diseño, testing, gestión de proyectos y metodologías ágiles.",
-    "category": "Ingeniería del Software",
-    "copies": 4,
-    "physicalLocation": "Planta 2, Estantería E2",
-    "metadata": { "isbn": "978-0133943030", "publisher": "Pearson", "year": 2015, "pages": 816 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Design Patterns: Elements of Reusable Object-Oriented Software",
-    "creator": "Erich Gamma, Richard Helm, Ralph Johnson, John Vlissides",
-    "description": "Los 23 patrones de diseño clásicos del Gang of Four. Imprescindible para diseño orientado a objetos.",
-    "category": "Ingeniería del Software",
-    "copies": 3,
-    "physicalLocation": "Planta 2, Estantería E2",
-    "metadata": { "isbn": "978-0201633610", "publisher": "Addison-Wesley", "year": 1994, "pages": 395 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Clean Code",
-    "creator": "Robert C. Martin",
-    "description": "Principios y prácticas para escribir código limpio, legible y mantenible en cualquier lenguaje.",
-    "category": "Ingeniería del Software",
-    "copies": 4,
-    "physicalLocation": "Planta 2, Estantería E2",
-    "metadata": { "isbn": "978-0132350884", "publisher": "Prentice Hall", "year": 2008, "pages": 464 }
-  },
-  {
-    "type": "BOOK",
-    "title": "The Pragmatic Programmer",
-    "creator": "Andrew Hunt, David Thomas",
-    "description": "Consejos prácticos para programadores profesionales. Edición del 20 aniversario.",
-    "category": "Ingeniería del Software",
-    "copies": 3,
-    "physicalLocation": "Planta 2, Estantería E2",
-    "metadata": { "isbn": "978-0135957059", "publisher": "Addison-Wesley", "year": 2019, "pages": 352 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Refactoring: Improving the Design of Existing Code",
-    "creator": "Martin Fowler",
-    "description": "Guía definitiva de refactoring con catálogo de técnicas para mejorar código existente.",
-    "category": "Ingeniería del Software",
-    "copies": 2,
-    "physicalLocation": "Planta 2, Estantería E2",
-    "metadata": { "isbn": "978-0134757599", "publisher": "Addison-Wesley", "year": 2018, "pages": 448 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Clean Architecture",
-    "creator": "Robert C. Martin",
-    "description": "Principios de arquitectura de software: SOLID, componentes, límites y la regla de dependencia.",
-    "category": "Ingeniería del Software",
-    "copies": 2,
-    "physicalLocation": "Planta 2, Estantería E2",
-    "metadata": { "isbn": "978-0134494166", "publisher": "Prentice Hall", "year": 2017, "pages": 432 }
-  },
-  {
-    "type": "BOOK",
-    "title": "The C Programming Language",
-    "creator": "Brian W. Kernighan, Dennis M. Ritchie",
-    "description": "El libro original de C por sus creadores. Referencia fundamental para programación de sistemas.",
-    "category": "Programación",
-    "copies": 3,
-    "physicalLocation": "Planta 2, Estantería F1",
-    "metadata": { "isbn": "978-0131103627", "publisher": "Prentice Hall", "year": 1988, "pages": 272 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Effective Java",
-    "creator": "Joshua Bloch",
-    "description": "Buenas prácticas y patrones idiomáticos para programación en Java. 90 reglas esenciales.",
-    "category": "Programación",
-    "copies": 3,
-    "physicalLocation": "Planta 2, Estantería F1",
-    "metadata": { "isbn": "978-0134685991", "publisher": "Addison-Wesley", "year": 2018, "pages": 416 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Structure and Interpretation of Computer Programs",
-    "creator": "Harold Abelson, Gerald Jay Sussman",
-    "description": "SICP: el clásico del MIT sobre abstracción, recursión y programación funcional con Scheme.",
-    "category": "Programación",
-    "copies": 2,
-    "physicalLocation": "Planta 2, Estantería F1",
-    "metadata": { "isbn": "978-0262510875", "publisher": "MIT Press", "year": 1996, "pages": 657 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Programming in Haskell",
-    "creator": "Graham Hutton",
-    "description": "Introducción a la programación funcional con Haskell. Usado en asignaturas de programación declarativa.",
-    "category": "Programación",
-    "copies": 3,
-    "physicalLocation": "Planta 2, Estantería F1",
-    "metadata": { "isbn": "978-1316626221", "publisher": "Cambridge University Press", "year": 2016, "pages": 318 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Python Crash Course",
-    "creator": "Eric Matthes",
-    "description": "Introducción práctica a Python: fundamentos, proyectos web, visualización de datos y juegos.",
-    "category": "Programación",
-    "copies": 4,
-    "physicalLocation": "Planta 2, Estantería F1",
-    "metadata": { "isbn": "978-1593279288", "publisher": "No Starch Press", "year": 2019, "pages": 544 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Artificial Intelligence: A Modern Approach",
-    "creator": "Stuart Russell, Peter Norvig",
-    "description": "El texto de referencia en IA: búsqueda, conocimiento, planificación, aprendizaje y robótica.",
-    "category": "Inteligencia Artificial",
-    "copies": 4,
-    "physicalLocation": "Planta 3, Estantería G1",
-    "metadata": { "isbn": "978-0134610993", "publisher": "Pearson", "year": 2020, "pages": 1136 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Deep Learning",
-    "creator": "Ian Goodfellow, Yoshua Bengio, Aaron Courville",
-    "description": "Fundamentos teóricos del deep learning: redes neuronales, optimización, CNN, RNN y modelos generativos.",
-    "category": "Inteligencia Artificial",
-    "copies": 3,
-    "physicalLocation": "Planta 3, Estantería G1",
-    "metadata": { "isbn": "978-0262035613", "publisher": "MIT Press", "year": 2016, "pages": 800 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Pattern Recognition and Machine Learning",
-    "creator": "Christopher M. Bishop",
-    "description": "Reconocimiento de patrones y machine learning desde una perspectiva bayesiana.",
-    "category": "Inteligencia Artificial",
-    "copies": 2,
-    "physicalLocation": "Planta 3, Estantería G1",
-    "metadata": { "isbn": "978-0387310732", "publisher": "Springer", "year": 2006, "pages": 738 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Computer Organization and Design",
-    "creator": "David A. Patterson, John L. Hennessy",
-    "description": "Organización y diseño de computadores: RISC-V, pipeline, memoria y E/S.",
-    "category": "Arquitectura de Computadores",
-    "copies": 4,
-    "physicalLocation": "Planta 1, Estantería B1",
-    "metadata": { "isbn": "978-0124077263", "publisher": "Morgan Kaufmann", "year": 2013, "pages": 800 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Computer Architecture: A Quantitative Approach",
-    "creator": "John L. Hennessy, David A. Patterson",
-    "description": "Arquitectura avanzada: paralelismo, memoria, multicore y warehouse-scale computing.",
-    "category": "Arquitectura de Computadores",
-    "copies": 2,
-    "physicalLocation": "Planta 1, Estantería B1",
-    "metadata": { "isbn": "978-0128119051", "publisher": "Morgan Kaufmann", "year": 2017, "pages": 936 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Discrete Mathematics and Its Applications",
-    "creator": "Kenneth H. Rosen",
-    "description": "Matemática discreta: lógica, conjuntos, grafos, combinatoria, relaciones y teoría de números.",
-    "category": "Matemáticas",
-    "copies": 5,
-    "physicalLocation": "Planta 3, Estantería H1",
-    "metadata": { "isbn": "978-1259676512", "publisher": "McGraw-Hill", "year": 2018, "pages": 1120 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Linear Algebra and Its Applications",
-    "creator": "David C. Lay, Steven R. Lay, Judi J. McDonald",
-    "description": "Álgebra lineal con aplicaciones: sistemas de ecuaciones, espacios vectoriales, determinantes y eigenvalores.",
-    "category": "Matemáticas",
-    "copies": 4,
-    "physicalLocation": "Planta 3, Estantería H1",
-    "metadata": { "isbn": "978-0321982384", "publisher": "Pearson", "year": 2015, "pages": 576 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Probability and Statistics for Engineers and Scientists",
-    "creator": "Ronald E. Walpole, Raymond H. Myers, Sharon L. Myers, Keying Ye",
-    "description": "Probabilidad y estadística aplicada: distribuciones, inferencia, regresión y diseño de experimentos.",
-    "category": "Matemáticas",
-    "copies": 3,
-    "physicalLocation": "Planta 3, Estantería H1",
-    "metadata": { "isbn": "978-0321629111", "publisher": "Pearson", "year": 2016, "pages": 816 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Concrete Mathematics",
-    "creator": "Ronald L. Graham, Donald E. Knuth, Oren Patashnik",
-    "description": "Matemáticas para ciencias de la computación: sumas, recurrencias, funciones generadoras y asintóticas.",
-    "category": "Matemáticas",
-    "copies": 2,
-    "physicalLocation": "Planta 3, Estantería H1",
-    "metadata": { "isbn": "978-0201558029", "publisher": "Addison-Wesley", "year": 1994, "pages": 672 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Cálculo",
-    "creator": "James Stewart",
-    "description": "Cálculo diferencial e integral: límites, derivadas, integrales, series y cálculo multivariable.",
-    "category": "Matemáticas",
-    "copies": 5,
-    "physicalLocation": "Planta 3, Estantería H1",
-    "metadata": { "isbn": "978-1285740621", "publisher": "Cengage", "year": 2015, "pages": 1368 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Compilers: Principles, Techniques, and Tools",
-    "creator": "Alfred V. Aho, Monica S. Lam, Ravi Sethi, Jeffrey D. Ullman",
-    "description": "El Dragon Book: análisis léxico, parsing, generación de código, optimización. Referencia de compiladores.",
-    "category": "Compiladores",
-    "copies": 3,
-    "physicalLocation": "Planta 2, Estantería F2",
-    "metadata": { "isbn": "978-0321486813", "publisher": "Pearson", "year": 2006, "pages": 1009 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Introduction to the Theory of Computation",
-    "creator": "Michael Sipser",
-    "description": "Teoría de la computación: autómatas, lenguajes formales, computabilidad y complejidad.",
-    "category": "Teoría de la Computación",
-    "copies": 3,
-    "physicalLocation": "Planta 2, Estantería F2",
-    "metadata": { "isbn": "978-1133187790", "publisher": "Cengage", "year": 2012, "pages": 504 }
-  },
-  {
-    "type": "BOOK",
-    "title": "Cryptography and Network Security",
-    "creator": "William Stallings",
-    "description": "Criptografía y seguridad en redes: cifrado simétrico y asimétrico, PKI, protocolos de seguridad.",
-    "category": "Seguridad Informática",
+    "title": "El lenguaje de programación C++",
+    "creator": "Bjarne Stroustrup",
+    "description": "Edición en español sobre C++ con recorrido completo por lenguaje, STL, diseño y desarrollo.",
+    "category": "Fundamentos de la Programación",
     "copies": 3,
     "physicalLocation": "Planta 2, Estantería D2",
-    "metadata": { "isbn": "978-0134444284", "publisher": "Pearson", "year": 2016, "pages": 768 }
+    "metadata": {
+      "isbn": "9788478290468",
+      "isbn10": "847829046X",
+      "publisher": "Addison-Wesley",
+      "year": 2011,
+      "language": "Español"
+    }
   },
   {
     "type": "BOOK",
-    "title": "Learning Web Design",
-    "creator": "Jennifer Niederst Robbins",
-    "description": "Desarrollo web: HTML, CSS, JavaScript y diseño responsive. Para asignaturas de Fundamentos de Aplicaciones en la Red.",
-    "category": "Desarrollo Web",
+    "title": "Fundamentos de computadores",
+    "creator": "Román Hermida et al.",
+    "description": "Base para arquitectura y diseño digital: sistemas combinacionales, secuenciales y CPU.",
+    "category": "Fundamentos de computadores",
     "copies": 3,
     "physicalLocation": "Planta 2, Estantería E1",
-    "metadata": { "isbn": "978-1491960202", "publisher": "O'Reilly", "year": 2018, "pages": 808 }
+    "metadata": {
+      "isbn": "9788477385745",
+      "isbn10": "8477385742",
+      "publisher": "Síntesis",
+      "year": 2008,
+      "language": "Español"
+    }
+  },
+  {
+    "type": "BOOK",
+    "title": "Digital design and computer architecture: ARM edition",
+    "creator": "Sarah L. Harris, David Money Harris",
+    "description": "Diseño digital y arquitectura de computadores con enfoque ARM.",
+    "category": "Fundamentos de computadores",
+    "copies": 3,
+    "physicalLocation": "Planta 2, Estantería E2",
+    "metadata": {
+      "isbn": "9780128000564",
+      "isbn10": "0128000562",
+      "publisher": "Morgan Kaufmann",
+      "year": 2016,
+      "language": "Inglés"
+    }
+  },
+  {
+    "type": "BOOK",
+    "title": "Computer organization and design: the hardware-software interface: RISC-V edition",
+    "creator": "John L. Hennessy, David A. Patterson",
+    "description": "Interfaz hardware-software y fundamentos de arquitectura con edición RISC-V.",
+    "category": "Fundamentos de computadores",
+    "copies": 3,
+    "physicalLocation": "Planta 2, Estantería F1",
+    "metadata": {
+      "isbn": "9780128122754",
+      "isbn10": "0128122757",
+      "publisher": "Morgan Kaufmann",
+      "year": 2018,
+      "language": "Inglés"
+    }
+  },
+  {
+    "type": "BOOK",
+    "title": "Digital design and computer architecture: RISC-V edition",
+    "creator": "Sarah Harris, David Harris",
+    "description": "Diseño digital y arquitectura de computadores en edición RISC-V.",
+    "category": "Fundamentos de computadores",
+    "copies": 3,
+    "physicalLocation": "Planta 2, Estantería F2",
+    "metadata": {
+      "isbn": "9780128200643",
+      "isbn10": "0128200642",
+      "publisher": "Morgan Kaufmann",
+      "year": 2022,
+      "language": "Inglés"
+    }
   },
   {
     "type": "BOARD_GAME",
