@@ -232,7 +232,15 @@ await runNodeScript("scripts/seed-admin.mjs", {
   nonCriticalMessage: "Seed terminó con errores (no crítico, continuando...)",
 });
 
-// 8. Seed de productos de la tienda (idempotente — si ya hay productos, no hace nada)
+// 8. Seed de datos académicos (profesores, estudiantes, asignaturas, ofertas, matrículas)
+log("Cargando datos académicos...");
+await runNodeScript("scripts/seed-academic.mjs", {
+  prefix: "[seed-academic]",
+  allowFailure: true,
+  nonCriticalMessage: "Seed académico terminó con errores (no crítico, continuando...)",
+});
+
+// 9. Seed de productos de la tienda (idempotente — si ya hay productos, no hace nada)
 log("Cargando catálogo de productos...");
 await runNodeScript("scripts/seed-products.mjs", {
   prefix: "[seed-products]",
@@ -256,7 +264,15 @@ await runNodeScript("scripts/seed-rooms.mjs", {
   nonCriticalMessage: "Seed de salas terminó con errores (no crítico, continuando...)",
 });
 
-// 11. Limpiar archivos de impresión expirados (>24h)
+// 11. Seed de impresoras (idempotente)
+log("Cargando impresoras...");
+await runNodeScript("scripts/seed-printers.mjs", {
+  prefix: "[seed-printers]",
+  allowFailure: true,
+  nonCriticalMessage: "Seed de impresoras terminó con errores (no crítico, continuando...)",
+});
+
+// 12. Limpiar archivos de impresión expirados (>24h)
 log("Limpiando archivos de impresión expirados...");
 await runNodeScript("scripts/cleanup-uploads.mjs", {
   prefix: "[cleanup]",

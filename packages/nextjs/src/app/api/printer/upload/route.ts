@@ -13,7 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { randomUUID } from "crypto";
-import { getSession, ensureAuthenticated } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 
 const ALLOWED_TYPES = [
 	"application/pdf",
@@ -33,7 +33,7 @@ const UPLOAD_DIR = join(process.cwd(), "uploads", "prints");
 export async function POST(req: NextRequest) {
 	try {
 		// Verificar autenticación
-		const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
+		const session = await getSession();
 		if (!session.userId) {
 			return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 		}

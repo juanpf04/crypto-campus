@@ -16,7 +16,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { hardhat } from "viem/chains";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
-import { getSession, ensureRole } from "@/lib/action-utils";
+import { getSession, ensureRole } from "@/lib/auth";
 import { adminWalletClient, publicClient } from "@/lib/viem";
 import {
 	CONTRACT_ADDRESSES,

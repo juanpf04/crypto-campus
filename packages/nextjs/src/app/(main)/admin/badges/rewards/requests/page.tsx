@@ -37,11 +37,7 @@ export default function AdminUseRequestsPage() {
     try {
       const res = await fetch("/api/badges/use-requests");
       if (res.ok) {
-        const rewards = await res.json();
-        // TODO: Para una implementación completa, se necesitaría leer
-        // las use requests on-chain por cada reward. Por ahora mostramos
-        // las recompensas que tienen solicitudes pendientes.
-        setRequests([]);
+        setRequests(await res.json());
       }
     } catch { /* no-op */ }
     setLoading(false);

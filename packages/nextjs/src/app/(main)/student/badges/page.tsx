@@ -5,7 +5,7 @@
  * Muestra badges ganados agrupados por tipo + enlaces a recompensas y solicitudes.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BackLink } from "@/components/ui/BackLink";
 import { Button } from "@/components/ui/Button";
@@ -31,15 +31,17 @@ export default function StudentBadgesPage() {
   const [badges, setBadges] = useState<BadgeAward[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadData = useCallback(async () => {
-    try {
-      const res = await fetch("/api/badges/my/badges");
-      if (res.ok) setBadges(await res.json());
-    } catch { /* no-op */ }
-    setLoading(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/badges/my/badges");
+        if (res.ok && !cancelled) setBadges(await res.json());
+      } catch { /* no-op */ }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
   }, []);
-
-  useEffect(() => { loadData(); }, [loadData]);
 
   // Agrupar badges por tipo
   const grouped: GroupedBadge[] = [];

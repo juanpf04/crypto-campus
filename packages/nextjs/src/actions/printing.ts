@@ -20,7 +20,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getSession, ensureRole } from "@/lib/action-utils";
+import { getSession, ensureRole } from "@/lib/auth";
 import { adminWalletClient, publicClient } from "@/lib/viem";
 import { CONTRACT_ADDRESSES, PRINTER_ABI } from "@/lib/contracts";
 

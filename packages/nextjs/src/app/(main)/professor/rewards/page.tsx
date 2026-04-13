@@ -8,7 +8,6 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
@@ -35,7 +34,6 @@ interface Reward {
 }
 
 export default function ProfessorRewardsPage() {
-  const router = useRouter();
   const { addToast } = useToast();
 
   const [rewards, setRewards] = useState<Reward[]>([]);

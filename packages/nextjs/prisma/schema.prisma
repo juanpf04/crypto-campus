@@ -45,6 +45,7 @@ model User {
   tasksCreated      Task[]           @relation("TaskCreator")
   rewardsCreated    Reward[]         @relation("RewardCreator")
   rewardRedemptions RewardRedemption[]
+  useRequests       UseRequest[]     @relation("UseRequestStudent")
   subjectOfferings  SubjectOffering[] @relation("OfferingProfessor")
 }
 
@@ -165,6 +166,7 @@ model Reward {
   badgeType   BadgeType          @relation(fields: [badgeTypeId], references: [id])
   creator     User               @relation("RewardCreator", fields: [creatorId], references: [id])
   redemptions RewardRedemption[]
+  useRequests UseRequest[]
 }
 
 // Log de canjes de recompensas.
@@ -177,6 +179,28 @@ model RewardRedemption {
 
   user   User   @relation(fields: [userId], references: [id])
   reward Reward @relation(fields: [rewardId], references: [id])
+}
+
+// Solicitudes de uso de recompensas (mirror on-chain).
+enum UseRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model UseRequest {
+  id        String           @id @default(cuid())
+  requestId Int              @unique // ID en el contrato BadgeSystem
+  studentId String
+  rewardId  String
+  status    UseRequestStatus @default(PENDING)
+  txHash    String
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  student User   @relation("UseRequestStudent", fields: [studentId], references: [id])
+  reward  Reward @relation(fields: [rewardId], references: [id])
 }
 
 // ─────────────────────────────────────────────────────────────

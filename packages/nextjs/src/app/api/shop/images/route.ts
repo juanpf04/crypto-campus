@@ -9,7 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSession, ensureAdmin } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { randomUUID } from "crypto";
@@ -21,7 +21,7 @@ const UPLOAD_DIR = path.join(process.cwd(), "public", "images", "shop");
 export async function POST(req: NextRequest) {
   try {
     // Verificar sesión admin
-    const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
+    const session = await getSession();
     if (!session.userId || session.role !== "ADMIN") {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 });
     }

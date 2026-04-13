@@ -1,0 +1,94 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useToast } from "@/hooks/useToast";
+import { BackLink } from "@/components/ui/BackLink";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Spinner } from "@/components/ui/Spinner";
+import { EmptyState } from "@/components/ui/EmptyState";
+import {
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+} from "@/components/ui/Table";
+
+interface Subject {
+  id: string;
+  name: string;
+  code: string;
+  _count?: { offerings: number };
+}
+
+export default function AdminSubjectsPage() {
+  const router = useRouter();
+  const { addToast } = useToast();
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadSubjects = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/academic/subjects");
+      if (!res.ok) throw new Error((await res.json()).error);
+      const data = await res.json();
+      setSubjects(Array.isArray(data) ? data : data.subjects ?? []);
+    } catch {
+      addToast("Error al cargar asignaturas", "danger");
+    } finally {
+      setLoading(false);
+    }
+  }, [addToast]);
+
+  useEffect(() => { loadSubjects(); }, [loadSubjects]);
+
+  if (loading && subjects.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <BackLink href="/admin" label="Volver a administración" />
+
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-text">Asignaturas</h1>
+          <p className="text-text-muted mt-1">{subjects.length} asignatura(s)</p>
+        </div>
+        <Button onClick={() => router.push("/admin/subjects/new")}>Crear asignatura</Button>
+      </div>
+
+      {subjects.length === 0 ? (
+        <EmptyState title="Sin asignaturas" description="No se ha creado ninguna asignatura." />
+      ) : (
+        <Card className="overflow-hidden p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Código</TableHead>
+                <TableHead>Nombre</TableHead>
+                <TableHead>N.º ofertas</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {subjects.map((subject) => (
+                <TableRow
+                  key={subject.id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => router.push(`/admin/subjects/${subject.id}`)}
+                >
+                  <TableCell className="font-mono text-sm">{subject.code}</TableCell>
+                  <TableCell className="font-medium">{subject.name}</TableCell>
+                  <TableCell>{subject._count?.offerings ?? 0}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+    </div>
+  );
+}

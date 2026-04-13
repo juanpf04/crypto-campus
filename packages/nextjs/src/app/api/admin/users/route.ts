@@ -15,8 +15,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { parseEther } from "viem";
-import { getSession, ensureAdmin } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+
+/** Verificar que la sesión activa es de un ADMIN */
+async function requireAdmin() {
+  const session = await getSession();
+  if (!session.userId || session.role !== "ADMIN") return null;
+  return session;
+}
 import { encrypt } from "@/lib/crypto";
 import { adminWalletClient, publicClient } from "@/lib/viem";
 import {

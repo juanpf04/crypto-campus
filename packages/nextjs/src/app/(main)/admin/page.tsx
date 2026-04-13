@@ -59,6 +59,9 @@ export default function AdminDashboard() {
   const [roomStats, setRoomStats] = useState<{ activeRooms: number | string; todayBookings: number | string }>({
     activeRooms: "—", todayBookings: "—",
   });
+  const [badgeStats, setBadgeStats] = useState<{ totalBadgeTypes: number | string; totalAwards: number | string }>({
+    totalBadgeTypes: "—", totalAwards: "—",
+  });
 
   useEffect(() => {
     if (!user) return;
@@ -109,6 +112,17 @@ export default function AdminDashboard() {
         setRoomStats({
           activeRooms: data.activeRooms ?? "—",
           todayBookings: data.todayBookings ?? "—",
+        });
+      })
+      .catch(() => {});
+
+    // Estadísticas de insignias
+    fetch("/api/badges/stats")
+      .then((r) => r.json())
+      .then((data) => {
+        setBadgeStats({
+          totalBadgeTypes: data.totalBadgeTypes ?? "—",
+          totalAwards: data.totalAwards ?? "—",
         });
       })
       .catch(() => {});
@@ -286,8 +300,8 @@ export default function AdminDashboard() {
       <section className="space-y-4">
         <SectionTitle icon={icons.badge}>Insignias</SectionTitle>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard title="Tipos de insignia" value="—" subtitle="Creados por profesores" icon={icons.badge} />
-          <StatCard title="Insignias otorgadas" value="—" subtitle="Total en la plataforma" icon={icons.badge} />
+          <StatCard title="Tipos de insignia" value={badgeStats.totalBadgeTypes} subtitle="Creados por profesores" icon={icons.badge} />
+          <StatCard title="Insignias otorgadas" value={badgeStats.totalAwards} subtitle="Total en la plataforma" icon={icons.badge} />
         </div>
       </section>
 

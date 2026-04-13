@@ -18,7 +18,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { hardhat } from "viem/chains";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
-import { getSession, ensureRole, logPrismaRecovery } from "@/lib/action-utils";
+import { getSession, ensureRole, logPrismaRecovery } from "@/lib/auth";
 import { adminWalletClient, publicClient } from "@/lib/viem";
 import { CONTRACT_ADDRESSES, BADGE_SYSTEM_ABI } from "@/lib/contracts";
 
@@ -472,6 +472,13 @@ export async function requestUseReward(rewardPrismaId: string) {
 		const reward = await prisma.reward.findUnique({ where: { id: rewardPrismaId } });
 		if (!reward) throw new Error("Recompensa no encontrada");
 
+		const nextId = await publicClient.readContract({
+			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+			abi: BADGE_SYSTEM_ABI,
+			functionName: "nextUseRequestId",
+		}) as bigint;
+		const requestId = Number(nextId);
+
 		const { walletClient } = await getUserWalletClient(session.userId!);
 
 		const hash = await walletClient.writeContract({
@@ -482,6 +489,16 @@ export async function requestUseReward(rewardPrismaId: string) {
 		});
 		const receipt = await publicClient.waitForTransactionReceipt({ hash });
 		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
+
+		await prisma.useRequest.create({
+			data: {
+				requestId,
+				studentId: session.userId!,
+				rewardId: reward.id,
+				status: "PENDING",
+				txHash: hash,
+			},
+		});
 
 		return { success: true };
 	} catch (error) {
@@ -506,6 +523,11 @@ export async function cancelUseRequest(requestId: number) {
 		const receipt = await publicClient.waitForTransactionReceipt({ hash });
 		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
 
+		await prisma.useRequest.update({
+			where: { requestId },
+			data: { status: "CANCELLED" },
+		});
+
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
@@ -527,6 +549,11 @@ export async function approveUseRequest(requestId: number) {
 		const receipt = await publicClient.waitForTransactionReceipt({ hash });
 		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
 
+		await prisma.useRequest.update({
+			where: { requestId },
+			data: { status: "APPROVED" },
+		});
+
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
@@ -547,6 +574,11 @@ export async function rejectUseRequest(requestId: number) {
 		});
 		const receipt = await publicClient.waitForTransactionReceipt({ hash });
 		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
+
+		await prisma.useRequest.update({
+			where: { requestId },
+			data: { status: "REJECTED" },
+		});
 
 		return { success: true };
 	} catch (error) {
@@ -599,6 +631,26 @@ export async function getMyUseRequests() {
 	return requests.filter(r => r.status !== 0); // Excluir None
 }
 
+// ── Listar solicitudes de uso (profesor/admin) ──────────────────────────
+
+export async function listUseRequests() {
+	const session = await getSession();
+	ensureRole(session, ["PROFESSOR", "ADMIN"]);
+
+	const where = session.role === "ADMIN"
+		? {}
+		: { reward: { creatorId: session.userId! } };
+
+	return prisma.useRequest.findMany({
+		where,
+		include: {
+			student: { select: { id: true, name: true, email: true } },
+			reward: { select: { id: true, name: true, badgeType: { select: { name: true } } } },
+		},
+		orderBy: { createdAt: "desc" },
+	});
+}
+
 // ── Stats ────────────────────────────────────────────────────────────────
 
 export async function getBadgeStats() {
@@ -606,16 +658,30 @@ export async function getBadgeStats() {
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 
 	const where = session.role === "ADMIN" ? {} : { creatorId: session.userId! };
+	const taskWhere = session.role === "ADMIN" ? {} : { badgeType: { creatorId: session.userId! } };
+	const rewardWhere = session.role === "ADMIN" ? {} : { reward: { creatorId: session.userId! } };
 
-	const [totalBadgeTypes, totalTasks, totalAwards, totalRewards, totalRedemptions] = await Promise.all([
+	const [
+		totalBadgeTypes, totalTasks, activeTasks, totalAwards,
+		totalRewards, totalRedemptions,
+		pendingRequests, approvedRequests, rejectedRequests,
+	] = await Promise.all([
 		prisma.badgeType.count({ where }),
-		prisma.task.count({ where: session.role === "ADMIN" ? {} : { badgeType: { creatorId: session.userId! } } }),
-		prisma.badgeAward.count({ where: session.role === "ADMIN" ? {} : { badgeType: { creatorId: session.userId! } } }),
+		prisma.task.count({ where: taskWhere }),
+		prisma.task.count({ where: { ...taskWhere, active: true } }),
+		prisma.badgeAward.count({ where: taskWhere }),
 		prisma.reward.count({ where: session.role === "ADMIN" ? {} : { badgeType: { creatorId: session.userId! } } }),
-		prisma.rewardRedemption.count({ where: session.role === "ADMIN" ? {} : { reward: { creatorId: session.userId! } } }),
+		prisma.rewardRedemption.count({ where: rewardWhere }),
+		prisma.useRequest.count({ where: { ...rewardWhere, status: "PENDING" } }),
+		prisma.useRequest.count({ where: { ...rewardWhere, status: "APPROVED" } }),
+		prisma.useRequest.count({ where: { ...rewardWhere, status: "REJECTED" } }),
 	]);
 
-	return { totalBadgeTypes, totalTasks, totalAwards, totalRewards, totalRedemptions };
+	return {
+		totalBadgeTypes, totalTasks, activeTasks, totalAwards,
+		totalRewards, totalRedemptions,
+		pendingRequests, approvedRequests, rejectedRequests,
+	};
 }
 
 // ── Alumnos ──────────────────────────────────────────────────────────────

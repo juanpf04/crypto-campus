@@ -89,6 +89,7 @@ function getNavGroups(role: UserRole) {
           title: "Administración",
           items: [
             { href: `${base}/users`, icon: icons.users, label: "Usuarios" },
+            { href: `${base}/subjects`, icon: icons.items, label: "Asignaturas" },
           ],
         },
         {
