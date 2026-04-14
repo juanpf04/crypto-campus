@@ -15,8 +15,8 @@
  * - ProductImage (intermedio) — miniatura del producto
  */
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -50,11 +50,13 @@ interface CartPayload {
 
 export default function StudentCartPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { addToast } = useToast();
   const { setItemCount } = useCart();
   const [loading, setLoading] = useState(true);
   const [cart, setCart] = useState<CartPayload | null>(null);
   const [balance, setBalance] = useState(0);
+  const pendingHandledRef = useRef(false);
 
   // Modal de confirmación
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -89,6 +91,48 @@ export default function StudentCartPage() {
   useEffect(() => {
     loadCart();
   }, [loadCart]);
+
+  useEffect(() => {
+    const pendingProductId = searchParams.get("pendingProductId");
+    if (!pendingProductId || pendingHandledRef.current) {
+      return;
+    }
+
+    pendingHandledRef.current = true;
+
+    const pendingQtyRaw = Number(searchParams.get("pendingQty") ?? "1");
+    const pendingQty = Number.isInteger(pendingQtyRaw) && pendingQtyRaw > 0 ? pendingQtyRaw : 1;
+
+    async function addPendingProduct() {
+      try {
+        const res = await fetch("/api/shop/cart", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ productId: pendingProductId, quantity: pendingQty }),
+        });
+
+        const body = await res.json();
+        if (!res.ok) {
+          addToast(body.error ?? "No se pudo agregar el producto al carrito", "danger");
+        } else {
+          setCart(body);
+          setItemCount(body.items?.length ?? 0);
+          addToast("Producto agregado al carrito", "success");
+        }
+      } catch {
+        addToast("No se pudo agregar el producto al carrito", "danger");
+      } finally {
+        const nextParams = new URLSearchParams(searchParams.toString());
+        nextParams.delete("pendingProductId");
+        nextParams.delete("pendingQty");
+        const query = nextParams.toString();
+        router.replace(query ? `/student/shop/cart?${query}` : "/student/shop/cart");
+        loadCart();
+      }
+    }
+
+    addPendingProduct();
+  }, [addToast, loadCart, router, searchParams, setItemCount]);
 
   // Actualizar cantidad
   async function updateQuantity(itemId: string, newQuantity: number) {

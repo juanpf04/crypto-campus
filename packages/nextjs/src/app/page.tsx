@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/Header";
+import { NavGroup } from "@/components/shared/NavGroup";
+import { ThemeSwitcher } from "@/components/shared/ThemeSwitcher";
+import { NavBrand } from "@/components/ui/NavBrand";
+import { NavItem } from "@/components/ui/NavItem";
 import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import { icons } from "@/components/ui/icons";
@@ -14,38 +18,52 @@ interface AuthUser {
   role: UserRole;
 }
 
-const MODULES = [
-  {
-    key: "library",
-    icon: icons.library,
-    title: "Biblioteca",
-    description: "Reserva libros, juegos de mesa, videojuegos, imprime documentos y reserva salas de estudio.",
-    roles: ["STUDENT", "LIBRARIAN", "ADMIN"],
-    studentHref: "/student/library",
+interface ShopPreviewProduct {
+  id: string;
+  name: string;
+  category: string | null;
+  imageUrl: string | null;
+  price: number;
+  stock: number;
+  color: string | null;
+  variantLabel: string | null;
+}
+
+interface PublicPreviewPayload {
+  printingTokensPreview: number;
+  availableRooms: number;
+  availableBooks: number;
+  shop: {
+    categories: string[];
+    products: ShopPreviewProduct[];
+  };
+}
+
+const EMPTY_PREVIEW: PublicPreviewPayload = {
+  printingTokensPreview: 200,
+  availableRooms: 0,
+  availableBooks: 0,
+  shop: {
+    categories: [],
+    products: [],
   },
-  {
-    key: "shop",
-    icon: icons.shop,
-    title: "Tienda",
-    description: "Compra merchandising oficial de la UCM con ShopTokens.",
-    roles: ["STUDENT", "ADMIN"],
-    studentHref: "/student/shop",
-  },
-  {
-    key: "badges",
-    icon: icons.badge,
-    title: "Insignias",
-    description: "Gana insignias completando tareas y canjea recompensas.",
-    roles: ["STUDENT", "PROFESSOR", "ADMIN"],
-    studentHref: "/student/badges",
-  },
-];
+};
+
+function buildLoginHref(returnUrl: string, pendingProductId?: string) {
+  const query = new URLSearchParams({ returnUrl });
+  if (pendingProductId) {
+    query.set("pendingProductId", pendingProductId);
+    query.set("pendingQty", "1");
+  }
+  return `/login?${query.toString()}`;
+}
 
 export default function HomePage() {
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [checked, setChecked] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [preview, setPreview] = useState<PublicPreviewPayload>(EMPTY_PREVIEW);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -53,6 +71,13 @@ export default function HomePage() {
       .then((data) => setUser(data?.user ?? null))
       .catch(() => {})
       .finally(() => setChecked(true));
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/public/preview")
+      .then((res) => (res.ok ? res.json() : EMPTY_PREVIEW))
+      .then((data) => setPreview(data as PublicPreviewPayload))
+      .catch(() => setPreview(EMPTY_PREVIEW));
   }, []);
 
   const role = user?.role ?? null;
@@ -95,23 +120,33 @@ export default function HomePage() {
         }`}
       >
         <aside className="flex h-full w-64 flex-col border-r border-border-default bg-card">
-          <div className="flex h-16 items-center border-b border-border-default px-4">
-            <div className="flex items-center gap-3">
-              <div className="grid h-9 w-9 place-items-center rounded-lg bg-primary text-sm font-bold text-text-on-primary">
-                CC
-              </div>
-              <span className="text-base font-semibold text-text">CryptoCampus</span>
-            </div>
+          <div className="flex h-16 items-center border-b border-border-default px-3">
+            <NavBrand />
           </div>
 
-          <nav className="flex-1 space-y-2 p-4">
+          <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4">
+            <NavGroup title="Principal">
+              <NavItem href="/login?returnUrl=/" icon={icons.home} label="Panel" />
+            </NavGroup>
+
+            <NavGroup title="Servicios">
+              <NavItem href="/login?returnUrl=/printing" icon={icons.print} label="Impresión" />
+              <NavItem href="/login?returnUrl=/rooms" icon={icons.rooms} label="Salas" />
+              <NavItem href="/login?returnUrl=/loans" icon={icons.library} label="Préstamos" />
+              <NavItem href="/login?returnUrl=/badges" icon={icons.badge} label="Insignias" />
+              <NavItem href="/login?returnUrl=/shop" icon={icons.shop} label="Tienda" />
+            </NavGroup>
+          </nav>
+
+          <div className="space-y-1 border-t border-border-default p-3">
+            <ThemeSwitcher />
             <Link
               href="/login"
               className="flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-text-on-primary transition-colors hover:bg-primary-hover"
             >
               Iniciar sesión
             </Link>
-          </nav>
+          </div>
         </aside>
       </div>
 
@@ -124,60 +159,93 @@ export default function HomePage() {
               Plataforma universitaria en blockchain
             </h1>
             <p className="mx-auto mt-3 max-w-2xl text-lg text-text-muted">
-              Biblioteca, tienda, insignias, impresion y salas de estudio, todo gestionado con contratos inteligentes en la UCM.
+              Biblioteca, tienda, insignias, impresión y salas de estudio, todo gestionado con contratos inteligentes en la UCM.
             </p>
-
-            {user && panelHref && (
-              <div className="mt-6">
-                <Link
-                  href={panelHref}
-                  className="inline-flex items-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-text-on-primary transition-colors hover:bg-primary-hover"
-                >
-                  Ir a mi panel
-                </Link>
-              </div>
-            )}
           </section>
 
           <section className="mx-auto max-w-5xl pb-10">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {MODULES.map((mod) => {
-                const hasAccess = role ? mod.roles.includes(role) : false;
-                const href = !user
-                  ? `/login?returnUrl=${mod.studentHref}`
-                  : hasAccess
-                    ? mod.studentHref
-                    : null;
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <Card className="space-y-3 p-5">
+                <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">{icons.print}</div>
+                <h3 className="font-semibold text-text">Impresión</h3>
+                <p className="text-sm text-text-muted">
+                  {preview.printingTokensPreview} Tokens para imprimir disponibles.
+                </p>
+                <Link href={buildLoginHref("/printing")} className="text-sm font-medium text-primary hover:underline">
+                  Ir a impresiones
+                </Link>
+              </Card>
 
-                const content = (
-                  <Card
-                    className={`h-full space-y-3 p-5 transition-colors ${
-                      !user || hasAccess
-                        ? "cursor-pointer hover:border-primary/50"
-                        : "cursor-not-allowed opacity-40"
-                    }`}
+              <Card className="space-y-3 p-5">
+                <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">{icons.rooms}</div>
+                <h3 className="font-semibold text-text">Salas de estudio</h3>
+                <p className="text-sm text-text-muted">{preview.availableRooms} salas disponibles ahora.</p>
+                <Link href={buildLoginHref("/rooms")} className="text-sm font-medium text-primary hover:underline">
+                  Reservar sala
+                </Link>
+              </Card>
+
+              <Card className="space-y-3 p-5">
+                <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">{icons.library}</div>
+                <h3 className="font-semibold text-text">Préstamos</h3>
+                <p className="text-sm text-text-muted">{preview.availableBooks} libros disponibles para préstamo.</p>
+                <Link href={buildLoginHref("/loans")} className="text-sm font-medium text-primary hover:underline">
+                  Ir a préstamos
+                </Link>
+              </Card>
+
+              <Card className="space-y-3 p-5">
+                <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">{icons.badge}</div>
+                <h3 className="font-semibold text-text">Insignias</h3>
+                <p className="text-sm text-text-muted">Consigue insignias mientras aprendes.</p>
+                <Link href={buildLoginHref("/badges")} className="text-sm font-medium text-primary hover:underline">
+                  Ver insignias
+                </Link>
+              </Card>
+            </div>
+
+            <div className="mt-8 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-text">Tienda</h2>
+                <Link href={buildLoginHref("/shop")} className="text-sm font-medium text-primary hover:underline">
+                  Ver catálogo completo
+                </Link>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {preview.shop.categories.map((category) => (
+                  <span
+                    key={category}
+                    className="rounded-full border border-border-default bg-card px-3 py-1 text-xs font-medium text-text-muted"
                   >
-                    <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">
-                      {mod.icon}
+                    {category}
+                  </span>
+                ))}
+                {preview.shop.categories.length === 0 && (
+                  <span className="text-xs text-text-muted">Sin filtros disponibles</span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {preview.shop.products.map((product) => (
+                  <Card key={product.id} className="space-y-3 p-5">
+                    <div className="line-clamp-2 min-h-[48px] text-base font-semibold text-text">{product.name}</div>
+                    <p className="text-sm text-text-muted line-clamp-2">
+                      {product.variantLabel ?? product.color ?? product.category ?? "Producto del catálogo"}
+                    </p>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-semibold text-primary">{product.price} ShopTokens</span>
+                      <span className="text-text-muted">Stock: {product.stock}</span>
                     </div>
-                    <h3 className="font-semibold text-text">{mod.title}</h3>
-                    <p className="text-sm text-text-muted">{mod.description}</p>
-                    {user && !hasAccess && (
-                      <p className="text-xs italic text-text-muted">No disponible para tu rol</p>
-                    )}
-                  </Card>
-                );
-
-                if (href) {
-                  return (
-                    <Link key={mod.key} href={href} className="block">
-                      {content}
+                    <Link
+                      href={buildLoginHref("/shop/cart", product.id)}
+                      className="inline-flex w-full items-center justify-center rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-text-on-primary transition-colors hover:bg-primary-hover"
+                    >
+                      Añadir al carrito
                     </Link>
-                  );
-                }
-
-                return <div key={mod.key}>{content}</div>;
-              })}
+                  </Card>
+                ))}
+              </div>
             </div>
           </section>
         </main>

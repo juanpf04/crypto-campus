@@ -4,6 +4,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { LoginForm, type LoginFormData } from "@/components/forms";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui";
 import { useToast } from "@/hooks/useToast";
+import {
+  ROLE_FOLDER_BY_USER_ROLE,
+  resolveRoleRoute,
+  type UserRole,
+} from "@/types";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -26,14 +31,26 @@ export default function LoginPage() {
 
     addToast("Sesión iniciada correctamente", "success");
 
-    // Redirigir a returnUrl si existe, o al panel del rol
+    // Redirigir según returnUrl + rol, con fallback al dashboard del rol.
     const returnUrl = searchParams.get("returnUrl");
-    if (returnUrl) {
-      router.push(returnUrl);
-    } else {
-      const role = (json.user?.role as string)?.toLowerCase() || "student";
-      router.push(`/${role}`);
+    const pendingProductId = searchParams.get("pendingProductId");
+    const pendingQty = searchParams.get("pendingQty") ?? "1";
+    const role = ((json.user?.role as string)?.toUpperCase() || "STUDENT") as UserRole;
+    const roleFolder = ROLE_FOLDER_BY_USER_ROLE[role];
+
+    const targetPath = resolveRoleRoute(returnUrl, role);
+    const shouldAppendPending = !!pendingProductId && targetPath === "/student/shop/cart";
+
+    if (!shouldAppendPending) {
+      router.push(targetPath || `/${roleFolder}`);
+      return;
     }
+
+    const query = new URLSearchParams({
+      pendingProductId,
+      pendingQty,
+    });
+    router.push(`${targetPath}?${query.toString()}`);
   }
 
   return (
