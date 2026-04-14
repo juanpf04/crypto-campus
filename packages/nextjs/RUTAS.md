@@ -18,7 +18,7 @@ Rutas protegidas por middleware:
 Comportamiento de acceso:
 
 - Usuario no autenticado intentando entrar en rutas de rol: redirección a `/login?returnUrl=...`.
-- Usuario autenticado intentando entrar en `/login` o `/register`: redirección a `/{suRol}`.
+- Usuario autenticado intentando entrar en `/login`: redirección a `/{suRol}`.
 - Usuario autenticado intentando entrar en la ruta de otro rol: redirección a `/{suRol}`.
 
 ## Rutas públicas
@@ -26,7 +26,6 @@ Comportamiento de acceso:
 | Ruta | Propósito |
 | --- | --- |
 | `/login` | Formulario de acceso para usuarios registrados. |
-| `/register` | Formulario de alta para estudiantes con email `@ucm.es`. |
 
 ## Rutas principales por rol
 
@@ -126,8 +125,7 @@ Comportamiento de acceso:
 | `/api/auth/login` | `POST` | Inicia sesión y crea cookie de sesión. |
 | `/api/auth/logout` | `POST` | Cierra sesión y elimina cookie. |
 | `/api/auth/me` | `GET` | Devuelve el usuario autenticado actual. |
-| `/api/auth/register` | `POST` | Registra estudiante, wallet y datos iniciales. |
-
+| `/api/auth/register` | `POST` | Registra estudiante, wallet y dato
 ## API de administración
 
 | Ruta | Métodos | Propósito |

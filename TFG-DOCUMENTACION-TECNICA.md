@@ -227,9 +227,8 @@ Las rutas API (`app/api/...`) son wrappers mínimos que:
 
 ### Rate limiting
 
-Endpoints de `/api/auth/login` y `/api/auth/register` protegidos con rate limiter en memoria:
+Endpoint `/api/auth/login` protegido con rate limiter en memoria:
 - Login: 10 intentos/minuto por IP
-- Register: 5 intentos/minuto por IP
 - Respuesta: HTTP 429 con header `Retry-After`
 
 ### Cifrado

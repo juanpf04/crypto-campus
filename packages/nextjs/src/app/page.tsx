@@ -111,12 +111,6 @@ export default function HomePage() {
             >
               Iniciar sesión
             </Link>
-            <Link
-              href="/register"
-              className="flex items-center justify-center rounded-lg border border-border-default px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-primary/5"
-            >
-              Registrarse
-            </Link>
           </nav>
         </aside>
       </div>

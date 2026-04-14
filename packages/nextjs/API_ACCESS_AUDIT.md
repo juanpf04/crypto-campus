@@ -16,7 +16,6 @@ That means the system is generally safe, but the security model is decentralized
 - `GET /api/printer`
 - `GET /api/printer/config`
 - `POST /api/auth/login`
-- `POST /api/auth/register`
 
 ### Authenticated, role checked in server actions
 

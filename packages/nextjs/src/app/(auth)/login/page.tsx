@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LoginForm, type LoginFormData } from "@/components/forms";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui";
@@ -47,10 +46,8 @@ export default function LoginPage() {
         <CardBody>
           <LoginForm onSubmit={handleLogin} />
           <p className="mt-4 text-center text-sm text-text-muted">
-            ¿No tienes cuenta?{" "}
-            <Link href="/register" className="font-medium text-primary hover:underline">
-              Regístrate
-            </Link>
+            Si tienes problemas,{" "}
+            <span className="font-medium text-primary">contacta con el administrador</span>
           </p>
         </CardBody>
       </Card>

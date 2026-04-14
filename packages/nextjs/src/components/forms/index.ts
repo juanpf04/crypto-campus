@@ -1,5 +1,4 @@
 export { LoginForm, type LoginFormData } from "./LoginForm";
-export { RegisterForm, type RegisterFormData } from "./RegisterForm";
 export { UserForm, type UserFormData } from "./UserForm";
 export { ItemForm, type ItemFormData } from "./ItemForm";
 export { ProductForm, type ProductFormData } from "./ProductForm";

@@ -3,7 +3,7 @@
  *
  * Protege las rutas de rol (/{role}/*) y gestiona redirecciones:
  * - Usuarios no autenticados → /login?returnUrl=...
- * - Usuarios autenticados en /login o /register → /{su_rol}
+ * - Usuarios autenticados en /login → /{su_rol}
  * - Usuarios accediendo a rutas de otros roles → /{su_rol}
  */
 
@@ -29,8 +29,8 @@ export default async function proxy(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Regla 2: Ya autenticado → no mostrar login/register
-    if ((pathname === "/" || pathname === "/login" || pathname === "/register") && isAuthenticated) {
+  // Regla 2: Ya autenticado → no mostrar login
+    if ((pathname === "/" || pathname === "/login") && isAuthenticated) {
     const role = (session.role as string)?.toLowerCase() || "student";
     return NextResponse.redirect(new URL(`/${role}`, req.url));
   }
@@ -56,6 +56,5 @@ export const config = {
     "/librarian/:path*",
     "/admin/:path*",
     "/login",
-    "/register",
   ],
 };

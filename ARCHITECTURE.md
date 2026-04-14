@@ -252,7 +252,7 @@ El App Router de Next.js mapea carpetas a URLs. Cada `page.tsx` es una página. 
 
 #### Grupos de rutas
 
-- `(auth)/` — grupo sin prefijo en URL: `/login`, `/register`
+- `(auth)/` — grupo sin prefijo en URL: `/login`
 - `dashboard/` — área privada protegida por middleware
 
 #### Estructura completa de rutas
@@ -265,17 +265,14 @@ src/app/
 ├── globals.css
 │
 ├── (auth)/
-│   ├── login/
-│   │   └── page.tsx              # Formulario login → POST /api/auth/login
-│   └── register/
-│       └── page.tsx              # Formulario registro → POST /api/auth/register
+│   └── login/
+│       └── page.tsx              # Formulario login → POST /api/auth/login
 │
 ├── api/                          # API Routes (Next.js Route Handlers)
 │   ├── auth/
 │   │   ├── login/route.ts        # POST: valida credenciales, crea sesión iron-session
 │   │   ├── logout/route.ts       # POST: destruye la sesión
 │   │   ├── me/route.ts           # GET: devuelve datos del usuario autenticado
-│   │   └── register/route.ts    # POST: crea wallet, registra on-chain, guarda en Prisma
 │   ├── admin/                    # Rutas de administración (solo ADMIN)
 │   ├── library/                  # Rutas de biblioteca
 │   ├── shop/                     # Rutas de tienda
@@ -434,12 +431,12 @@ src/lib/
 ### 6.5 `src/middleware.ts` — Protección de rutas
 
 Intercepta todas las peticiones a `/dashboard/*`, `/login` y `/register`.
+proxy.ts` — Protección de rutas
 
-- Si un usuario no autenticado intenta acceder a `/dashboard` → redirige a `/login`
-- Si un usuario ya autenticado va a `/login` o `/register` → redirige a `/dashboard`
+Intercepta todas las peticiones a `/{role}/*` y `/login`.
 
-**Nota**: El middleware NO hace autorización por rol (eso lo hace cada `page.tsx` individualmente). Solo comprueba si hay sesión activa.
-
+- Si un usuario no autenticado intenta acceder a una ruta de rol → redirige a `/login`
+- Si un usuario ya autenticado va a `/login` → redirige a su panel de rol
 ---
 
 ### 6.6 `src/types/index.ts` — Tipos compartidos
@@ -488,23 +485,9 @@ Respuesta al componente: { success: true, item: { id, title, tokenId } }
 
 ## 8. Sistema de autenticación
 
-### Registro de estudiante (`POST /api/auth/register`)
-
-1. Validar email `@ucm.es` y campos requeridos
-2. Comprobar que el email no existe en Prisma
-3. `bcrypt.hash(password, 10)` → guardar hash
-4. `generatePrivateKey()` → `privateKeyToAccount()` → obtener address
-5. `encrypt(privateKey)` con AES-256-GCM usando `SESSION_SECRET`
-6. `adminWalletClient.sendTransaction({ to: address, value: 1000 ETH })` — gas para operar
-7. `adminWalletClient.writeContract(CampusRoles.registerUser(address, name, STUDENT_ROLE))`
-8. Mintear 10 LibraryTokens + 100 ShopTokens al nuevo address
-9. `prisma.user.create({ email, password: hash, name, address, encryptedKey, role: STUDENT })`
-
 ### Registro de otros roles (PROFESSOR, LIBRARIAN, ADMIN)
 
-Solo el admin puede crear usuarios con otros roles. Se hace desde `/dashboard/admin/users/new`. El flujo es el mismo pero sin validación de email @ucm.es y con el rol correspondiente.
-
-### Login (`POST /api/auth/login`)
+Solo el admin puede crear usuarios con otros roles. Se hace desde `/admin/users/new`. El flujo es el siguiente:
 
 1. `prisma.user.findUnique({ where: { email } })`
 2. `bcrypt.compare(password, user.password)`
