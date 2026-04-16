@@ -140,7 +140,7 @@ export function PrintJobForm({
   // Opciones del dropdown de impresoras
   const printerOptions = printers.map((p) => ({
     value: p.id,
-    label: `${p.name} — ${p.location}`,
+    label: `${p.id} — ${p.location}`,
   }));
 
   // ── Detección de páginas al seleccionar archivo ──

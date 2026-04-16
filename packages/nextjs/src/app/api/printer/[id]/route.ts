@@ -2,7 +2,7 @@
  * PUT /api/printer/[id]
  * Actualiza detalles de una impresora existente.
  * Acceso: Solo administradores (validado en la Server Action).
- * Body: { name?, location?, floor?, active? } (campos opcionales)
+ * Body: { location?, active? } (campos opcionales)
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -14,9 +14,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 		const body = await req.json();
 
 		// Desestructurar solo los campos válidos para evitar pasar datos inesperados
-		const { name, location, floor, active } = body;
+		const { location, active } = body;
 
-		const printer = await updatePrinter({ id, name, location, floor, active });
+		const printer = await updatePrinter({ id, location, active });
 		return NextResponse.json(printer);
 	} catch (error) {
 		console.error("[PUT /api/printer/[id]]", error);

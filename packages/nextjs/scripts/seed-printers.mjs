@@ -60,30 +60,20 @@ async function main() {
 
     log(`Sincronizando ${printersJson.length} impresora(s)...`);
 
-    // Limpiar impresoras anteriores (no borra logs de impresión)
-    const deleted = await prisma.printer.deleteMany({});
-    if (deleted.count > 0) {
-      log(yellow(`  ⚠ Limpiadas ${deleted.count} impresora(s) anteriores`));
-    }
-
-    let created = 0;
-
     for (const printer of printersJson) {
-      await prisma.printer.create({
-        data: {
-          id: printer.id,
-          name: printer.name,
-          location: printer.location,
-          floor: printer.floor || null,
-          active: true,
-        },
-      });
+      const data = {
+        location: printer.location,
+        active: true,
+      };
 
-      created += 1;
-      log(green(`  + ${printer.id} ${printer.name} (${printer.location})`));
+      await prisma.printer.upsert({
+        where: { id: printer.id },
+        update: data,
+        create: { id: printer.id, ...data },
+      });
     }
 
-    log(green(`Sync completado. Creadas: ${created}`));
+    log(green(`Sync completado. ${printersJson.length} impresora(s) sincronizadas.`));
   } finally {
     await prisma.$disconnect();
   }

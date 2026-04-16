@@ -41,7 +41,7 @@ interface PrintLog {
   paperSize: string;
   txHash: string;
   createdAt: string;
-  printer: { id: string; name: string; location: string };
+  printer: { id: string; location: string };
 }
 
 const PAGE_SIZE = 10;
@@ -130,7 +130,7 @@ export default function StudentPrintHistoryPage() {
                     <TableCell className="font-medium max-w-[200px] truncate">
                       {log.filename}
                     </TableCell>
-                    <TableCell className="text-text-muted">{log.printer.name}</TableCell>
+                    <TableCell className="text-text-muted">{log.printer.id}</TableCell>
                     <TableCell>{log.pages}</TableCell>
                     <TableCell>{log.copies}</TableCell>
                     <TableCell>

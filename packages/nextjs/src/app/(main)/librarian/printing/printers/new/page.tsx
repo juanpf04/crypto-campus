@@ -22,9 +22,7 @@ export default function NewPrinterPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         id: data.id,
-        name: data.name,
         location: data.location,
-        floor: data.floor || undefined,
       }),
     });
 
@@ -35,7 +33,7 @@ export default function NewPrinterPage() {
       throw new Error(body.error);
     }
 
-    addToast(`Impresora "${data.name}" registrada correctamente`, "success");
+    addToast(`Impresora "${data.id}" registrada correctamente`, "success");
     router.push("/librarian/printing/printers");
   }
 

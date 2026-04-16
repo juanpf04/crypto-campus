@@ -1,68 +1,46 @@
 [
   {
     "id": "IMP-BIB-PB-01",
-    "name": "Impresora Biblioteca PB",
-    "location": "Planta baja, Biblioteca",
-    "floor": "Planta baja"
+    "location": "Planta baja, Biblioteca"
   },
   {
     "id": "IMP-BIB-PB-02",
-    "name": "Impresora Biblioteca PB (color)",
-    "location": "Planta baja, Biblioteca",
-    "floor": "Planta baja"
+    "location": "Planta baja, Biblioteca"
   },
   {
     "id": "IMP-BIB-P1-01",
-    "name": "Impresora Biblioteca P1",
-    "location": "Primera planta, Biblioteca",
-    "floor": "Primera planta"
+    "location": "Primera planta, Biblioteca"
   },
   {
     "id": "IMP-BIB-P2-01",
-    "name": "Impresora Biblioteca P2",
-    "location": "Segunda planta, Biblioteca",
-    "floor": "Segunda planta"
+    "location": "Segunda planta, Biblioteca"
   },
   {
     "id": "IMP-BIB-P2-02",
-    "name": "Impresora Biblioteca P2 (color)",
-    "location": "Segunda planta, Biblioteca",
-    "floor": "Segunda planta"
+    "location": "Segunda planta, Biblioteca"
   },
   {
     "id": "IMP-LAB-01",
-    "name": "Impresora Laboratorio 1",
-    "location": "Laboratorio 1, Segunda planta",
-    "floor": "Segunda planta"
+    "location": "Laboratorio 1, Segunda planta"
   },
   {
     "id": "IMP-LAB-02",
-    "name": "Impresora Laboratorio 2",
-    "location": "Laboratorio 2, Segunda planta",
-    "floor": "Segunda planta"
+    "location": "Laboratorio 2, Segunda planta"
   },
   {
     "id": "IMP-LAB-03",
-    "name": "Impresora Laboratorio 3",
-    "location": "Laboratorio 3, Segunda planta",
-    "floor": "Segunda planta"
+    "location": "Laboratorio 3, Segunda planta"
   },
   {
     "id": "IMP-LAB-04",
-    "name": "Impresora Laboratorio 4",
-    "location": "Laboratorio 4, Segunda planta",
-    "floor": "Segunda planta"
+    "location": "Laboratorio 4, Segunda planta"
   },
   {
     "id": "IMP-LAB-05",
-    "name": "Impresora Laboratorio 5",
-    "location": "Laboratorio 5, Segunda planta",
-    "floor": "Segunda planta"
+    "location": "Laboratorio 5, Segunda planta"
   },
   {
     "id": "IMP-LAB-06",
-    "name": "Impresora Laboratorio 6",
-    "location": "Laboratorio 6, Segunda planta",
-    "floor": "Segunda planta"
+    "location": "Laboratorio 6, Segunda planta"
   }
 ]

@@ -17,9 +17,7 @@ import { Spinner } from "@/components/ui/Spinner";
 
 interface PrinterData {
   id: string;
-  name: string;
   location: string;
-  floor: string | null;
   active: boolean;
 }
 
@@ -53,9 +51,7 @@ export default function EditPrinterPage() {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: data.name,
         location: data.location,
-        floor: data.floor || undefined,
       }),
     });
 
@@ -66,7 +62,7 @@ export default function EditPrinterPage() {
       throw new Error(body.error);
     }
 
-    addToast(`Impresora "${data.name}" actualizada correctamente`, "success");
+    addToast(`Impresora "${params.id}" actualizada correctamente`, "success");
     router.push("/librarian/printing/printers");
   }
 
@@ -98,9 +94,7 @@ export default function EditPrinterPage() {
               onSubmit={handleSubmit}
               initialValues={{
                 id: printer.id,
-                name: printer.name,
                 location: printer.location,
-                floor: printer.floor ?? "",
               }}
             />
           </CardBody>

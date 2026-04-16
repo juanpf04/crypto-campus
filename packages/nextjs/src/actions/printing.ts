@@ -24,6 +24,27 @@ import { getSession, ensureRole } from "@/lib/auth";
 import { adminWalletClient, publicClient } from "@/lib/viem";
 import { CONTRACT_ADDRESSES, PRINTER_ABI } from "@/lib/contracts";
 
+interface ExecutePrintInput {
+	printerId: string;
+	filename: string;
+	pages: number;
+	copies?: number;
+	color?: boolean;
+	duplex?: boolean;
+	orientation?: string;
+	paperSize?: string;
+	pageRangeFrom?: number | null;
+	pageRangeTo?: number | null;
+	pagesPerSheet?: number;
+	filePages?: number;
+	fileSize?: number;
+	filePath?: string | null;
+}
+
+interface ExecutePrintAsAdminInput extends ExecutePrintInput {
+	userId: string;
+}
+
 function ensurePositiveInt(value: number, fieldName: string): number {
 	if (!Number.isInteger(value) || value <= 0) {
 		throw new Error(`${fieldName} debe ser un entero positivo`);
@@ -120,13 +141,13 @@ export async function getPrinterConfig() {
 
 /**
  * Lista todas las impresoras activas registradas en la BD.
- * @returns Array de impresoras ordenadas por ubicación y nombre.
+ * @returns Array de impresoras ordenadas por ubicación.
  */
 export async function listActivePrinters() {
 	try {
 		return await prisma.printer.findMany({
 			where: { active: true },
-			orderBy: [{ location: "asc" }, { name: "asc" }],
+			orderBy: [{ location: "asc" }, { id: "asc" }],
 		});
 	} catch (error) {
 		throw new Error(`Error al listar impresoras: ${error instanceof Error ? error.message : "desconocido"}`);
@@ -153,7 +174,7 @@ export async function listMyPrinterLogs(limit = 20, offset = 0) {
 			where: { userId: session.userId },
 			include: {
 				printer: {
-					select: { id: true, name: true, location: true, floor: true },
+					select: { id: true, location: true },
 				},
 			},
 			orderBy: { createdAt: "desc" },
@@ -184,7 +205,7 @@ export async function getPrintLogDetail(logId: string) {
 					select: { id: true, name: true, email: true, role: true },
 				},
 				printer: {
-					select: { id: true, name: true, location: true, floor: true },
+					select: { id: true, location: true },
 				},
 			},
 		});
@@ -232,7 +253,7 @@ export async function listPrinterLogsForAdmin(limit = 50, offset = 0, userId?: s
 					select: { id: true, name: true, email: true, role: true, address: true },
 				},
 				printer: {
-					select: { id: true, name: true, location: true, floor: true },
+					select: { id: true, location: true },
 				},
 			},
 			orderBy: { createdAt: "desc" },
@@ -248,7 +269,7 @@ export async function listPrinterLogsForAdmin(limit = 50, offset = 0, userId?: s
  * Lista todas las impresoras registradas en la BD (activas e inactivas).
  * Solo accesible por administradores, para gestión completa de impresoras.
  *
- * @returns Array de impresoras ordenadas por ubicación y nombre.
+ * @returns Array de impresoras ordenadas por ubicación.
  */
 export async function listAllPrinters() {
 	const session = await getSession();
@@ -256,7 +277,7 @@ export async function listAllPrinters() {
 
 	try {
 		return await prisma.printer.findMany({
-			orderBy: [{ location: "asc" }, { name: "asc" }],
+			orderBy: [{ location: "asc" }, { id: "asc" }],
 		});
 	} catch (error) {
 		throw new Error(`Error al listar impresoras: ${error instanceof Error ? error.message : "desconocido"}`);
@@ -267,22 +288,20 @@ export async function listAllPrinters() {
  * Registra una nueva impresora física en la BD (solo admin).
  * La impresora se activa por defecto.
  *
- * @param input Identificador único, nombre, ubicación y piso de la impresora.
+ * @param input Identificador único y ubicación de la impresora.
  * @returns Registro creado con timestamps.
  */
-export async function createPrinter(input: CreatePrinterInput) {
+export async function createPrinter(input: { id: string; location: string }) {
 	const session = await getSession();
 	ensureRole(session, ["ADMIN", "LIBRARIAN"]);
 
 	try {
 		const id = cleanString(input.id, "El identificador");
-		const name = cleanString(input.name, "El nombre");
 		const location = cleanString(input.location, "La ubicación");
-		const floor = input.floor?.trim() || null;
 
 		// Crear registro en BD con estado activo por defecto
 		const printer = await prisma.printer.create({
-			data: { id, name, location, floor, active: true },
+			data: { id, location, active: true },
 		});
 
 		// Revalidar caché de la ruta de administración
@@ -298,12 +317,12 @@ export async function createPrinter(input: CreatePrinterInput) {
 
 /**
  * Actualiza los detalles de una impresora existente (solo admin).
- * Modifica nombre, ubicación, piso o estado activo.
+ * Modifica ubicación o estado activo.
  *
  * @param input ID de la impresora y campos a actualizar (solo los proporcionados se modifican).
  * @returns Impresora actualizada con nuevos valores.
  */
-export async function updatePrinter(input: UpdatePrinterInput) {
+export async function updatePrinter(input: { id: string; location?: string; active?: boolean }) {
 	const session = await getSession();
 	ensureRole(session, ["ADMIN", "LIBRARIAN"]);
 
@@ -321,20 +340,12 @@ export async function updatePrinter(input: UpdatePrinterInput) {
 
 		// Preparar datos a actualizar, validando solo los campos proporcionados
 		const updates: {
-			name?: string;
 			location?: string;
-			floor?: string | null;
 			active?: boolean;
 		} = {};
 
-		if (typeof input.name === "string") {
-			updates.name = cleanString(input.name, "El nombre");
-		}
 		if (typeof input.location === "string") {
 			updates.location = cleanString(input.location, "La ubicación");
-		}
-		if (typeof input.floor === "string") {
-			updates.floor = input.floor.trim() || null;
 		}
 		if (typeof input.active === "boolean") {
 			updates.active = input.active;
@@ -539,7 +550,7 @@ async function executePrinterJob(
 				data: fullPrintLogData,
 				include: {
 					printer: {
-						select: { id: true, name: true, location: true, floor: true },
+						select: { id: true, location: true },
 					},
 				},
 			});
@@ -556,7 +567,7 @@ async function executePrinterJob(
 				data: minimalPrintLogData,
 				include: {
 					printer: {
-						select: { id: true, name: true, location: true, floor: true },
+						select: { id: true, location: true },
 					},
 				},
 			});

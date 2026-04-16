@@ -6,7 +6,7 @@
  * POST /api/printer
  * Registra una nueva impresora física.
  * Acceso: Solo administradores (validado en la Server Action).
- * Body: { id, name, location, floor? }
+ * Body: { id, location }
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -28,17 +28,17 @@ export async function GET() {
 export async function POST(req: NextRequest) {
 	try {
 		const body = await req.json();
-		const { id, name, location, floor } = body;
+		const { id, location } = body;
 
 		// Validar campos requeridos (la autorización la valida createPrinter)
-		if (!id || !name || !location) {
+		if (!id || !location) {
 			return NextResponse.json(
-				{ error: "campos requeridos: id, name, location" },
+				{ error: "campos requeridos: id, location" },
 				{ status: 400 }
 			);
 		}
 
-		const printer = await createPrinter({ id, name, location, floor });
+		const printer = await createPrinter({ id, location });
 		return NextResponse.json(printer, { status: 201 });
 	} catch (error) {
 		console.error("[POST /api/printer]", error);

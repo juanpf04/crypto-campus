@@ -27,9 +27,7 @@ import {
 
 interface Printer {
   id: string;
-  name: string;
   location: string;
-  floor: string | null;
   active: boolean;
 }
 
@@ -115,9 +113,7 @@ export default function PrintersListPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>ID</TableHead>
-                <TableHead>Nombre</TableHead>
                 <TableHead>Ubicación</TableHead>
-                <TableHead>Planta</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Acciones</TableHead>
               </TableRow>
@@ -126,9 +122,7 @@ export default function PrintersListPage() {
               {printers.map((printer) => (
                 <TableRow key={printer.id}>
                   <TableCell className="font-mono text-sm">{printer.id}</TableCell>
-                  <TableCell className="font-medium">{printer.name}</TableCell>
                   <TableCell className="text-text-muted">{printer.location}</TableCell>
-                  <TableCell className="text-text-muted">{printer.floor ?? "—"}</TableCell>
                   <TableCell>
                     <StatusBadge status={printer.active ? "ACTIVE" : "INACTIVE"} />
                   </TableCell>

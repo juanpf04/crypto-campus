@@ -40,7 +40,7 @@ interface PrintLogDetail {
   filePath: string | null;
   txHash: string;
   createdAt: string;
-  printer: { id: string; name: string; location: string; floor: string | null };
+  printer: { id: string; location: string };
 }
 
 
@@ -166,11 +166,8 @@ export default function StudentPrintDetailPage() {
 
           {/* Impresora */}
           <div className="space-y-3">
-            <DetailField label="Impresora" value={log.printer.name} />
+            <DetailField label="Impresora" value={log.printer.id} />
             <DetailField label="Ubicación" value={log.printer.location} />
-            {log.printer.floor && (
-              <DetailField label="Planta" value={log.printer.floor} />
-            )}
           </div>
 
           <div className="border-t border-border-default" />

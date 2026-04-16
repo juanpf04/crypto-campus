@@ -144,7 +144,7 @@ export default function LibrarianDashboard() {
                         contentStyle={{ backgroundColor: "var(--color-card)", border: "1px solid var(--color-border-default)", borderRadius: 8, fontSize: 13 }}
                         labelStyle={{ color: "var(--color-text)" }}
                         itemStyle={{ color: "var(--color-primary)" }}
-                        formatter={(value: number) => [`${value} préstamos`, ""]}
+                        formatter={(value) => [`${value} préstamos`, ""]}
                       />
                       <Bar dataKey="count" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
                     </BarChart>
@@ -179,9 +179,9 @@ export default function LibrarianDashboard() {
                         </Pie>
                         <Tooltip
                           contentStyle={{ backgroundColor: "var(--color-card)", border: "1px solid var(--color-border-default)", borderRadius: 8, fontSize: 13 }}
-                          formatter={(value: number, _name: string, props: { payload: { type: string } }) => [
+                          formatter={(value, _name, props) => [
                             `${value} ítems`,
-                            TYPE_LABELS[props.payload.type] || props.payload.type,
+                            TYPE_LABELS[(props as { payload: { type: string } }).payload.type] || (props as { payload: { type: string } }).payload.type,
                           ]}
                         />
                       </PieChart>

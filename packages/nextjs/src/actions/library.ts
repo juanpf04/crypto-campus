@@ -16,6 +16,7 @@
 import { createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { hardhat } from "viem/chains";
+import { LoanStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { getSession, ensureRole, logPrismaRecovery } from "@/lib/auth";
@@ -318,7 +319,7 @@ export async function getItem(itemId: string) {
 		where: { id: itemId },
 		include: {
 			loans: {
-				where: { status: { in: ["QUEUED" as LoanStatusCompat, "RESERVED" as LoanStatusCompat, "PICKED_UP" as LoanStatusCompat] } },
+				where: { status: { in: ["QUEUED" as LoanStatus, "RESERVED" as LoanStatus, "PICKED_UP" as LoanStatus] } },
 				include: { user: { select: { id: true, name: true, email: true } } },
 				orderBy: { requestDate: "desc" },
 			},
@@ -338,7 +339,7 @@ export async function getItem(itemId: string) {
 		availableCopies = Number(result);
 	} catch {
 		// Si falla la lectura on-chain, estimamos desde Prisma
-		const activeLoans = item.loans.filter((l) => l.status === ("RESERVED" as LoanStatusCompat) || l.status === ("PICKED_UP" as LoanStatusCompat)).length;
+		const activeLoans = item.loans.filter((l) => l.status === ("RESERVED" as LoanStatus) || l.status === ("PICKED_UP" as LoanStatus)).length;
 		availableCopies = Math.max(0, item.totalCopies - activeLoans);
 	}
 
@@ -380,8 +381,8 @@ async function processQueueEvents(receipt: { logs: readonly { data: string; topi
 			if (event.eventName === "LoanReserved") {
 				const args = event.args as unknown as { loanId: bigint };
 				await prisma.loan.update({
-				where: { loanId: Number(args.loanId), status: "QUEUED" as LoanStatusCompat },
-				data: { status: "RESERVED" as LoanStatusCompat, reservationDate: new Date() },
+				where: { loanId: Number(args.loanId), status: "QUEUED" as LoanStatus },
+				data: { status: "RESERVED" as LoanStatus, reservationDate: new Date() },
 				});
 			}
 		} catch { /* log no es nuestro evento */ }
@@ -405,7 +406,7 @@ export async function requestLoan(itemId: string) {
 			where: {
 				userId: session.userId!,
 				libraryItemId: item.id,
-				status: { in: ["QUEUED" as LoanStatusCompat, "RESERVED" as LoanStatusCompat, "PICKED_UP" as LoanStatusCompat] },
+				status: { in: ["QUEUED" as LoanStatus, "RESERVED" as LoanStatus, "PICKED_UP" as LoanStatus] },
 			},
 		});
 		if (existingLoan) throw new Error("Ya tienes un préstamo activo o pendiente de este ítem");
@@ -474,7 +475,7 @@ export async function cancelLoan(loanPrismaId: string) {
 		const loan = await prisma.loan.findUnique({ where: { id: loanPrismaId } });
 		if (!loan) throw new Error("Préstamo no encontrado");
 		if (loan.userId !== session.userId) throw new Error("No autorizado");
-		if (loan.status !== ("QUEUED" as LoanStatusCompat) && loan.status !== ("RESERVED" as LoanStatusCompat))
+		if (loan.status !== ("QUEUED" as LoanStatus) && loan.status !== ("RESERVED" as LoanStatus))
 			throw new Error("Solo se pueden cancelar préstamos en cola o reservados");
 
 		const { walletClient } = await getUserWalletClient(session.userId!);
@@ -490,7 +491,7 @@ export async function cancelLoan(loanPrismaId: string) {
 
 		await prisma.loan.update({
 			where: { id: loanPrismaId },
-			data: { status: "CANCELLED" as LoanStatusCompat },
+			data: { status: "CANCELLED" as LoanStatus },
 		});
 
 		// Procesar auto-reservas de la cola
@@ -514,7 +515,7 @@ export async function confirmPickup(loanPrismaId: string) {
 	try {
 		const loan = await prisma.loan.findUnique({ where: { id: loanPrismaId } });
 		if (!loan) throw new Error("Préstamo no encontrado");
-		if (loan.status !== ("RESERVED" as LoanStatusCompat)) throw new Error("Solo se pueden recoger préstamos reservados");
+		if (loan.status !== ("RESERVED" as LoanStatus)) throw new Error("Solo se pueden recoger préstamos reservados");
 
 		const hash = await adminWalletClient.writeContract({
 			address: CONTRACT_ADDRESSES.libraryManager as `0x${string}`,
@@ -535,7 +536,7 @@ export async function confirmPickup(loanPrismaId: string) {
 		await prisma.loan.update({
 			where: { id: loanPrismaId },
 			data: {
-			status: "PICKED_UP" as LoanStatusCompat,
+			status: "PICKED_UP" as LoanStatus,
 				pickupTxHash: hash,
 				pickupDate: new Date(),
 				dueDate: new Date(Number(loanInfo.dueDate) * 1000),
@@ -560,7 +561,7 @@ export async function confirmReturn(loanPrismaId: string) {
 	try {
 		const loan = await prisma.loan.findUnique({ where: { id: loanPrismaId } });
 		if (!loan) throw new Error("Préstamo no encontrado");
-		if (loan.status !== ("PICKED_UP" as LoanStatusCompat)) throw new Error("Solo se pueden devolver préstamos recogidos");
+		if (loan.status !== ("PICKED_UP" as LoanStatus)) throw new Error("Solo se pueden devolver préstamos recogidos");
 
 		const hash = await adminWalletClient.writeContract({
 			address: CONTRACT_ADDRESSES.libraryManager as `0x${string}`,
@@ -576,7 +577,7 @@ export async function confirmReturn(loanPrismaId: string) {
 		await prisma.loan.update({
 			where: { id: loanPrismaId },
 			data: {
-				status: "RETURNED" as LoanStatusCompat,
+				status: "RETURNED" as LoanStatus,
 				returnTxHash: hash,
 				returnDate: new Date(),
 				overdue: isOverdue,
@@ -603,7 +604,7 @@ export async function forceReturn(loanPrismaId: string) {
 	try {
 		const loan = await prisma.loan.findUnique({ where: { id: loanPrismaId } });
 		if (!loan) throw new Error("Préstamo no encontrado");
-		if (loan.status !== ("PICKED_UP" as LoanStatusCompat)) throw new Error("Solo se pueden forzar devoluciones de préstamos recogidos");
+		if (loan.status !== ("PICKED_UP" as LoanStatus)) throw new Error("Solo se pueden forzar devoluciones de préstamos recogidos");
 
 		const hash = await adminWalletClient.writeContract({
 			address: CONTRACT_ADDRESSES.libraryManager as `0x${string}`,
@@ -617,7 +618,7 @@ export async function forceReturn(loanPrismaId: string) {
 		await prisma.loan.update({
 			where: { id: loanPrismaId },
 			data: {
-				status: "RETURNED" as LoanStatusCompat,
+				status: "RETURNED" as LoanStatus,
 				returnTxHash: hash,
 				returnDate: new Date(),
 				overdue: true,
@@ -644,7 +645,7 @@ export async function expireReservation(loanPrismaId: string) {
 	try {
 		const loan = await prisma.loan.findUnique({ where: { id: loanPrismaId } });
 		if (!loan) throw new Error("Préstamo no encontrado");
-		if (loan.status !== ("RESERVED" as LoanStatusCompat)) throw new Error("Solo se pueden expirar reservas");
+		if (loan.status !== ("RESERVED" as LoanStatus)) throw new Error("Solo se pueden expirar reservas");
 
 		const hash = await adminWalletClient.writeContract({
 			address: CONTRACT_ADDRESSES.libraryManager as `0x${string}`,
@@ -657,7 +658,7 @@ export async function expireReservation(loanPrismaId: string) {
 
 		await prisma.loan.update({
 			where: { id: loanPrismaId },
-			data: { status: "CANCELLED" as LoanStatusCompat },
+			data: { status: "CANCELLED" as LoanStatus },
 		});
 
 		await processQueueEvents(receipt);
@@ -711,7 +712,7 @@ export async function listPendingPickups(filters?: { limit?: number; offset?: nu
 	const session = await getSession();
 	ensureRole(session, ["LIBRARIAN", "ADMIN"]);
 
-const where = { status: "RESERVED" as LoanStatusCompat };
+const where = { status: "RESERVED" as LoanStatus };
 
 	const [items, total] = await Promise.all([
 		prisma.loan.findMany({
@@ -749,7 +750,7 @@ export async function getMyLoans() {
 	// Para préstamos en cola, obtener la posición
 	const loansWithQueue = await Promise.all(
 		loans.map(async (loan) => {
-			if (loan.status === ("QUEUED" as LoanStatusCompat)) {
+			if (loan.status === ("QUEUED" as LoanStatus)) {
 				try {
 					const pos = await publicClient.readContract({
 						address: CONTRACT_ADDRESSES.libraryManager as `0x${string}`,
@@ -818,12 +819,12 @@ export async function getLibraryStats() {
 		prisma.libraryItem.count(),
 		prisma.libraryItem.count({ where: { active: true } }),
 		prisma.loan.count(),
-			prisma.loan.count({ where: { status: "QUEUED" as LoanStatusCompat } }),
-			prisma.loan.count({ where: { status: "RESERVED" as LoanStatusCompat } }),
-			prisma.loan.count({ where: { status: "PICKED_UP" as LoanStatusCompat } }),
-			prisma.loan.count({ where: { status: "PICKED_UP" as LoanStatusCompat, dueDate: { lt: now } } }),
-		prisma.loan.count({ where: { status: "RETURNED" as LoanStatusCompat, overdue: false } }),
-		prisma.loan.count({ where: { status: "RETURNED" as LoanStatusCompat } }),
+			prisma.loan.count({ where: { status: "QUEUED" as LoanStatus } }),
+			prisma.loan.count({ where: { status: "RESERVED" as LoanStatus } }),
+			prisma.loan.count({ where: { status: "PICKED_UP" as LoanStatus } }),
+			prisma.loan.count({ where: { status: "PICKED_UP" as LoanStatus, dueDate: { lt: now } } }),
+		prisma.loan.count({ where: { status: "RETURNED" as LoanStatus, overdue: false } }),
+		prisma.loan.count({ where: { status: "RETURNED" as LoanStatus } }),
 		prisma.libraryItem.groupBy({ by: ["type"], where: { active: true }, _count: true }),
 		prisma.loan.groupBy({
 			by: ["libraryItemId"],

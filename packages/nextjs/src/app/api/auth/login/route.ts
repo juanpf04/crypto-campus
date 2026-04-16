@@ -8,7 +8,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   // ─── 0. Rate limiting ───
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.ip || "unknown";
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
   const { allowed, resetIn } = checkRateLimit(ip);
   if (!allowed) {
     return NextResponse.json(

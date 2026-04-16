@@ -110,10 +110,10 @@ export default function StudentItemDetailPage() {
             <Card className="p-5 space-y-4">
               <SectionTitle icon={icons.library}>Datos del libro</SectionTitle>
               <div className="grid grid-cols-2 gap-4">
-                {meta.isbn && <DetailField label="ISBN" value={String(meta.isbn)} />}
-                {meta.publisher && <DetailField label="Editorial" value={String(meta.publisher)} />}
-                {meta.year && <DetailField label="Año" value={String(meta.year)} />}
-                {meta.pages && <DetailField label="Páginas" value={String(meta.pages)} />}
+                {meta.isbn ? <DetailField label="ISBN" value={String(meta.isbn)} /> : null}
+                {meta.publisher ? <DetailField label="Editorial" value={String(meta.publisher)} /> : null}
+                {meta.year ? <DetailField label="Año" value={String(meta.year)} /> : null}
+                {meta.pages ? <DetailField label="Páginas" value={String(meta.pages)} /> : null}
               </div>
             </Card>
           )}
@@ -122,9 +122,9 @@ export default function StudentItemDetailPage() {
             <Card className="p-5 space-y-4">
               <SectionTitle icon={icons.items}>Datos del juego</SectionTitle>
               <div className="grid grid-cols-3 gap-4">
-                {meta.players && <DetailField label="Jugadores" value={String(meta.players)} />}
-                {meta.duration && <DetailField label="Duración" value={String(meta.duration)} />}
-                {meta.ageRating && <DetailField label="Edad mínima" value={String(meta.ageRating)} />}
+                {meta.players ? <DetailField label="Jugadores" value={String(meta.players)} /> : null}
+                {meta.duration ? <DetailField label="Duración" value={String(meta.duration)} /> : null}
+                {meta.ageRating ? <DetailField label="Edad mínima" value={String(meta.ageRating)} /> : null}
               </div>
             </Card>
           )}
@@ -133,8 +133,8 @@ export default function StudentItemDetailPage() {
             <Card className="p-5 space-y-4">
               <SectionTitle icon={icons.items}>Datos del videojuego</SectionTitle>
               <div className="grid grid-cols-2 gap-4">
-                {meta.platform && <DetailField label="Plataforma" value={String(meta.platform)} />}
-                {meta.genre && <DetailField label="Género" value={String(meta.genre)} />}
+                {meta.platform ? <DetailField label="Plataforma" value={String(meta.platform)} /> : null}
+                {meta.genre ? <DetailField label="Género" value={String(meta.genre)} /> : null}
               </div>
             </Card>
           )}

@@ -98,7 +98,7 @@ export function RoomForm({ onSubmit, initialValues, isEdit }: RoomFormProps) {
               <input
                 type="checkbox"
                 checked={fields[key]}
-                onChange={(e) => setField(key)(e.target.checked as unknown as string)}
+                onChange={(e) => setField(key)(e as unknown as React.ChangeEvent<HTMLInputElement>)}
                 className="rounded border-border-default"
               />
               {label}

@@ -100,7 +100,7 @@ model BadgeType {
   id                String   @id @default(cuid())
   tokenId           Int      @unique  // ID en el contrato BadgeSystem
   name              String
-  description       String
+  description       String?
   subjectOfferingId String
   creatorId         String
   txHash            String
@@ -118,7 +118,7 @@ model Task {
   id           String   @id @default(cuid())
   taskId       Int      @unique  // ID en el contrato BadgeSystem
   name         String
-  description  String
+  description  String?
   badgeTypeId  String
   rewardAmount Int
   active       Boolean  @default(true)
@@ -154,7 +154,7 @@ model Reward {
   id          String   @id @default(cuid())
   rewardId    Int      @unique  // ID en el contrato BadgeSystem
   name        String
-  description String
+  description String?
   badgeTypeId String
   badgeCost   Int
   supply      Int      // 0 = ilimitado
@@ -314,9 +314,7 @@ model RoomBooking {
 
 model Printer {
   id        String  @id         // "IMP-BIB-01"
-  name      String
   location  String              // "Biblioteca, planta 2"
-  floor     String?
   active    Boolean @default(true)
 
   printLogs PrintLog[]
