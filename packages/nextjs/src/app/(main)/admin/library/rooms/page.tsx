@@ -87,8 +87,8 @@ export default function AdminRoomsPage() {
                       <TableCell><StatusBadge status={room.active ? "ACTIVE" : "INACTIVE"} /></TableCell>
                       <TableCell>
                         <div className="flex gap-1">
-                          <Button size="sm" variant="ghost" onClick={() => router.push(`/admin/library/rooms/${room.id}/edit`)}>Editar</Button>
-                          {room.active && <Button size="sm" variant="ghost" onClick={() => handleDelete(room.id)}>Desactivar</Button>}
+                          <Button size="sm" variant="secondary" onClick={() => router.push(`/admin/library/rooms/${room.id}/edit`)}>Editar</Button>
+                          {room.active && <Button size="sm" variant="danger" onClick={() => handleDelete(room.id)}>Desactivar</Button>}
                         </div>
                       </TableCell>
                     </TableRow>

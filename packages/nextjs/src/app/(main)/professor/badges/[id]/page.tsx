@@ -1,194 +1,215 @@
 "use client";
 
 /**
- * Detalle de un tipo de insignia.
+ * Detalle de una assignment del profesor.
  *
- * Muestra la información del badge type, sus tareas (con opciones
- * de otorgar y desactivar) y sus recompensas asociadas.
+ * Muestra info, premios con sus ganadores y entregas. Permite cerrar
+ * para revisión y cerrar definitivamente.
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionTitle } from "@/components/shared/SectionTitle";
-import { StatusBadge } from "@/components/shared/StatusBadge";
+import { ConfirmModal } from "@/components/shared/ConfirmModal";
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "@/components/ui/Table";
 import { icons } from "@/components/ui/icons";
 
-interface Task {
+interface AssignmentDetail {
   id: string;
   name: string;
   description: string | null;
-  rewardAmount: number;
-  active: boolean;
-  _count?: { awards: number };
-}
-
-interface Reward {
-  id: string;
-  name: string;
-  badgeCost: number;
-  supply: number;
-  _count?: { redemptions: number };
-}
-
-interface BadgeTypeDetail {
-  id: string;
-  name: string;
-  description: string | null;
-  subjectOffering: {
-    id: string;
-    subject: { name: string };
-    academicYear: string;
+  status: "OPEN" | "REVIEWING" | "CLOSED";
+  deadline: string | null;
+  autoClose: boolean;
+  createdAt: string;
+  closedAt: string | null;
+  subjectBadge: {
+    subjectOffering: {
+      group: string; academicYear: string;
+      subject: { name: string; code: string };
+      professor: { id: string; name: string };
+    };
   };
-  professor: { name: string };
-  tasks: Task[];
-  rewards: Reward[];
+  prizes: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    badgeReward: number;
+    maxWinners: number;
+    awards: Array<{ id: string; user: { id: string; name: string; email: string } }>;
+  }>;
+  submissions: Array<{ id: string; submittedAt: string; student: { id: string; name: string; email: string } }>;
 }
 
-export default function ProfessorBadgeTypeDetailPage() {
+const STATUS_BADGE = {
+  OPEN:      { label: "Abierta",     variant: "success" as const },
+  REVIEWING: { label: "En revisión", variant: "warning" as const },
+  CLOSED:    { label: "Cerrada",     variant: "neutral" as const },
+};
+
+export default function ProfessorAssignmentDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
   const { addToast } = useToast();
 
-  const [badgeType, setBadgeType] = useState<BadgeTypeDetail | null>(null);
+  const [data, setData] = useState<AssignmentDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [deactivating, setDeactivating] = useState<string | null>(null);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [closeModalOpen, setCloseModalOpen] = useState(false);
+  const [acting, setActing] = useState(false);
 
-  const loadData = useCallback(async () => {
-    if (!id) return;
+  const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/badges/types/${id}`);
-      if (res.ok) {
-        setBadgeType(await res.json());
-      } else {
-        addToast("Error al cargar tipo de insignia", "danger");
-      }
-    } catch {
-      addToast("Error al cargar tipo de insignia", "danger");
+      const res = await fetch(`/api/badges/assignments/${id}`);
+      if (res.ok) setData(await res.json());
+      else throw new Error("No se pudo cargar la tarea");
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : "Error", "danger");
     } finally {
       setLoading(false);
     }
   }, [id, addToast]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { load(); }, [load]);
 
-  async function handleDeactivateTask(taskId: string) {
-    setDeactivating(taskId);
+  async function handleAction(endpoint: "review" | "close") {
+    setActing(true);
     try {
-      const res = await fetch(`/api/badges/tasks/${taskId}/deactivate`, { method: "POST" });
+      const res = await fetch(`/api/badges/assignments/${id}/${endpoint}`, { method: "POST" });
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Error al desactivar tarea");
+        const body = await res.json();
+        throw new Error(body.error ?? "Error");
       }
-      addToast("Tarea desactivada", "success");
-      loadData();
+      addToast(endpoint === "review" ? "Entregas cerradas" : "Tarea cerrada definitivamente", "success");
+      setReviewModalOpen(false);
+      setCloseModalOpen(false);
+      load();
     } catch (err) {
-      addToast(err instanceof Error ? err.message : "Error al desactivar tarea", "danger");
+      addToast(err instanceof Error ? err.message : "Error", "danger");
     } finally {
-      setDeactivating(null);
+      setActing(false);
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
+  if (loading) return <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>;
+  if (!data) return null;
 
-  if (!badgeType) {
-    return (
-      <div className="space-y-6">
-        <BackLink href="/professor/badges" label="Volver a insignias" />
-        <EmptyState title="No encontrado" description="No se encontró el tipo de insignia." />
-      </div>
-    );
-  }
+  const offering = data.subjectBadge.subjectOffering;
+  const status = STATUS_BADGE[data.status];
 
   return (
-    <div className="space-y-8">
-      <BackLink href="/professor/badges" label="Volver a insignias" />
+    <div className="space-y-6">
+      <BackLink href="/professor/badges" label="Volver a tareas" />
 
-      {/* ── Información del badge type ── */}
-      <div>
-        <h1 className="text-2xl font-bold text-text">{badgeType.name}</h1>
-        {badgeType.description && (
-          <p className="text-text-muted mt-1">{badgeType.description}</p>
-        )}
-        <div className="flex flex-wrap gap-4 mt-3 text-sm text-text-muted">
-          <span>Asignatura: <strong className="text-text">{badgeType.subjectOffering.subject.name}</strong></span>
-          <span>Curso: <strong className="text-text">{badgeType.subjectOffering.academicYear}</strong></span>
-          <span>Profesor: <strong className="text-text">{badgeType.professor.name}</strong></span>
+      {/* ── Cabecera ── */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-text">{data.name}</h1>
+          <p className="text-text-muted mt-1">
+            {offering.subject.code} · {offering.subject.name} ({offering.group} · {offering.academicYear})
+          </p>
         </div>
+        <Badge variant={status.variant}>{status.label}</Badge>
       </div>
 
-      {/* ── Sección: Tareas ── */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <SectionTitle icon={icons.task}>Tareas</SectionTitle>
-          <Link href={`/professor/badges/${id}/tasks/new`}>
-            <Button size="sm">Crear tarea</Button>
-          </Link>
-        </div>
+      {data.description && (
+        <Card>
+          <p className="text-sm text-text">{data.description}</p>
+        </Card>
+      )}
 
-        {badgeType.tasks.length === 0 ? (
-          <EmptyState
-            title="Sin tareas"
-            description="Aún no has creado ninguna tarea para este tipo de insignia."
-          />
+      {/* ── Acciones de estado ── */}
+      <div className="flex flex-wrap gap-3">
+        {data.status === "OPEN" && (
+          <Button variant="outline" onClick={() => setReviewModalOpen(true)}>
+            Cerrar entregas (pasar a revisión)
+          </Button>
+        )}
+        {data.status !== "CLOSED" && (
+          <Button variant="danger" onClick={() => setCloseModalOpen(true)}>
+            Cerrar tarea definitivamente
+          </Button>
+        )}
+        {data.deadline && (
+          <p className="text-xs text-text-muted self-center">
+            Fecha límite: {new Date(data.deadline).toLocaleString("es-ES")}
+            {data.autoClose && " (auto-cierre activo)"}
+          </p>
+        )}
+      </div>
+
+      {/* ── Premios ── */}
+      <section className="space-y-4">
+        <SectionTitle icon={icons.reward}>Premios</SectionTitle>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {data.prizes.map((p) => {
+            const remaining = p.maxWinners - p.awards.length;
+            return (
+              <Card key={p.id} className="space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold text-text">{p.name}</h3>
+                    {p.description && <p className="text-sm text-text-muted mt-1">{p.description}</p>}
+                  </div>
+                  <Badge variant={remaining === 0 ? "neutral" : "info"}>
+                    {p.awards.length}/{p.maxWinners}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-text-muted">{p.badgeReward} insignia{p.badgeReward !== 1 ? "s" : ""} por ganador</span>
+                </div>
+                {p.awards.length > 0 && (
+                  <div className="text-sm">
+                    <p className="font-medium text-text mb-1">Ganadores:</p>
+                    <ul className="space-y-0.5">
+                      {p.awards.map((a) => (
+                        <li key={a.id} className="text-text-muted">{a.user.name}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {data.status !== "CLOSED" && remaining > 0 && (
+                  <Link href={`/professor/badges/${id}/prizes/${p.id}/award`}>
+                    <Button size="sm" className="w-full">Otorgar premio</Button>
+                  </Link>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ── Entregas ── */}
+      <section className="space-y-4">
+        <SectionTitle icon={icons.student}>Entregas ({data.submissions.length})</SectionTitle>
+        {data.submissions.length === 0 ? (
+          <EmptyState title="Sin entregas" description="Aún no ha entregado ningún alumno." />
         ) : (
           <Card className="overflow-hidden p-0">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nombre</TableHead>
-                  <TableHead>Tokens</TableHead>
-                  <TableHead>Otorgamientos</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead>Acciones</TableHead>
+                  <TableHead>Alumno</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Entregado el</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {badgeType.tasks.map((task) => (
-                  <TableRow key={task.id}>
-                    <TableCell className="font-medium">{task.name}</TableCell>
-                    <TableCell>{task.rewardAmount}</TableCell>
-                    <TableCell>{task._count?.awards ?? 0}</TableCell>
-                    <TableCell>
-                      <StatusBadge status={task.active ? "ACTIVE" : "INACTIVE"} />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        {task.active && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => router.push(`/professor/badges/${id}/tasks/${task.id}/award`)}
-                            >
-                              Otorgar
-                            </Button>
-                            <Button
-                              variant="danger"
-                              size="sm"
-                              onClick={() => handleDeactivateTask(task.id)}
-                              loading={deactivating === task.id}
-                            >
-                              Desactivar
-                            </Button>
-                          </>
-                        )}
-                      </div>
+                {data.submissions.map((s) => (
+                  <TableRow key={s.id}>
+                    <TableCell className="font-medium">{s.student.name}</TableCell>
+                    <TableCell className="text-text-muted">{s.student.email}</TableCell>
+                    <TableCell className="text-text-muted">
+                      {new Date(s.submittedAt).toLocaleString("es-ES")}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -198,45 +219,27 @@ export default function ProfessorBadgeTypeDetailPage() {
         )}
       </section>
 
-      {/* ── Sección: Recompensas ── */}
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <SectionTitle icon={icons.reward}>Recompensas</SectionTitle>
-          <Link href="/professor/rewards/new">
-            <Button size="sm" variant="secondary">Crear recompensa</Button>
-          </Link>
-        </div>
+      <ConfirmModal
+        open={reviewModalOpen}
+        onClose={() => setReviewModalOpen(false)}
+        onConfirm={() => handleAction("review")}
+        title="Cerrar entregas"
+        description="Los alumnos ya no podrán marcar como entregada. Tú aún podrás otorgar premios."
+        confirmLabel="Cerrar entregas"
+        variant="primary"
+        loading={acting}
+      />
 
-        {badgeType.rewards.length === 0 ? (
-          <EmptyState
-            title="Sin recompensas"
-            description="No hay recompensas asociadas a este tipo de insignia."
-          />
-        ) : (
-          <Card className="overflow-hidden p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nombre</TableHead>
-                  <TableHead>Coste (badges)</TableHead>
-                  <TableHead>Stock</TableHead>
-                  <TableHead>Canjes</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {badgeType.rewards.map((reward) => (
-                  <TableRow key={reward.id}>
-                    <TableCell className="font-medium">{reward.name}</TableCell>
-                    <TableCell>{reward.badgeCost}</TableCell>
-                    <TableCell>{reward.supply === 0 ? "Ilimitado" : reward.supply}</TableCell>
-                    <TableCell>{reward._count?.redemptions ?? 0}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Card>
-        )}
-      </section>
+      <ConfirmModal
+        open={closeModalOpen}
+        onClose={() => setCloseModalOpen(false)}
+        onConfirm={() => handleAction("close")}
+        title="Cerrar tarea definitivamente"
+        description="Una vez cerrada no podrás otorgar más premios. Esta acción no se puede deshacer."
+        confirmLabel="Cerrar tarea"
+        variant="danger"
+        loading={acting}
+      />
     </div>
   );
 }

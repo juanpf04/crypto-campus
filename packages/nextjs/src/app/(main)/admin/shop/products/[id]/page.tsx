@@ -301,7 +301,7 @@ export default function AdminProductDetailPage() {
               Editar grupo
             </Button>
             <Button
-              variant={group.active ? "danger" : "primary"}
+              variant={group.active ? "danger" : "success"}
               className="flex-1"
               onClick={handleToggleGroup}
               loading={toggling === "group"}
@@ -359,7 +359,7 @@ export default function AdminProductDetailPage() {
                 Editar variante
               </Button>
               <Button
-                variant={selectedVariant.active ? "danger" : "primary"}
+                variant={selectedVariant.active ? "danger" : "success"}
                 size="sm"
                 className="flex-1"
                 onClick={() => handleToggleVariant(selectedVariant.id, selectedVariant.active)}

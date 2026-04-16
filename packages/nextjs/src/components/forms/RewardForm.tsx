@@ -8,34 +8,33 @@ export interface RewardFormData {
   description: string;
   badgeCost: string;
   supply: string;
-  badgeTypeId: string;
+  subjectOfferingId: string;
 }
 
 interface RewardFormProps {
   onSubmit: (data: RewardFormData) => Promise<void> | void;
   initialValues?: Partial<RewardFormData>;
   isEdit?: boolean;
-  badgeTypes: { value: string; label: string }[];
+  subjectOfferings: { value: string; label: string }[];
 }
 
-export function RewardForm({ onSubmit, initialValues, isEdit, badgeTypes }: RewardFormProps) {
+export function RewardForm({ onSubmit, initialValues, isEdit, subjectOfferings }: RewardFormProps) {
   const { fields, errors, submitError, loading, setField, handleSubmit } = useForm<RewardFormData>({
     initialValues: {
       name: initialValues?.name ?? "",
       description: initialValues?.description ?? "",
       badgeCost: initialValues?.badgeCost ?? "",
       supply: initialValues?.supply ?? "0",
-      badgeTypeId: initialValues?.badgeTypeId ?? "",
+      subjectOfferingId: initialValues?.subjectOfferingId ?? "",
     },
     validate: (v) => {
       const e: Partial<Record<keyof RewardFormData, string>> = {};
       if (!v.name) e.name = "El nombre es obligatorio";
-      if (!v.description) e.description = "La descripción es obligatoria";
       const cost = parseInt(v.badgeCost);
-      if (isNaN(cost) || cost < 1) e.badgeCost = "El coste debe ser al menos 1 badge";
+      if (isNaN(cost) || cost < 1) e.badgeCost = "El coste debe ser al menos 1 insignia";
       const supply = parseInt(v.supply);
       if (isNaN(supply) || supply < 0) e.supply = "El stock no puede ser negativo";
-      if (!v.badgeTypeId) e.badgeTypeId = "Selecciona un tipo de insignia";
+      if (!v.subjectOfferingId) e.subjectOfferingId = "Selecciona una asignatura";
       return e;
     },
     onSubmit,
@@ -51,7 +50,7 @@ export function RewardForm({ onSubmit, initialValues, isEdit, badgeTypes }: Rewa
         error={errors.name}
       />
       <Textarea
-        label="Descripción"
+        label="Descripción (opcional)"
         placeholder="Describe la recompensa"
         value={fields.description}
         onChange={setField("description")}
@@ -59,7 +58,7 @@ export function RewardForm({ onSubmit, initialValues, isEdit, badgeTypes }: Rewa
       />
       <div className="grid grid-cols-2 gap-4">
         <Input
-          label="Coste (en badges)"
+          label="Coste (en insignias)"
           type="number"
           min="1"
           placeholder="3"
@@ -78,12 +77,12 @@ export function RewardForm({ onSubmit, initialValues, isEdit, badgeTypes }: Rewa
         />
       </div>
       <Select
-        label="Tipo de insignia requerida"
-        options={badgeTypes}
-        value={fields.badgeTypeId}
-        onChange={setField("badgeTypeId")}
-        error={errors.badgeTypeId}
-        placeholder="Selecciona insignia"
+        label="Asignatura"
+        options={subjectOfferings}
+        value={fields.subjectOfferingId}
+        onChange={setField("subjectOfferingId")}
+        error={errors.subjectOfferingId}
+        placeholder="Selecciona asignatura"
         disabled={isEdit}
       />
       {submitError && <p className="text-sm text-danger">{submitError}</p>}

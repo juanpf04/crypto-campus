@@ -19,7 +19,7 @@ const USE_REQUEST_STATUS: Record<number, string> = {
 interface UseRequestCardProps {
   requestId: number;
   rewardName: string;
-  badgeTypeName: string;
+  subjectName: string;
   status: number;
   /** Acciones para el estudiante */
   onCancel?: () => void;
@@ -32,7 +32,7 @@ interface UseRequestCardProps {
 export function UseRequestCard({
   requestId,
   rewardName,
-  badgeTypeName,
+  subjectName,
   status,
   onCancel,
   onApprove,
@@ -46,7 +46,7 @@ export function UseRequestCard({
       <div className="flex items-start justify-between">
         <div>
           <p className="font-medium text-text">{rewardName}</p>
-          <p className="text-sm text-text-muted">{badgeTypeName}</p>
+          <p className="text-sm text-text-muted">{subjectName}</p>
         </div>
         <StatusBadge status={statusKey} />
       </div>

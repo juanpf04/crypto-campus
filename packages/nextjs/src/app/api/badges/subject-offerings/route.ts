@@ -6,7 +6,7 @@ export async function GET() {
 		const result = await getMySubjectOfferings();
 		return NextResponse.json(result);
 	} catch (error) {
-		const message = error instanceof Error ? error.message : "Error al obtener ofertas de materias";
+		const message = error instanceof Error ? error.message : "Error al listar asignaturas";
 		const status = message === "No autenticado" ? 401 : message === "No autorizado" ? 403 : 500;
 		if (status === 500) console.error("[GET /api/badges/subject-offerings]", error);
 		return NextResponse.json({ error: message }, { status });

@@ -96,8 +96,8 @@ export default function AdminLibraryItemsPage() {
                       <TableCell><StatusBadge status={item.active ? "ACTIVE" : "INACTIVE"} /></TableCell>
                       <TableCell>
                         <div className="flex gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => router.push(`/admin/library/items/${item.id}/edit`)}>Editar</Button>
-                          <Button variant={item.active ? "ghost" : "outline"} size="sm" onClick={() => handleToggleActive(item.id, item.active)}>
+                          <Button variant="secondary" size="sm" onClick={() => router.push(`/admin/library/items/${item.id}/edit`)}>Editar</Button>
+                          <Button variant={item.active ? "danger" : "success"} size="sm" onClick={() => handleToggleActive(item.id, item.active)}>
                             {item.active ? "Desactivar" : "Reactivar"}
                           </Button>
                         </div>

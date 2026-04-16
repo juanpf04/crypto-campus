@@ -31,7 +31,7 @@ const statusConfig: Record<DomainStatus, { label: string; variant: "success" | "
   REJECTED: { label: "Rechazado", variant: "danger" },
   // Genérico
   ACTIVE: { label: "Activo", variant: "success" },
-  INACTIVE: { label: "Inactivo", variant: "neutral" },
+  INACTIVE: { label: "Inactivo", variant: "danger" },
 };
 
 interface StatusBadgeProps {

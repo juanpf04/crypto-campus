@@ -30,7 +30,11 @@ interface UseRequest {
   status: string;
   createdAt: string;
   student: { id: string; name: string; email: string };
-  reward: { id: string; name: string; badgeType: { name: string } };
+  reward: {
+    id: string;
+    name: string;
+    subjectBadge: { subjectOffering: { group: string; subject: { name: string; code: string } } };
+  };
 }
 
 export default function ProfessorUseRequestsPage() {
@@ -133,7 +137,7 @@ export default function ProfessorUseRequestsPage() {
                       </div>
                     </TableCell>
                     <TableCell className="font-medium">{req.reward.name}</TableCell>
-                    <TableCell className="text-text-muted">{req.reward.badgeType.name}</TableCell>
+                    <TableCell className="text-text-muted">{req.reward.subjectBadge.subjectOffering.subject.code} · {req.reward.subjectBadge.subjectOffering.group}</TableCell>
                     <TableCell className="text-text-muted">
                       {new Date(req.createdAt).toLocaleDateString("es-ES")}
                     </TableCell>
@@ -189,7 +193,7 @@ export default function ProfessorUseRequestsPage() {
                       </div>
                     </TableCell>
                     <TableCell className="font-medium">{req.reward.name}</TableCell>
-                    <TableCell className="text-text-muted">{req.reward.badgeType.name}</TableCell>
+                    <TableCell className="text-text-muted">{req.reward.subjectBadge.subjectOffering.subject.code} · {req.reward.subjectBadge.subjectOffering.group}</TableCell>
                     <TableCell className="text-text-muted">
                       {new Date(req.createdAt).toLocaleDateString("es-ES")}
                     </TableCell>

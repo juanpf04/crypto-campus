@@ -1,72 +1,117 @@
 "use client";
 
 /**
- * Crear tipo de insignia.
+ * Crear nueva tarea (assignment) con N premios.
  *
- * Carga las asignaturas del profesor y muestra el formulario
- * de creación de badge type.
+ * Permite añadir/quitar premios dinámicamente. Cada premio tiene nombre,
+ * descripción opcional, cantidad de insignias y nº máximo de ganadores.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
+import { Textarea } from "@/components/ui/Textarea";
+import { Toggle } from "@/components/ui/Toggle";
 import { Spinner } from "@/components/ui/Spinner";
-import { BadgeTypeForm, type BadgeTypeFormData } from "@/components/forms/BadgeTypeForm";
+import { SectionTitle } from "@/components/shared/SectionTitle";
+import { icons } from "@/components/ui/icons";
 
 interface SubjectOffering {
   id: string;
-  subject: { name: string };
+  group: string;
   academicYear: string;
+  subject: { name: string; code: string };
 }
 
-export default function ProfessorNewBadgeTypePage() {
+interface PrizeForm {
+  name: string;
+  description: string;
+  badgeReward: number;
+  maxWinners: number;
+}
+
+const EMPTY_PRIZE: PrizeForm = { name: "", description: "", badgeReward: 5, maxWinners: 1 };
+
+export default function NewAssignmentPage() {
   const router = useRouter();
   const { addToast } = useToast();
 
-  const [subjectOfferings, setSubjectOfferings] = useState<{ value: string; label: string }[]>([]);
+  const [offerings, setOfferings] = useState<SubjectOffering[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
-  const loadSubjectOfferings = useCallback(async () => {
-    try {
-      const res = await fetch("/api/badges/subject-offerings");
-      if (res.ok) {
-        const data: SubjectOffering[] = await res.json();
-        setSubjectOfferings(
-          data.map((so) => ({
-            value: so.id,
-            label: `${so.subject.name} (${so.academicYear})`,
-          })),
-        );
-      }
-    } catch {
-      addToast("Error al cargar asignaturas", "danger");
-    } finally {
-      setLoading(false);
-    }
+  const [subjectOfferingId, setSubjectOfferingId] = useState("");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [deadline, setDeadline] = useState("");
+  const [autoClose, setAutoClose] = useState(false);
+  const [prizes, setPrizes] = useState<PrizeForm[]>([{ ...EMPTY_PRIZE, name: "Mejor entrega" }]);
+
+  useEffect(() => {
+    fetch("/api/badges/subject-offerings")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        setOfferings(data);
+        if (data.length > 0) setSubjectOfferingId(data[0].id);
+      })
+      .catch(() => addToast("Error al cargar asignaturas", "danger"))
+      .finally(() => setLoading(false));
   }, [addToast]);
 
-  useEffect(() => { loadSubjectOfferings(); }, [loadSubjectOfferings]);
+  function updatePrize(index: number, patch: Partial<PrizeForm>) {
+    setPrizes((prev) => prev.map((p, i) => (i === index ? { ...p, ...patch } : p)));
+  }
 
-  async function handleSubmit(data: BadgeTypeFormData) {
-    const res = await fetch("/api/badges/types", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: data.name,
-        description: data.description,
-        subjectOfferingId: data.subjectOfferingId,
-      }),
-    });
+  function addPrize() {
+    setPrizes((prev) => [...prev, { ...EMPTY_PRIZE }]);
+  }
 
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || "Error al crear tipo de insignia");
+  function removePrize(index: number) {
+    setPrizes((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!subjectOfferingId) return addToast("Selecciona una asignatura", "danger");
+    if (!name.trim()) return addToast("Escribe un nombre", "danger");
+    if (prizes.some((p) => !p.name.trim())) return addToast("Cada premio necesita un nombre", "danger");
+    if (prizes.some((p) => p.badgeReward < 1 || p.maxWinners < 1))
+      return addToast("Cantidades deben ser >= 1", "danger");
+
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/badges/assignments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subjectOfferingId,
+          name: name.trim(),
+          description: description.trim() || undefined,
+          deadline: deadline || null,
+          autoClose,
+          prizes: prizes.map((p) => ({
+            name: p.name.trim(),
+            description: p.description.trim() || undefined,
+            badgeReward: p.badgeReward,
+            maxWinners: p.maxWinners,
+          })),
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Error al crear tarea");
+
+      addToast("Tarea creada correctamente", "success");
+      router.push(`/professor/badges/${body.assignment.id}`);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : "Error al crear tarea", "danger");
+    } finally {
+      setSubmitting(false);
     }
-
-    addToast("Tipo de insignia creado correctamente", "success");
-    router.push("/professor/badges");
   }
 
   if (loading) {
@@ -77,16 +122,144 @@ export default function ProfessorNewBadgeTypePage() {
     );
   }
 
+  if (offerings.length === 0) {
+    return (
+      <div className="space-y-6">
+        <BackLink href="/professor/badges" label="Volver" />
+        <Card className="py-12 text-center">
+          <p className="text-text-muted">No tienes asignaturas asignadas todavía.</p>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <BackLink href="/professor/badges" label="Volver a insignias" />
-      <h1 className="text-2xl font-bold text-text">Crear tipo de insignia</h1>
-      <Card className="max-w-2xl mx-auto p-6">
-        <BadgeTypeForm
-          onSubmit={handleSubmit}
-          subjectOfferings={subjectOfferings}
-        />
-      </Card>
+      <BackLink href="/professor/badges" label="Volver" />
+      <h1 className="text-2xl font-bold text-text">Nueva tarea</h1>
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* ── Datos generales ── */}
+        <Card className="space-y-4">
+          <SectionTitle icon={icons.task}>Datos de la tarea</SectionTitle>
+
+          <Select
+            label="Asignatura"
+            value={subjectOfferingId}
+            onChange={(e) => setSubjectOfferingId(e.target.value)}
+            options={offerings.map((o) => ({
+              value: o.id,
+              label: `${o.subject.code} · ${o.subject.name} (${o.group} · ${o.academicYear})`,
+            }))}
+          />
+
+          <Input
+            label="Nombre"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Práctica 1 - Página web"
+            required
+          />
+
+          <Textarea
+            label="Descripción (opcional)"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Detalles de la entrega, requisitos, etc."
+            rows={3}
+          />
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Input
+              label="Fecha límite (opcional)"
+              type="datetime-local"
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+            />
+            <div className="flex flex-col justify-end gap-2">
+              <Toggle
+                label="Auto-cerrar al pasar la fecha"
+                checked={autoClose}
+                onChange={setAutoClose}
+                disabled={!deadline}
+              />
+              <p className="text-xs text-text-muted">
+                Si está activo, al pasar el deadline pasa a &quot;En revisión&quot; automáticamente.
+              </p>
+            </div>
+          </div>
+        </Card>
+
+        {/* ── Premios ── */}
+        <Card className="space-y-4">
+          <div className="flex items-center justify-between">
+            <SectionTitle icon={icons.reward}>Premios</SectionTitle>
+            <Button type="button" variant="outline" size="sm" onClick={addPrize}>
+              + Añadir premio
+            </Button>
+          </div>
+
+          <div className="space-y-3">
+            {prizes.map((prize, idx) => (
+              <div key={idx} className="rounded-lg border border-border-default p-4 space-y-3 bg-bg">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-text">Premio #{idx + 1}</span>
+                  {prizes.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removePrize(idx)}
+                      className="text-xs text-danger hover:underline cursor-pointer"
+                    >
+                      Eliminar
+                    </button>
+                  )}
+                </div>
+
+                <Input
+                  label="Nombre del premio"
+                  value={prize.name}
+                  onChange={(e) => updatePrize(idx, { name: e.target.value })}
+                  placeholder="Mejor diseño, Mejor nota, Más útil..."
+                  required
+                />
+
+                <Input
+                  label="Descripción (opcional)"
+                  value={prize.description}
+                  onChange={(e) => updatePrize(idx, { description: e.target.value })}
+                  placeholder="Criterio de evaluación de este premio"
+                />
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    label="Insignias por ganador"
+                    type="number"
+                    min={1}
+                    value={prize.badgeReward}
+                    onChange={(e) => updatePrize(idx, { badgeReward: Number(e.target.value) })}
+                  />
+                  <Input
+                    label="Nº máximo de ganadores"
+                    type="number"
+                    min={1}
+                    value={prize.maxWinners}
+                    onChange={(e) => updatePrize(idx, { maxWinners: Number(e.target.value) })}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="outline" onClick={() => router.back()}>
+            Cancelar
+          </Button>
+          <Button type="submit" loading={submitting}>
+            Crear tarea
+          </Button>
+        </div>
+      </form>
     </div>
   );
 }

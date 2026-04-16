@@ -129,12 +129,12 @@ export default function PrintersListPage() {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Link href={`/admin/printing/printers/${printer.id}/edit`}>
-                        <Button variant="outline" size="sm">
+                        <Button variant="secondary" size="sm">
                           Editar
                         </Button>
                       </Link>
                       <Button
-                        variant={printer.active ? "danger" : "primary"}
+                        variant={printer.active ? "danger" : "success"}
                         size="sm"
                         loading={togglingId === printer.id}
                         onClick={() => toggleActive(printer)}

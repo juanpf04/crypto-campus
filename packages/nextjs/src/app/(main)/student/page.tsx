@@ -2,222 +2,319 @@
 
 /**
  * Dashboard del ESTUDIANTE.
- *
- * Secciones (en el orden del sidebar):
- * - Impresión: créditos de impresión disponibles
- * - Biblioteca: tokens LIB + préstamos activos
- * - Insignias y Recompensas: insignias obtenidas, recompensas (usadas/pendientes/disponibles), tareas
- * - Tienda: tokens SHOP
+ * Panel personal con alertas (reservas/vencimientos), resumen, gráfico de
+ * impresiones, actividad reciente (préstamos + pedidos) y accesos rápidos.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuthUser } from "@/hooks/useAuthUser";
 import { icons } from "@/components/ui/icons";
+import { Card } from "@/components/ui/Card";
+import { Spinner } from "@/components/ui/Spinner";
 import { StatCard } from "@/components/shared/StatCard";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { CompoundCard } from "@/components/shared/CompoundCard";
 import { DashboardGreeting } from "@/components/shared/DashboardGreeting";
-import { Spinner } from "@/components/ui/Spinner";
-import { LinkArrow } from "@/components/shared/LinkArrow";
+import { ActionRow } from "@/components/shared/ActionRow";
+import { AlertCalloutCard } from "@/components/shared/AlertCalloutCard";
+import { DashboardBarChart } from "@/components/shared/DashboardBarChart";
+import { RecentActivityCard } from "@/components/shared/RecentActivityCard";
+import { formatCredits, formatShortDate } from "@/lib/formatters";
+
+// ── Tipos ─────────────────────────────────────────────────────────────────
+
+interface Loan {
+  id: string;
+  status: string;
+  dueDate: string | null;
+  requestDate: string;
+  libraryItem: { title: string };
+}
+
+interface Order {
+  id: string;
+  orderId: number;
+  status: string;
+  product: { name: string };
+  totalPrice?: number;
+  purchaseDate?: string;
+  createdAt?: string;
+}
+
+interface BadgeSummary {
+  earnedBadges: number;
+  availableAssignments: number;
+  pendingRedemptions: number;
+  recentAwards: { prizeName: string; badgeReward: number; subjectName: string; date: string }[];
+}
+
+// ── Componente ────────────────────────────────────────────────────────────
 
 export default function StudentDashboard() {
-  const { user, loading } = useAuthUser();
+  const { user, loading: authLoading } = useAuthUser();
 
-  // Datos reales de impresión
-  const [printCredits, setPrintCredits] = useState<number | string>("—");
-  const [printCount, setPrintCount] = useState<number | string>("—");
+  const [printCredits, setPrintCredits] = useState<number | null>(null);
+  const [printCount, setPrintCount] = useState<number>(0);
+  const [printsByMonth, setPrintsByMonth] = useState<{ month: string; count: number }[]>([]);
+  const [libBalance, setLibBalance] = useState<number | null>(null);
+  const [shopBalance, setShopBalance] = useState<number | null>(null);
+  const [loans, setLoans] = useState<Loan[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [badgeSummary, setBadgeSummary] = useState<BadgeSummary | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Datos reales de la biblioteca
-  const [libBalance, setLibBalance] = useState<number | string>("—");
-  const [activeLoans, setActiveLoans] = useState<number | string>("—");
+  const loadStats = useCallback(async () => {
+    try {
+      const [creditsRes, printLogsRes, printsMonthRes, libBalRes, loansRes, shopBalRes, ordersRes, badgesRes] = await Promise.all([
+        fetch("/api/printer/credits"),
+        fetch("/api/printer/logs?limit=100&offset=0"),
+        fetch("/api/printer/logs/monthly"),
+        fetch("/api/library/balance"),
+        fetch("/api/library/loans/my"),
+        fetch("/api/shop/balance"),
+        fetch("/api/shop/orders?limit=5&offset=0"),
+        fetch("/api/badges/my"),
+      ]);
 
-  // Datos reales de la tienda
-  const [shopBalance, setShopBalance] = useState<number | string>("—");
-  const [ticketCount, setTicketCount] = useState<number | string>("—");
-  const [itemCount, setItemCount] = useState<number | string>("—");
+      if (creditsRes.ok) {
+        const data = await creditsRes.json();
+        setPrintCredits(data.availableCredits ?? 0);
+      }
+      if (printLogsRes.ok) {
+        const data = await printLogsRes.json();
+        setPrintCount(Array.isArray(data) ? data.length : 0);
+      }
+      if (printsMonthRes.ok) {
+        const data = await printsMonthRes.json();
+        setPrintsByMonth(Array.isArray(data) ? data : []);
+      }
+      if (libBalRes.ok) {
+        const data = await libBalRes.json();
+        setLibBalance(data.balance ?? 0);
+      }
+      if (loansRes.ok) {
+        const data = await loansRes.json();
+        setLoans(Array.isArray(data) ? data : []);
+      }
+      if (shopBalRes.ok) {
+        const data = await shopBalRes.json();
+        setShopBalance(data.balance ?? 0);
+      }
+      if (ordersRes.ok) {
+        const data = await ordersRes.json();
+        setOrders(Array.isArray(data.items) ? data.items : []);
+      }
+      if (badgesRes.ok) {
+        setBadgeSummary(await badgesRes.json());
+      }
+    } catch {
+      // Stats no críticas
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  useEffect(() => {
-    if (!user) return;
+  useEffect(() => { loadStats(); }, [loadStats]);
 
-    // Créditos disponibles
-    fetch("/api/printer/credits")
-      .then((r) => r.json())
-      .then((data) => setPrintCredits(data.availableCredits ?? "—"))
-      .catch(() => {});
-
-    // Total de impresiones realizadas (pedimos con limit alto para contar)
-    fetch("/api/printer/logs?limit=100&offset=0")
-      .then((r) => r.json())
-      .then((data) => setPrintCount(Array.isArray(data) ? data.length : "—"))
-      .catch(() => {});
-
-    // Balance de LibraryTokens
-    fetch("/api/library/balance")
-      .then((r) => r.json())
-      .then((data) => setLibBalance(data.balance ?? "—"))
-      .catch(() => {});
-
-    // Préstamos activos del estudiante
-    fetch("/api/library/loans/my")
-      .then((r) => r.json())
-      .then((data) => {
-        const loans = Array.isArray(data) ? data : [];
-        setActiveLoans(loans.filter((l: { status: string }) => l.status === "QUEUED" || l.status === "RESERVED" || l.status === "PICKED_UP").length);
-      })
-      .catch(() => {});
-
-    // Balance de ShopTokens
-    fetch("/api/shop/balance")
-      .then((r) => r.json())
-      .then((data) => setShopBalance(data.balance ?? "—"))
-      .catch(() => {});
-
-    // Total de tickets y artículos
-    fetch("/api/shop/batches?limit=1&offset=0")
-      .then((r) => r.json())
-      .then((data) => setTicketCount(data.total ?? "—"))
-      .catch(() => {});
-
-    fetch("/api/shop/orders?limit=1&offset=0")
-      .then((r) => r.json())
-      .then((data) => setItemCount(data.total ?? "—"))
-      .catch(() => {});
-  }, [user]);
-
-  if (loading || !user) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
+  if (authLoading || !user) {
+    return <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>;
   }
+
+  const val = (v: number | null | undefined) => loading ? "—" : String(v ?? 0);
+
+  // Préstamos activos y alertas
+  const activeLoans = loans.filter((l) => l.status === "QUEUED" || l.status === "RESERVED" || l.status === "PICKED_UP");
+  const readyToPickup = loans.filter((l) => l.status === "RESERVED");
+  const now = Date.now();
+  const overdueLoans = loans.filter((l) => l.status === "PICKED_UP" && l.dueDate && new Date(l.dueDate).getTime() < now);
+  const dueSoon = loans.filter((l) => {
+    if (l.status !== "PICKED_UP" || !l.dueDate) return false;
+    const due = new Date(l.dueDate).getTime();
+    const diff = due - now;
+    return diff >= 0 && diff <= 3 * 24 * 60 * 60 * 1000;
+  });
+
+  // Últimos préstamos (ordenados por requestDate desc, top 5)
+  const recentLoans = [...loans]
+    .sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime())
+    .slice(0, 5);
 
   return (
     <div className="space-y-10">
-      <DashboardGreeting
-        name={user.name}
-        subtitle="Aquí tienes un resumen de tu actividad en CryptoCampus."
-      />
+      <DashboardGreeting name={user.name} subtitle="Tu panel personal de CryptoCampus." />
 
-      {/* ── Sección: Impresión ── */}
-      <section className="space-y-4">
-        <SectionTitle icon={icons.print}>Impresión</SectionTitle>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Link href="/student/library/printing" className="group relative block">
-            <StatCard
-              title="Créditos disponibles"
-              value={printCredits}
-              subtitle="1 crédito = 1 página"
-              icon={icons.print}
-              className="h-full transition-colors group-hover:border-primary/50"
+      {/* ── Alertas personales ── */}
+      {(overdueLoans.length > 0 || dueSoon.length > 0 || readyToPickup.length > 0) && (
+        <div className="space-y-3">
+          {overdueLoans.length > 0 && (
+            <AlertCalloutCard
+              variant="danger"
+              icon={icons.alert}
+              title={`${overdueLoans.length} préstamo${overdueLoans.length !== 1 ? "s" : ""} vencido${overdueLoans.length !== 1 ? "s" : ""}`}
+              description="Devuélvelos cuanto antes para evitar sanciones"
+              actionText="Ver préstamos"
+              href="/student/library"
             />
-            <LinkArrow />
-          </Link>
-          <Link href="/student/library/printing/history" className="group relative block">
-            <StatCard
-              title="Impresiones realizadas"
-              value={printCount}
-              subtitle="Total acumulado"
-              icon={icons.orders}
-              className="h-full transition-colors group-hover:border-primary/50"
+          )}
+          {dueSoon.length > 0 && (
+            <AlertCalloutCard
+              variant="warning"
+              icon={icons.pending}
+              title={`${dueSoon.length} préstamo${dueSoon.length !== 1 ? "s" : ""} vence${dueSoon.length !== 1 ? "n" : ""} pronto`}
+              description="Devuélvelos en los próximos 3 días"
+              actionText="Ver préstamos"
+              href="/student/library"
             />
-            <LinkArrow />
-          </Link>
-        </div>
-      </section>
-
-      {/* ── Sección: Biblioteca ── */}
-      <section className="space-y-4">
-        <SectionTitle icon={icons.library}>Biblioteca</SectionTitle>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Link href="/student/library" className="group relative block">
-            <StatCard
-              title="LibraryTokens"
-              value={libBalance}
-              subtitle="Balance actual"
+          )}
+          {readyToPickup.length > 0 && (
+            <AlertCalloutCard
+              variant="success"
               icon={icons.library}
-              className="h-full transition-colors group-hover:border-primary/50"
+              title={`${readyToPickup.length} reserva${readyToPickup.length !== 1 ? "s" : ""} lista${readyToPickup.length !== 1 ? "s" : ""} para recoger`}
+              description="Pasa por la biblioteca a recogerla"
+              actionText="Ver préstamos"
+              href="/student/library"
             />
-            <LinkArrow />
-          </Link>
-          <Link href="/student/library" className="group relative block">
-            <StatCard
-              title="Préstamos activos"
-              value={activeLoans}
-              subtitle="Solicitados o en curso"
-              icon={icons.loans}
-              className="h-full transition-colors group-hover:border-primary/50"
-            />
-            <LinkArrow />
-          </Link>
-          <Link href="/student/library/rooms" className="group relative block">
-            <StatCard
-              title="Salas de estudio"
-              value=""
-              subtitle="Reservar sala para hoy"
-              icon={icons.rooms}
-              className="h-full transition-colors group-hover:border-primary/50"
-            />
-            <LinkArrow />
-          </Link>
+          )}
         </div>
-      </section>
+      )}
 
-      {/* ── Sección: Insignias y Recompensas ── */}
+      {/* ── Mi resumen ── */}
       <section className="space-y-4">
-        <SectionTitle icon={icons.badge}>Insignias y Recompensas</SectionTitle>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <SectionTitle icon={icons.student}>Mi resumen</SectionTitle>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
-            title="Insignias obtenidas"
-            value="—"
-            subtitle="Total"
-            icon={icons.badge}
+            title="Créditos de impresión"
+            value={printCredits !== null ? formatCredits(printCredits) : "—"}
+            subtitle={`${printCount} impresiones realizadas`}
+            icon={icons.print}
           />
-
           <CompoundCard
-            icon={icons.reward}
-            title="Recompensas"
+            icon={icons.token}
+            title="Mis tokens"
             slots={[
-              { value: "—", label: "Usadas", color: "text-success" },
-              { value: "—", label: "Pendientes", color: "text-warning" },
-              { value: "—", label: "Disponibles", color: "text-primary" },
+              { value: val(libBalance), label: "LIB", color: "text-primary" },
+              { value: val(shopBalance), label: "SHOP", color: "text-success" },
             ]}
           />
-
           <StatCard
-            title="Tareas disponibles"
-            value="—"
-            subtitle="Para conseguir insignias"
-            icon={icons.task}
+            title="Préstamos activos"
+            value={val(activeLoans.length)}
+            subtitle={overdueLoans.length > 0 ? `${overdueLoans.length} vencidos` : "Ningún vencido"}
+            icon={icons.loans}
+          />
+          <CompoundCard
+            icon={icons.badge}
+            title="Insignias"
+            slots={[
+              { value: val(badgeSummary?.earnedBadges), label: "Obtenidas", color: "text-warning" },
+              { value: val(badgeSummary?.availableAssignments), label: "Tareas", color: "text-primary" },
+            ]}
           />
         </div>
       </section>
 
-      {/* ── Sección: Tienda ── */}
+      {/* ── Mi actividad: gráfico + insignias recientes ── */}
       <section className="space-y-4">
-        <SectionTitle icon={icons.shop}>Tienda</SectionTitle>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Link href="/student/shop" className="group relative block">
-            <StatCard
-              title="ShopTokens"
-              value={shopBalance}
-              subtitle="Balance actual"
-              icon={icons.shop}
-              className="h-full transition-colors group-hover:border-primary/50"
-            />
-            <LinkArrow />
-          </Link>
-          <Link href="/student/shop/orders" className="group relative block">
-            <StatCard
-              title="Mis pedidos"
-              value={`${ticketCount} tickets · ${itemCount} artículos`}
-              subtitle="Ver historial de compras"
-              icon={icons.orders}
-              className="h-full transition-colors group-hover:border-primary/50"
-            />
-            <LinkArrow />
-          </Link>
+        <SectionTitle icon={icons.history}>Mi actividad</SectionTitle>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <DashboardBarChart
+            title="Páginas impresas por mes"
+            data={printsByMonth}
+            formatter={(v) => `${v} páginas`}
+            emptyMessage="Aún no has impreso nada en los últimos 6 meses"
+          />
+
+          {/* Últimas insignias */}
+          <Card className="space-y-3">
+            <h3 className="font-medium text-text">Últimas insignias</h3>
+            {badgeSummary && badgeSummary.recentAwards.length > 0 ? (
+              <div className="space-y-2">
+                {badgeSummary.recentAwards.map((a, i) => (
+                  <div key={i} className="flex items-center gap-3 py-1.5">
+                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-warning/15 text-warning">
+                      {icons.badge}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-text truncate">{a.prizeName}</p>
+                      <p className="text-xs text-text-muted truncate">{a.subjectName}</p>
+                    </div>
+                    <span className="text-sm font-semibold text-warning shrink-0">+{a.badgeReward}</span>
+                    <span className="text-xs text-text-muted shrink-0">
+                      {formatShortDate(a.date)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-8 text-center space-y-2">
+                <p className="text-sm text-text-muted">Aún no tienes insignias</p>
+                <Link href="/student/badges" className="text-sm text-primary hover:underline">
+                  Explorar tareas disponibles →
+                </Link>
+              </div>
+            )}
+          </Card>
+        </div>
+      </section>
+
+      {/* ── Historial reciente ── */}
+      <section className="space-y-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <RecentActivityCard
+            title="Últimos préstamos"
+            items={recentLoans.map((l) => ({
+              id: l.id,
+              title: l.libraryItem.title,
+              subtitle: "",
+              status: l.status,
+              date: l.requestDate,
+            }))}
+            emptyMessage="Aún no tienes préstamos"
+          />
+
+          <RecentActivityCard
+            title="Últimos pedidos"
+            items={orders.map((o) => ({
+              id: o.id,
+              title: o.product.name,
+              subtitle: "",
+              status: o.status,
+              date: o.purchaseDate ?? o.createdAt ?? new Date().toISOString(),
+            }))}
+            emptyMessage="Aún no tienes pedidos"
+          />
+        </div>
+      </section>
+
+      {/* ── Accesos rápidos ── */}
+      <section className="space-y-4">
+        <SectionTitle icon={icons.home}>Accede</SectionTitle>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {/* Biblioteca */}
+          <Card className="overflow-hidden p-0">
+            <ActionRow href="/student/library" icon={icons.library} title="Biblioteca" description="Explorar catálogo y préstamos" stat={`${activeLoans.length} activos`} />
+            <ActionRow href="/student/library/rooms" icon={icons.rooms} title="Salas de estudio" description="Reservar sala" stat="" isLast />
+          </Card>
+
+          {/* Tienda */}
+          <Card className="overflow-hidden p-0">
+            <ActionRow href="/student/shop" icon={icons.shop} title="Tienda" description="Comprar con ShopTokens" stat={`${val(shopBalance)} SHOP`} />
+            <ActionRow href="/student/shop/orders" icon={icons.orders} title="Mis pedidos" description="Historial de compras" stat={`${orders.length} recientes`} isLast />
+          </Card>
+
+          {/* Impresión */}
+          <Card className="overflow-hidden p-0">
+            <ActionRow href="/student/library/printing" icon={icons.print} title="Imprimir" description="Enviar documento a impresora" stat={printCredits !== null ? `${formatCredits(printCredits)} créditos` : "—"} />
+            <ActionRow href="/student/library/printing/history" icon={icons.history} title="Historial" description="Ver impresiones anteriores" stat={`${printCount} total`} isLast />
+          </Card>
+
+          {/* Insignias */}
+          <Card className="overflow-hidden p-0">
+            <ActionRow href="/student/badges" icon={icons.badge} title="Insignias" description="Tareas y logros" stat={`${badgeSummary?.availableAssignments ?? "—"} tareas`} />
+            <ActionRow href="/student/badges/rewards" icon={icons.reward} title="Recompensas" description="Canjear con insignias" stat={badgeSummary?.pendingRedemptions ? `${badgeSummary.pendingRedemptions} pendientes` : ""} isLast />
+          </Card>
         </div>
       </section>
     </div>

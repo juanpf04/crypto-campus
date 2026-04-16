@@ -3,9 +3,9 @@
 /**
  * Panel de administración de insignias.
  *
- * Visión global del sistema de badges para el admin:
- * - 5 StatCards con métricas globales (tipos, tareas, otorgamientos, recompensas, canjes)
- * - ActionRows de acceso rápido a gestión de tipos, recompensas y solicitudes
+ * Visión global del sistema:
+ * - Stats globales del sistema
+ * - Acceso rápido a tareas, recompensas y solicitudes
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -20,11 +20,16 @@ import { ActionRow } from "@/components/shared/ActionRow";
 import { icons } from "@/components/ui/icons";
 
 interface BadgeStats {
-  totalBadgeTypes: number;
-  totalTasks: number;
+  totalSubjectBadges: number;
+  totalAssignments: number;
+  openAssignments: number;
+  reviewingAssignments: number;
+  closedAssignments: number;
+  totalPrizes: number;
   totalAwards: number;
   totalRewards: number;
   totalRedemptions: number;
+  pendingRequests: number;
 }
 
 export default function AdminBadgesPage() {
@@ -38,7 +43,7 @@ export default function AdminBadgesPage() {
       const res = await fetch("/api/badges/stats");
       if (res.ok) setStats(await res.json());
     } catch {
-      addToast("Error al cargar estadísticas de insignias", "danger");
+      addToast("Error al cargar estadísticas", "danger");
     } finally {
       setLoading(false);
     }
@@ -63,7 +68,7 @@ export default function AdminBadgesPage() {
       <div>
         <h1 className="text-2xl font-bold text-text">Insignias</h1>
         <p className="text-text-muted mt-1">
-          Gestión global del sistema de insignias, tareas y recompensas.
+          Gestión global de tareas, premios y recompensas por asignatura.
         </p>
       </div>
 
@@ -71,36 +76,11 @@ export default function AdminBadgesPage() {
       <section className="space-y-4">
         <SectionTitle icon={icons.badge}>Resumen</SectionTitle>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <StatCard
-            title="Tipos de insignia"
-            value={val(stats?.totalBadgeTypes)}
-            subtitle="Creados por profesores"
-            icon={icons.badge}
-          />
-          <StatCard
-            title="Tareas"
-            value={val(stats?.totalTasks)}
-            subtitle="En todos los tipos"
-            icon={icons.task}
-          />
-          <StatCard
-            title="Otorgamientos"
-            value={val(stats?.totalAwards)}
-            subtitle="Insignias otorgadas"
-            icon={icons.student}
-          />
-          <StatCard
-            title="Recompensas"
-            value={val(stats?.totalRewards)}
-            subtitle="Definidas"
-            icon={icons.reward}
-          />
-          <StatCard
-            title="Canjes"
-            value={val(stats?.totalRedemptions)}
-            subtitle="Recompensas canjeadas"
-            icon={icons.token}
-          />
+          <StatCard title="Asignaturas activas" value={val(stats?.totalSubjectBadges)} subtitle="Con insignia creada" icon={icons.badge} />
+          <StatCard title="Tareas" value={val(stats?.totalAssignments)} subtitle="Totales" icon={icons.task} />
+          <StatCard title="Premios otorgados" value={val(stats?.totalAwards)} subtitle="A alumnos" icon={icons.student} />
+          <StatCard title="Recompensas" value={val(stats?.totalRewards)} subtitle="Definidas" icon={icons.reward} />
+          <StatCard title="Canjes" value={val(stats?.totalRedemptions)} subtitle="Realizados" icon={icons.history} />
         </div>
       </section>
 
@@ -109,11 +89,11 @@ export default function AdminBadgesPage() {
         <SectionTitle icon={icons.items}>Gestión</SectionTitle>
         <Card className="overflow-hidden p-0">
           <ActionRow
-            href="/admin/badges/types"
-            icon={icons.badge}
-            title="Tipos de insignia"
-            description="Ver, crear y gestionar todos los tipos de insignia"
-            stat={`${val(stats?.totalBadgeTypes)} tipos`}
+            href="/admin/badges/assignments"
+            icon={icons.task}
+            title="Tareas"
+            description="Ver todas las tareas creadas por los profesores"
+            stat={`${val(stats?.totalAssignments)} tareas`}
           />
           <ActionRow
             href="/admin/badges/rewards"
@@ -127,7 +107,7 @@ export default function AdminBadgesPage() {
             icon={icons.pending}
             title="Solicitudes de uso"
             description="Aprobar o rechazar solicitudes de uso de recompensas"
-            stat=""
+            stat={`${val(stats?.pendingRequests)} pendientes`}
             isLast
           />
         </Card>

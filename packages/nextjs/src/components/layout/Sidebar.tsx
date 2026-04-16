@@ -34,6 +34,7 @@ function getNavGroups(role: UserRole) {
           title: "Servicios",
           items: [
             { href: `${base}/library`, icon: icons.library, label: "Biblioteca" },
+            { href: `${base}/badges/assignments`, icon: icons.task, label: "Tareas" },
             { href: `${base}/badges`, icon: icons.badge, label: "Insignias" },
             { href: `${base}/shop`, icon: icons.shop, label: "Tienda" },
           ],
@@ -51,7 +52,7 @@ function getNavGroups(role: UserRole) {
         {
           title: "Gestión académica",
           items: [
-            { href: `${base}/badges`, icon: icons.badge, label: "Insignias" },
+            { href: `${base}/badges`, icon: icons.task, label: "Tareas" },
             { href: `${base}/rewards`, icon: icons.reward, label: "Recompensas" },
             { href: `${base}/students`, icon: icons.student, label: "Alumnos" },
           ],

@@ -15,7 +15,7 @@ interface RewardCardProps {
   badgeCost: number;
   supply: number;
   redemptionCount: number;
-  badgeTypeName: string;
+  subjectName: string;
   studentBadgeCount?: number;
   onRedeem?: () => void;
   redeeming?: boolean;
@@ -27,7 +27,7 @@ export function RewardCard({
   badgeCost,
   supply,
   redemptionCount,
-  badgeTypeName,
+  subjectName,
   studentBadgeCount,
   onRedeem,
   redeeming,
@@ -43,7 +43,7 @@ export function RewardCard({
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
-        <Badge variant="info">{badgeCost} {badgeTypeName}</Badge>
+        <Badge variant="info">{badgeCost} insignias · {subjectName}</Badge>
         {supply === 0 ? (
           <Badge variant="neutral">Ilimitado</Badge>
         ) : remaining > 0 ? (
@@ -55,7 +55,7 @@ export function RewardCard({
 
       {studentBadgeCount !== undefined && (
         <p className="text-xs text-text-muted">
-          Tienes {studentBadgeCount} badge{studentBadgeCount !== 1 ? "s" : ""} de {badgeTypeName}
+          Tienes {studentBadgeCount} insignia{studentBadgeCount !== 1 ? "s" : ""} de {subjectName}
         </p>
       )}
 

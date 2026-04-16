@@ -16,16 +16,16 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { icons } from "@/components/ui/icons";
 
 interface UseRequest {
+  id: string;
   requestId: number;
-  rewardName: string;
-  badgeTypeName: string;
-  studentName: string;
-  status: number; // 1=Pending, 2=Approved, 3=Rejected, 4=Cancelled
+  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+  student: { id: string; name: string; email: string };
+  reward: {
+    id: string;
+    name: string;
+    subjectBadge: { subjectOffering: { subject: { name: string; code: string }; group: string } };
+  };
 }
-
-const STATUS_MAP: Record<number, string> = {
-  1: "PENDING", 2: "APPROVED", 3: "REJECTED", 4: "CANCELLED",
-};
 
 export default function AdminUseRequestsPage() {
   const { addToast } = useToast();
@@ -36,9 +36,7 @@ export default function AdminUseRequestsPage() {
   const loadData = useCallback(async () => {
     try {
       const res = await fetch("/api/badges/use-requests");
-      if (res.ok) {
-        setRequests(await res.json());
-      }
+      if (res.ok) setRequests(await res.json());
     } catch { /* no-op */ }
     setLoading(false);
   }, []);
@@ -74,14 +72,16 @@ export default function AdminUseRequestsPage() {
           <Card className="overflow-hidden p-0">
             <div className="divide-y divide-border-default">
               {requests.map((r) => (
-                <div key={r.requestId} className="flex items-center justify-between p-4">
+                <div key={r.id} className="flex items-center justify-between p-4">
                   <div>
-                    <p className="text-sm font-medium text-text">{r.rewardName}</p>
-                    <p className="text-xs text-text-muted">{r.badgeTypeName} — {r.studentName}</p>
+                    <p className="text-sm font-medium text-text">{r.reward.name}</p>
+                    <p className="text-xs text-text-muted">
+                      {r.reward.subjectBadge.subjectOffering.subject.code} · {r.reward.subjectBadge.subjectOffering.group} — {r.student.name}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <StatusBadge status={STATUS_MAP[r.status] || "PENDING"} />
-                    {r.status === 1 && (
+                    <StatusBadge status={r.status} />
+                    {r.status === "PENDING" && (
                       <>
                         <Button size="sm" onClick={() => handleAction(r.requestId, "approve")} loading={processing === r.requestId}>
                           Aprobar

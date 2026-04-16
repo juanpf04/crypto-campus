@@ -1,14 +1,13 @@
 /**
- * badges.ts — Server Actions para el módulo de insignias.
+ * badges.ts — Server Actions para el módulo de insignias (rediseñado).
  *
- * Gestiona tipos de badge, tareas, premios, recompensas y solicitudes de uso.
- * El contrato BadgeSystem es ERC-1155 soulbound (no transferible).
+ * Modelo: SubjectBadge (1:1 con SubjectOffering) → Assignment → PrizeCategory[].
+ * Las insignias son por asignatura. Las recompensas se canjean con insignias
+ * de esa asignatura.
  *
  * Patrón de transacciones:
- * - Operaciones de PROFESSOR/ADMIN (crear tipos, tareas, recompensas, otorgar, aprobar/rechazar):
- *   firmadas por adminWalletClient (Account[0] de Hardhat).
- * - Operaciones de ESTUDIANTE (canjear recompensa, solicitar uso, cancelar):
- *   firmadas por la wallet custodial del estudiante.
+ * - Operaciones de PROFESSOR/ADMIN: firmadas por adminWalletClient.
+ * - Operaciones de STUDENT: firmadas por la wallet custodial del alumno.
  */
 
 "use server";
@@ -36,602 +35,693 @@ async function getUserWalletClient(userId: string) {
 	return { walletClient, address: user.address };
 }
 
-// ── Badge Types ──────────────────────────────────────────────────────────
+/**
+ * Cierra automáticamente assignments cuyo deadline ya pasó si tienen autoClose=true.
+ * Idempotente. Llamar antes de devolver datos al cliente.
+ */
+async function autoCloseExpiredAssignments(): Promise<void> {
+	const now = new Date();
+	await prisma.assignment.updateMany({
+		where: {
+			autoClose: true,
+			status: "OPEN",
+			deadline: { lte: now },
+		},
+		data: { status: "REVIEWING" },
+	});
+}
 
-export async function createBadgeType(input: {
+// ── SubjectBadge (insignia de asignatura) ────────────────────────────────
+
+/**
+ * Devuelve el SubjectBadge de una asignatura. Si no existe, lo crea on-chain
+ * y en Prisma. Solo el profesor de la asignatura (o admin) puede invocarla.
+ */
+export async function getOrCreateSubjectBadge(subjectOfferingId: string) {
+	const session = await getSession();
+	ensureRole(session, ["PROFESSOR", "ADMIN"]);
+
+	const offering = await prisma.subjectOffering.findUnique({
+		where: { id: subjectOfferingId },
+		include: { subjectBadge: true },
+	});
+	if (!offering) throw new Error("Asignatura no encontrada");
+	if (session.role !== "ADMIN" && offering.professorId !== session.userId)
+		throw new Error("No autorizado");
+
+	if (offering.subjectBadge) return offering.subjectBadge;
+
+	// Leer next ID y crear on-chain
+	const nextId = await publicClient.readContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "nextSubjectBadgeId",
+	}) as bigint;
+	const tokenId = Number(nextId);
+
+	const hash = await adminWalletClient.writeContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "createSubjectBadge",
+	});
+	const receipt = await publicClient.waitForTransactionReceipt({ hash });
+	if (receipt.status !== "success") throw new Error("La transacción fue revertida");
+
+	return prisma.subjectBadge.create({
+		data: { tokenId, subjectOfferingId, txHash: hash },
+	});
+}
+
+// ── Assignments ──────────────────────────────────────────────────────────
+
+export interface PrizeCategoryInput {
 	name: string;
 	description?: string;
+	badgeReward: number;
+	maxWinners: number;
+}
+
+/**
+ * Crea una assignment con sus PrizeCategories en cadena de transacciones:
+ * 1. Si no hay SubjectBadge para la asignatura, lo crea on-chain + Prisma.
+ * 2. Crea la Assignment on-chain → Prisma.
+ * 3. Por cada premio, crea PrizeCategory on-chain → Prisma.
+ */
+export async function createAssignment(input: {
 	subjectOfferingId: string;
+	name: string;
+	description?: string;
+	deadline?: string | null;
+	autoClose?: boolean;
+	prizes: PrizeCategoryInput[];
 }) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 
-	try {
-		const name = input.name.trim();
-		if (!name) throw new Error("El nombre es obligatorio");
+	const name = input.name.trim();
+	if (!name) throw new Error("El nombre es obligatorio");
+	if (!input.prizes || input.prizes.length === 0)
+		throw new Error("Debe incluir al menos un premio");
 
-		const nextId = await publicClient.readContract({
+	for (const p of input.prizes) {
+		if (!p.name.trim()) throw new Error("Cada premio necesita un nombre");
+		if (!Number.isInteger(p.badgeReward) || p.badgeReward < 1)
+			throw new Error("La recompensa de cada premio debe ser un entero >= 1");
+		if (!Number.isInteger(p.maxWinners) || p.maxWinners < 1)
+			throw new Error("El número máximo de ganadores debe ser un entero >= 1");
+	}
+
+	// 1. Asegurar SubjectBadge
+	const badge = await getOrCreateSubjectBadge(input.subjectOfferingId);
+
+	// 2. Crear Assignment on-chain
+	const nextAssignmentId = await publicClient.readContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "nextAssignmentId",
+	}) as bigint;
+	const assignmentChainId = Number(nextAssignmentId);
+
+	const assignmentHash = await adminWalletClient.writeContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "createAssignment",
+		args: [BigInt(badge.tokenId)],
+	});
+	const assignmentReceipt = await publicClient.waitForTransactionReceipt({ hash: assignmentHash });
+	if (assignmentReceipt.status !== "success") throw new Error("Error creando assignment on-chain");
+
+	// 3. Crear cada PrizeCategory on-chain
+	const prizeChainIds: number[] = [];
+	const prizeTxHashes: string[] = [];
+
+	for (const prize of input.prizes) {
+		const nextPrizeId = await publicClient.readContract({
 			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
 			abi: BADGE_SYSTEM_ABI,
-			functionName: "nextBadgeTypeId",
+			functionName: "nextPrizeCategoryId",
 		}) as bigint;
-		const tokenId = Number(nextId);
+		prizeChainIds.push(Number(nextPrizeId));
 
-		const hash = await adminWalletClient.writeContract({
+		const prizeHash = await adminWalletClient.writeContract({
 			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
 			abi: BADGE_SYSTEM_ABI,
-			functionName: "createBadgeType",
+			functionName: "addPrizeCategory",
+			args: [BigInt(assignmentChainId), BigInt(prize.badgeReward), BigInt(prize.maxWinners)],
 		});
-		const receipt = await publicClient.waitForTransactionReceipt({ hash });
-		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
+		const prizeReceipt = await publicClient.waitForTransactionReceipt({ hash: prizeHash });
+		if (prizeReceipt.status !== "success") throw new Error("Error creando premio on-chain");
+		prizeTxHashes.push(prizeHash);
+	}
 
-		const badgeType = await prisma.badgeType.create({
+	// 4. Persistir todo en Prisma en una transacción
+	try {
+		const assignment = await prisma.assignment.create({
 			data: {
-				tokenId,
+				assignmentId: assignmentChainId,
 				name,
 				description: input.description?.trim() || null,
-				subjectOfferingId: input.subjectOfferingId,
+				subjectBadgeId: badge.id,
+				deadline: input.deadline ? new Date(input.deadline) : null,
+				autoClose: input.autoClose ?? false,
 				creatorId: session.userId!,
-				txHash: hash,
+				txHash: assignmentHash,
+				prizes: {
+					create: input.prizes.map((prize, idx) => ({
+						prizeCategoryId: prizeChainIds[idx],
+						name: prize.name.trim(),
+						description: prize.description?.trim() || null,
+						badgeReward: prize.badgeReward,
+						maxWinners: prize.maxWinners,
+						txHash: prizeTxHashes[idx],
+					})),
+				},
 			},
+			include: { prizes: true },
 		});
-
-		return { success: true, badgeType };
-	} catch (error) {
-		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		throw new Error(`Error al crear tipo de insignia: ${error instanceof Error ? error.message : "desconocido"}`);
+		return { success: true, assignment };
+	} catch (e) {
+		logPrismaRecovery(`createAssignment (assignmentChainId=${assignmentChainId}, prizeChainIds=${prizeChainIds.join(",")})`, assignmentHash, e);
+		throw new Error("Assignment creada on-chain pero falló el guardado en BD. Revisa logs.");
 	}
 }
 
-export async function listBadgeTypes() {
+/**
+ * Lista assignments del profesor logueado (o todas si admin).
+ */
+export async function listAssignmentsForProfessor() {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
+	await autoCloseExpiredAssignments();
 
 	const where = session.role === "ADMIN" ? {} : { creatorId: session.userId! };
-
-	return prisma.badgeType.findMany({
+	return prisma.assignment.findMany({
 		where,
 		include: {
-			subjectOffering: { include: { subject: true } },
-			_count: { select: { tasks: true, awards: true } },
+			subjectBadge: { include: { subjectOffering: { include: { subject: true } } } },
+			prizes: { include: { _count: { select: { awards: true } } } },
+			_count: { select: { submissions: true } },
 		},
 		orderBy: { createdAt: "desc" },
 	});
 }
 
-export async function getBadgeType(id: string) {
-	const session = await getSession();
-	if (!session.userId) throw new Error("No autenticado");
-
-	const badgeType = await prisma.badgeType.findUnique({
-		where: { id },
-		include: {
-			subjectOffering: { include: { subject: true, professor: { select: { name: true } } } },
-			tasks: { orderBy: { createdAt: "desc" } },
-			rewards: { orderBy: { createdAt: "desc" } },
-			_count: { select: { awards: true } },
-		},
-	});
-	if (!badgeType) throw new Error("Tipo de insignia no encontrado");
-	return badgeType;
-}
-
-// ── Tasks ────────────────────────────────────────────────────────────────
-
-export async function createTask(input: {
-	name: string;
-	description?: string;
-	rewardAmount: number;
-	badgeTypeId: string;
-}) {
-	const session = await getSession();
-	ensureRole(session, ["PROFESSOR", "ADMIN"]);
-
-	try {
-		const name = input.name.trim();
-		if (!name) throw new Error("El nombre es obligatorio");
-		if (!Number.isInteger(input.rewardAmount) || input.rewardAmount < 0)
-			throw new Error("La cantidad de reward debe ser un entero no negativo");
-
-		const badgeType = await prisma.badgeType.findUnique({ where: { id: input.badgeTypeId } });
-		if (!badgeType) throw new Error("Tipo de insignia no encontrado");
-
-		const nextId = await publicClient.readContract({
-			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-			abi: BADGE_SYSTEM_ABI,
-			functionName: "nextTaskId",
-		}) as bigint;
-		const taskId = Number(nextId);
-
-		const hash = await adminWalletClient.writeContract({
-			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-			abi: BADGE_SYSTEM_ABI,
-			functionName: "createTask",
-			args: [BigInt(badgeType.tokenId), BigInt(input.rewardAmount)],
-		});
-		const receipt = await publicClient.waitForTransactionReceipt({ hash });
-		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
-
-		const task = await prisma.task.create({
-			data: {
-				taskId,
-				name,
-				description: input.description?.trim() || null,
-				rewardAmount: input.rewardAmount,
-				badgeTypeId: input.badgeTypeId,
-				creatorId: session.userId!,
-				txHash: hash,
-			},
-		});
-
-		return { success: true, task };
-	} catch (error) {
-		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		throw new Error(`Error al crear tarea: ${error instanceof Error ? error.message : "desconocido"}`);
-	}
-}
-
-export async function deactivateTask(taskPrismaId: string) {
-	const session = await getSession();
-	ensureRole(session, ["PROFESSOR", "ADMIN"]);
-
-	try {
-		const task = await prisma.task.findUnique({ where: { id: taskPrismaId } });
-		if (!task) throw new Error("Tarea no encontrada");
-
-		const hash = await adminWalletClient.writeContract({
-			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-			abi: BADGE_SYSTEM_ABI,
-			functionName: "deactivateTask",
-			args: [BigInt(task.taskId)],
-		});
-		const receipt = await publicClient.waitForTransactionReceipt({ hash });
-		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
-
-		await prisma.task.update({ where: { id: taskPrismaId }, data: { active: false } });
-
-		return { success: true };
-	} catch (error) {
-		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		throw new Error(`Error al desactivar tarea: ${error instanceof Error ? error.message : "desconocido"}`);
-	}
-}
-
-export async function listTasks(badgeTypeId?: string) {
-	const session = await getSession();
-	ensureRole(session, ["PROFESSOR", "ADMIN"]);
-
-	const where: Record<string, unknown> = {};
-	if (badgeTypeId) where.badgeTypeId = badgeTypeId;
-	if (session.role !== "ADMIN") where.creatorId = session.userId!;
-
-	return prisma.task.findMany({
-		where,
-		include: {
-			badgeType: { select: { name: true, tokenId: true } },
-			_count: { select: { awards: true } },
-		},
-		orderBy: { createdAt: "desc" },
-	});
-}
-
-// ── Awards ───────────────────────────────────────────────────────────────
-
-export async function awardBadge(taskPrismaId: string, studentId: string) {
-	const session = await getSession();
-	ensureRole(session, ["PROFESSOR", "ADMIN"]);
-
-	try {
-		const task = await prisma.task.findUnique({
-			where: { id: taskPrismaId },
-			include: { badgeType: true },
-		});
-		if (!task) throw new Error("Tarea no encontrada");
-		if (!task.active) throw new Error("La tarea está inactiva");
-
-		const student = await prisma.user.findUnique({
-			where: { id: studentId },
-			select: { address: true, role: true },
-		});
-		if (!student || student.role !== "STUDENT") throw new Error("Estudiante no encontrado");
-
-		const hash = await adminWalletClient.writeContract({
-			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-			abi: BADGE_SYSTEM_ABI,
-			functionName: "awardBadge",
-			args: [BigInt(task.taskId), student.address as `0x${string}`],
-		});
-		const receipt = await publicClient.waitForTransactionReceipt({ hash });
-		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
-
-		try {
-			await prisma.badgeAward.create({
-				data: {
-					userId: studentId,
-					taskId: taskPrismaId,
-					badgeTypeId: task.badgeTypeId,
-					awardedById: session.userId!,
-					txHash: hash,
-				},
-			});
-		} catch (dbError) {
-			logPrismaRecovery("awardBadge", hash, dbError);
-			throw new Error(`Error al guardar en base de datos. TxHash: ${hash}`);
-		}
-
-		return { success: true };
-	} catch (error) {
-		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		throw new Error(`Error al otorgar insignia: ${error instanceof Error ? error.message : "desconocido"}`);
-	}
-}
-
-export async function listAwardsForTask(taskPrismaId: string) {
-	const session = await getSession();
-	ensureRole(session, ["PROFESSOR", "ADMIN"]);
-
-	return prisma.badgeAward.findMany({
-		where: { taskId: taskPrismaId },
-		include: { user: { select: { id: true, name: true, email: true } } },
-		orderBy: { awardedAt: "desc" },
-	});
-}
-
-export async function getStudentBadges() {
+/**
+ * Lista assignments para el alumno: solo de las asignaturas en las que está
+ * matriculado, agrupadas por asignatura.
+ */
+export async function listAssignmentsForStudent() {
 	const session = await getSession();
 	ensureRole(session, ["STUDENT"]);
+	await autoCloseExpiredAssignments();
 
-	return prisma.badgeAward.findMany({
+	const enrollments = await prisma.enrollment.findMany({
 		where: { userId: session.userId! },
-		include: {
-			badgeType: { select: { id: true, name: true, tokenId: true } },
-			task: { select: { name: true, rewardAmount: true } },
+		select: { subjectOfferingId: true },
+	});
+	const offeringIds = enrollments.map(e => e.subjectOfferingId);
+	if (offeringIds.length === 0) return [];
+
+	const assignments = await prisma.assignment.findMany({
+		where: {
+			subjectBadge: { subjectOfferingId: { in: offeringIds } },
 		},
-		orderBy: { awardedAt: "desc" },
+		include: {
+			subjectBadge: { include: { subjectOffering: { include: { subject: true } } } },
+			prizes: true,
+			submissions: { where: { studentId: session.userId! }, take: 1 },
+		},
+		orderBy: { createdAt: "desc" },
+	});
+
+	return assignments.map(a => ({
+		...a,
+		hasSubmitted: a.submissions.length > 0,
+		submissions: undefined,
+	}));
+}
+
+export async function getAssignment(assignmentPrismaId: string) {
+	const session = await getSession();
+	if (!session.userId) throw new Error("No autenticado");
+	await autoCloseExpiredAssignments();
+
+	const assignment = await prisma.assignment.findUnique({
+		where: { id: assignmentPrismaId },
+		include: {
+			subjectBadge: { include: { subjectOffering: { include: { subject: true, professor: { select: { id: true, name: true } } } } } },
+			prizes: { include: { awards: { include: { user: { select: { id: true, name: true, email: true } } } } } },
+			submissions: { include: { student: { select: { id: true, name: true, email: true } } } },
+			creator: { select: { id: true, name: true } },
+		},
+	});
+	if (!assignment) throw new Error("Tarea no encontrada");
+
+	// Verificar acceso
+	const offeringId = assignment.subjectBadge.subjectOfferingId;
+	if (session.role === "STUDENT") {
+		const enrolled = await prisma.enrollment.findUnique({
+			where: { userId_subjectOfferingId: { userId: session.userId, subjectOfferingId: offeringId } },
+		});
+		if (!enrolled) throw new Error("No autorizado");
+	} else if (session.role === "PROFESSOR" && assignment.creatorId !== session.userId) {
+		throw new Error("No autorizado");
+	}
+
+	return assignment;
+}
+
+/**
+ * El alumno marca la assignment como entregada (simulación).
+ */
+export async function submitAssignment(assignmentPrismaId: string) {
+	const session = await getSession();
+	ensureRole(session, ["STUDENT"]);
+	await autoCloseExpiredAssignments();
+
+	const assignment = await prisma.assignment.findUnique({
+		where: { id: assignmentPrismaId },
+		include: { subjectBadge: true },
+	});
+	if (!assignment) throw new Error("Tarea no encontrada");
+	if (assignment.status !== "OPEN") throw new Error("La tarea ya no admite entregas");
+
+	const enrolled = await prisma.enrollment.findUnique({
+		where: {
+			userId_subjectOfferingId: {
+				userId: session.userId!,
+				subjectOfferingId: assignment.subjectBadge.subjectOfferingId,
+			},
+		},
+	});
+	if (!enrolled) throw new Error("No estás matriculado en esta asignatura");
+
+	const submission = await prisma.taskSubmission.upsert({
+		where: { assignmentId_studentId: { assignmentId: assignment.id, studentId: session.userId! } },
+		create: { assignmentId: assignment.id, studentId: session.userId! },
+		update: {},
+	});
+	return { success: true, submission };
+}
+
+export async function closeAssignmentForReview(assignmentPrismaId: string) {
+	const session = await getSession();
+	ensureRole(session, ["PROFESSOR", "ADMIN"]);
+
+	const assignment = await prisma.assignment.findUnique({ where: { id: assignmentPrismaId } });
+	if (!assignment) throw new Error("Tarea no encontrada");
+	if (session.role !== "ADMIN" && assignment.creatorId !== session.userId)
+		throw new Error("No autorizado");
+	if (assignment.status !== "OPEN") throw new Error("La tarea no está abierta");
+
+	const hash = await adminWalletClient.writeContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "closeAssignmentForReview",
+		args: [BigInt(assignment.assignmentId)],
+	});
+	const receipt = await publicClient.waitForTransactionReceipt({ hash });
+	if (receipt.status !== "success") throw new Error("Error on-chain");
+
+	return prisma.assignment.update({
+		where: { id: assignment.id },
+		data: { status: "REVIEWING" },
 	});
 }
 
-// ── Rewards ──────────────────────────────────────────────────────────────
+export async function closeAssignment(assignmentPrismaId: string) {
+	const session = await getSession();
+	ensureRole(session, ["PROFESSOR", "ADMIN"]);
+
+	const assignment = await prisma.assignment.findUnique({ where: { id: assignmentPrismaId } });
+	if (!assignment) throw new Error("Tarea no encontrada");
+	if (session.role !== "ADMIN" && assignment.creatorId !== session.userId)
+		throw new Error("No autorizado");
+	if (assignment.status === "CLOSED") throw new Error("La tarea ya está cerrada");
+
+	const hash = await adminWalletClient.writeContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "closeAssignment",
+		args: [BigInt(assignment.assignmentId)],
+	});
+	const receipt = await publicClient.waitForTransactionReceipt({ hash });
+	if (receipt.status !== "success") throw new Error("Error on-chain");
+
+	return prisma.assignment.update({
+		where: { id: assignment.id },
+		data: { status: "CLOSED", closedAt: new Date() },
+	});
+}
+
+// ── Premios (otorgar) ────────────────────────────────────────────────────
+
+/**
+ * Otorga un premio a una lista de alumnos en una sola tx on-chain.
+ */
+export async function awardPrize(prizeCategoryPrismaId: string, studentUserIds: string[]) {
+	const session = await getSession();
+	ensureRole(session, ["PROFESSOR", "ADMIN"]);
+
+	if (!Array.isArray(studentUserIds) || studentUserIds.length === 0)
+		throw new Error("Debes seleccionar al menos un alumno");
+
+	const prize = await prisma.prizeCategory.findUnique({
+		where: { id: prizeCategoryPrismaId },
+		include: {
+			assignment: { include: { subjectBadge: true } },
+			_count: { select: { awards: true } },
+		},
+	});
+	if (!prize) throw new Error("Premio no encontrado");
+	const assignment = prize.assignment;
+	if (session.role !== "ADMIN" && assignment.creatorId !== session.userId)
+		throw new Error("No autorizado");
+	if (assignment.status === "CLOSED") throw new Error("La tarea ya está cerrada");
+
+	if (prize._count.awards + studentUserIds.length > prize.maxWinners)
+		throw new Error(`Solo quedan ${prize.maxWinners - prize._count.awards} ganadores disponibles`);
+
+	// Obtener wallets de los alumnos
+	const students = await prisma.user.findMany({
+		where: { id: { in: studentUserIds }, role: "STUDENT" },
+		select: { id: true, address: true },
+	});
+	if (students.length !== studentUserIds.length)
+		throw new Error("Algún alumno no es válido");
+
+	// Verificar que no estén ya premiados en esta categoría
+	const existing = await prisma.badgeAward.findMany({
+		where: {
+			prizeCategoryId: prize.id,
+			userId: { in: studentUserIds },
+		},
+		select: { userId: true },
+	});
+	if (existing.length > 0)
+		throw new Error("Algún alumno ya ha sido premiado en esta categoría");
+
+	// Llamar al contrato
+	const hash = await adminWalletClient.writeContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "awardPrize",
+		args: [BigInt(prize.prizeCategoryId), students.map(s => s.address as `0x${string}`)],
+	});
+	const receipt = await publicClient.waitForTransactionReceipt({ hash });
+	if (receipt.status !== "success") throw new Error("Error on-chain otorgando premio");
+
+	// Crear los BadgeAward en Prisma
+	try {
+		await prisma.badgeAward.createMany({
+			data: students.map(s => ({
+				userId: s.id,
+				prizeCategoryId: prize.id,
+				subjectBadgeId: assignment.subjectBadgeId,
+				awardedById: session.userId!,
+				txHash: hash,
+			})),
+		});
+	} catch (e) {
+		logPrismaRecovery(`awardPrize (prizeId=${prize.id}, students=${studentUserIds.join(",")})`, hash, e);
+		throw new Error("Premio otorgado on-chain pero falló el log en BD");
+	}
+
+	return { success: true, awarded: students.length };
+}
+
+// ── Recompensas ──────────────────────────────────────────────────────────
 
 export async function createReward(input: {
+	subjectOfferingId: string;
 	name: string;
 	description?: string;
 	badgeCost: number;
 	supply: number;
-	badgeTypeId: string;
 }) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 
-	try {
-		const name = input.name.trim();
-		if (!name) throw new Error("El nombre es obligatorio");
-		if (!Number.isInteger(input.badgeCost) || input.badgeCost < 1)
-			throw new Error("El coste debe ser al menos 1");
-		if (!Number.isInteger(input.supply) || input.supply < 0)
-			throw new Error("El suministro debe ser un entero no negativo");
+	const name = input.name.trim();
+	if (!name) throw new Error("El nombre es obligatorio");
+	if (!Number.isInteger(input.badgeCost) || input.badgeCost < 1)
+		throw new Error("El coste en insignias debe ser >= 1");
+	if (!Number.isInteger(input.supply) || input.supply < 0)
+		throw new Error("El stock debe ser >= 0 (0 = ilimitado)");
 
-		const badgeType = await prisma.badgeType.findUnique({ where: { id: input.badgeTypeId } });
-		if (!badgeType) throw new Error("Tipo de insignia no encontrado");
+	const badge = await getOrCreateSubjectBadge(input.subjectOfferingId);
 
-		const nextId = await publicClient.readContract({
-			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-			abi: BADGE_SYSTEM_ABI,
-			functionName: "nextRewardId",
-		}) as bigint;
-		const rewardId = Number(nextId);
+	const nextId = await publicClient.readContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "nextRewardId",
+	}) as bigint;
+	const rewardChainId = Number(nextId);
 
-		const hash = await adminWalletClient.writeContract({
-			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-			abi: BADGE_SYSTEM_ABI,
-			functionName: "createReward",
-			args: [BigInt(badgeType.tokenId), BigInt(input.badgeCost), BigInt(input.supply)],
-		});
-		const receipt = await publicClient.waitForTransactionReceipt({ hash });
-		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
+	const hash = await adminWalletClient.writeContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "createReward",
+		args: [BigInt(badge.tokenId), BigInt(input.badgeCost), BigInt(input.supply)],
+	});
+	const receipt = await publicClient.waitForTransactionReceipt({ hash });
+	if (receipt.status !== "success") throw new Error("Error on-chain creando recompensa");
 
-		const reward = await prisma.reward.create({
-			data: {
-				rewardId,
-				name,
-				description: input.description?.trim() || null,
-				badgeCost: input.badgeCost,
-				supply: input.supply,
-				badgeTypeId: input.badgeTypeId,
-				creatorId: session.userId!,
-				txHash: hash,
-			},
-		});
-
-		return { success: true, reward };
-	} catch (error) {
-		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		throw new Error(`Error al crear recompensa: ${error instanceof Error ? error.message : "desconocido"}`);
-	}
+	const reward = await prisma.reward.create({
+		data: {
+			rewardId: rewardChainId,
+			name,
+			description: input.description?.trim() || null,
+			subjectBadgeId: badge.id,
+			badgeCost: input.badgeCost,
+			supply: input.supply,
+			creatorId: session.userId!,
+			txHash: hash,
+		},
+	});
+	return { success: true, reward };
 }
 
 export async function deactivateReward(rewardPrismaId: string) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 
-	try {
-		const reward = await prisma.reward.findUnique({ where: { id: rewardPrismaId } });
-		if (!reward) throw new Error("Recompensa no encontrada");
+	const reward = await prisma.reward.findUnique({ where: { id: rewardPrismaId } });
+	if (!reward) throw new Error("Recompensa no encontrada");
+	if (session.role !== "ADMIN" && reward.creatorId !== session.userId)
+		throw new Error("No autorizado");
 
-		const hash = await adminWalletClient.writeContract({
-			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-			abi: BADGE_SYSTEM_ABI,
-			functionName: "deactivateReward",
-			args: [BigInt(reward.rewardId)],
-		});
-		const receipt = await publicClient.waitForTransactionReceipt({ hash });
-		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
+	const hash = await adminWalletClient.writeContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "deactivateReward",
+		args: [BigInt(reward.rewardId)],
+	});
+	const receipt = await publicClient.waitForTransactionReceipt({ hash });
+	if (receipt.status !== "success") throw new Error("Error on-chain");
 
-		await prisma.reward.update({ where: { id: rewardPrismaId }, data: { active: false } });
-
-		return { success: true };
-	} catch (error) {
-		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		throw new Error(`Error al desactivar recompensa: ${error instanceof Error ? error.message : "desconocido"}`);
-	}
+	return prisma.reward.update({
+		where: { id: reward.id },
+		data: { active: false },
+	});
 }
 
-export async function listRewards(badgeTypeId?: string) {
+export async function listRewards(subjectOfferingId?: string) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 
 	const where: Record<string, unknown> = {};
-	if (badgeTypeId) where.badgeTypeId = badgeTypeId;
 	if (session.role !== "ADMIN") where.creatorId = session.userId!;
+	if (subjectOfferingId) where.subjectBadge = { subjectOfferingId };
 
 	return prisma.reward.findMany({
 		where,
 		include: {
-			badgeType: { select: { name: true, tokenId: true } },
+			subjectBadge: { include: { subjectOffering: { include: { subject: true } } } },
 			_count: { select: { redemptions: true } },
 		},
 		orderBy: { createdAt: "desc" },
 	});
 }
 
+/**
+ * Lista recompensas disponibles para canjear (alumno): solo activas, agrupadas
+ * por asignatura matriculada.
+ */
 export async function listAvailableRewards() {
 	const session = await getSession();
 	ensureRole(session, ["STUDENT"]);
 
+	const enrollments = await prisma.enrollment.findMany({
+		where: { userId: session.userId! },
+		select: { subjectOfferingId: true },
+	});
+	const offeringIds = enrollments.map(e => e.subjectOfferingId);
+	if (offeringIds.length === 0) return [];
+
 	return prisma.reward.findMany({
-		where: { active: true },
+		where: {
+			active: true,
+			subjectBadge: { subjectOfferingId: { in: offeringIds } },
+		},
 		include: {
-			badgeType: { select: { id: true, name: true, tokenId: true } },
+			subjectBadge: { include: { subjectOffering: { include: { subject: true } } } },
 			_count: { select: { redemptions: true } },
 		},
 		orderBy: { createdAt: "desc" },
 	});
 }
 
-// ── Redemptions ──────────────────────────────────────────────────────────
+// ── Canjeo (alumno) ──────────────────────────────────────────────────────
 
 export async function redeemReward(rewardPrismaId: string) {
 	const session = await getSession();
 	ensureRole(session, ["STUDENT"]);
 
-	try {
-		const reward = await prisma.reward.findUnique({ where: { id: rewardPrismaId } });
-		if (!reward) throw new Error("Recompensa no encontrada");
+	const reward = await prisma.reward.findUnique({
+		where: { id: rewardPrismaId },
+		include: { subjectBadge: true },
+	});
+	if (!reward) throw new Error("Recompensa no encontrada");
+	if (!reward.active) throw new Error("Recompensa desactivada");
 
-		const { walletClient } = await getUserWalletClient(session.userId!);
+	const { walletClient } = await getUserWalletClient(session.userId!);
 
-		const hash = await walletClient.writeContract({
-			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-			abi: BADGE_SYSTEM_ABI,
-			functionName: "redeemReward",
-			args: [BigInt(reward.rewardId)],
+	const hash = await walletClient.writeContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "redeemReward",
+		args: [BigInt(reward.rewardId)],
+	});
+	const receipt = await publicClient.waitForTransactionReceipt({ hash });
+	if (receipt.status !== "success") throw new Error("La transacción fue revertida");
+
+	await prisma.rewardRedemption.create({
+		data: { userId: session.userId!, rewardId: reward.id, txHash: hash },
+	});
+	if (reward.supply > 0) {
+		await prisma.reward.update({
+			where: { id: reward.id },
+			data: { supply: { decrement: 1 } },
 		});
-		const receipt = await publicClient.waitForTransactionReceipt({ hash });
-		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
-
-		try {
-			await prisma.rewardRedemption.create({
-				data: {
-					userId: session.userId!,
-					rewardId: rewardPrismaId,
-					txHash: hash,
-				},
-			});
-		} catch (dbError) {
-			logPrismaRecovery("redeemReward", hash, dbError);
-			throw new Error(`Error al guardar en base de datos. TxHash: ${hash}`);
-		}
-
-		return { success: true };
-	} catch (error) {
-		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		throw new Error(`Error al canjear recompensa: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
+	return { success: true };
 }
 
 export async function getMyRedemptions() {
 	const session = await getSession();
 	ensureRole(session, ["STUDENT"]);
-
 	return prisma.rewardRedemption.findMany({
 		where: { userId: session.userId! },
 		include: {
-			reward: { select: { name: true, badgeCost: true, badgeType: { select: { name: true } } } },
+			reward: { include: { subjectBadge: { include: { subjectOffering: { include: { subject: true } } } } } },
 		},
 		orderBy: { redeemedAt: "desc" },
 	});
 }
 
-// ── Use Requests ─────────────────────────────────────────────────────────
+// ── Solicitudes de uso ───────────────────────────────────────────────────
 
 export async function requestUseReward(rewardPrismaId: string) {
 	const session = await getSession();
 	ensureRole(session, ["STUDENT"]);
 
-	try {
-		const reward = await prisma.reward.findUnique({ where: { id: rewardPrismaId } });
-		if (!reward) throw new Error("Recompensa no encontrada");
+	const reward = await prisma.reward.findUnique({ where: { id: rewardPrismaId } });
+	if (!reward) throw new Error("Recompensa no encontrada");
 
-		const nextId = await publicClient.readContract({
-			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-			abi: BADGE_SYSTEM_ABI,
-			functionName: "nextUseRequestId",
-		}) as bigint;
-		const requestId = Number(nextId);
+	const nextId = await publicClient.readContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "nextUseRequestId",
+	}) as bigint;
+	const requestId = Number(nextId);
 
-		const { walletClient } = await getUserWalletClient(session.userId!);
+	const { walletClient } = await getUserWalletClient(session.userId!);
+	const hash = await walletClient.writeContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "requestUseReward",
+		args: [BigInt(reward.rewardId)],
+	});
+	const receipt = await publicClient.waitForTransactionReceipt({ hash });
+	if (receipt.status !== "success") throw new Error("La transacción fue revertida");
 
-		const hash = await walletClient.writeContract({
-			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-			abi: BADGE_SYSTEM_ABI,
-			functionName: "requestUseReward",
-			args: [BigInt(reward.rewardId)],
-		});
-		const receipt = await publicClient.waitForTransactionReceipt({ hash });
-		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
-
-		await prisma.useRequest.create({
-			data: {
-				requestId,
-				studentId: session.userId!,
-				rewardId: reward.id,
-				status: "PENDING",
-				txHash: hash,
-			},
-		});
-
-		return { success: true };
-	} catch (error) {
-		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		throw new Error(`Error al solicitar uso: ${error instanceof Error ? error.message : "desconocido"}`);
-	}
+	await prisma.useRequest.create({
+		data: {
+			requestId,
+			studentId: session.userId!,
+			rewardId: reward.id,
+			status: "PENDING",
+			txHash: hash,
+		},
+	});
+	return { success: true };
 }
 
 export async function cancelUseRequest(requestId: number) {
 	const session = await getSession();
 	ensureRole(session, ["STUDENT"]);
 
-	try {
-		const { walletClient } = await getUserWalletClient(session.userId!);
+	const { walletClient } = await getUserWalletClient(session.userId!);
+	const hash = await walletClient.writeContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "cancelUseRequest",
+		args: [BigInt(requestId)],
+	});
+	const receipt = await publicClient.waitForTransactionReceipt({ hash });
+	if (receipt.status !== "success") throw new Error("La transacción fue revertida");
 
-		const hash = await walletClient.writeContract({
-			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-			abi: BADGE_SYSTEM_ABI,
-			functionName: "cancelUseRequest",
-			args: [BigInt(requestId)],
-		});
-		const receipt = await publicClient.waitForTransactionReceipt({ hash });
-		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
-
-		await prisma.useRequest.update({
-			where: { requestId },
-			data: { status: "CANCELLED" },
-		});
-
-		return { success: true };
-	} catch (error) {
-		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		throw new Error(`Error al cancelar solicitud: ${error instanceof Error ? error.message : "desconocido"}`);
-	}
+	await prisma.useRequest.update({ where: { requestId }, data: { status: "CANCELLED" } });
+	return { success: true };
 }
 
 export async function approveUseRequest(requestId: number) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 
-	try {
-		const hash = await adminWalletClient.writeContract({
-			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-			abi: BADGE_SYSTEM_ABI,
-			functionName: "approveUseRequest",
-			args: [BigInt(requestId)],
-		});
-		const receipt = await publicClient.waitForTransactionReceipt({ hash });
-		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
+	const hash = await adminWalletClient.writeContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "approveUseRequest",
+		args: [BigInt(requestId)],
+	});
+	const receipt = await publicClient.waitForTransactionReceipt({ hash });
+	if (receipt.status !== "success") throw new Error("Error on-chain");
 
-		await prisma.useRequest.update({
-			where: { requestId },
-			data: { status: "APPROVED" },
-		});
-
-		return { success: true };
-	} catch (error) {
-		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		throw new Error(`Error al aprobar solicitud: ${error instanceof Error ? error.message : "desconocido"}`);
-	}
+	await prisma.useRequest.update({ where: { requestId }, data: { status: "APPROVED" } });
+	return { success: true };
 }
 
 export async function rejectUseRequest(requestId: number) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 
-	try {
-		const hash = await adminWalletClient.writeContract({
-			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-			abi: BADGE_SYSTEM_ABI,
-			functionName: "rejectUseRequest",
-			args: [BigInt(requestId)],
-		});
-		const receipt = await publicClient.waitForTransactionReceipt({ hash });
-		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
+	const hash = await adminWalletClient.writeContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "rejectUseRequest",
+		args: [BigInt(requestId)],
+	});
+	const receipt = await publicClient.waitForTransactionReceipt({ hash });
+	if (receipt.status !== "success") throw new Error("Error on-chain");
 
-		await prisma.useRequest.update({
-			where: { requestId },
-			data: { status: "REJECTED" },
-		});
-
-		return { success: true };
-	} catch (error) {
-		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		throw new Error(`Error al rechazar solicitud: ${error instanceof Error ? error.message : "desconocido"}`);
-	}
+	await prisma.useRequest.update({ where: { requestId }, data: { status: "REJECTED" } });
+	return { success: true };
 }
 
 export async function getMyUseRequests() {
 	const session = await getSession();
 	ensureRole(session, ["STUDENT"]);
 
-	const user = await prisma.user.findUnique({
-		where: { id: session.userId! },
-		select: { address: true },
+	return prisma.useRequest.findMany({
+		where: { studentId: session.userId! },
+		include: {
+			reward: { include: { subjectBadge: { include: { subjectOffering: { include: { subject: true } } } } } },
+		},
+		orderBy: { createdAt: "desc" },
 	});
-	if (!user) throw new Error("Usuario no encontrado");
-
-	const requestIds = await publicClient.readContract({
-		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-		abi: BADGE_SYSTEM_ABI,
-		functionName: "getStudentUseRequests",
-		args: [user.address as `0x${string}`],
-	}) as bigint[];
-
-	const requests = await Promise.all(
-		requestIds.map(async (id) => {
-			const req = await publicClient.readContract({
-				address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-				abi: BADGE_SYSTEM_ABI,
-				functionName: "getUseRequest",
-				args: [id],
-			}) as { student: string; rewardId: bigint; status: number };
-
-			const reward = await prisma.reward.findFirst({
-				where: { rewardId: Number(req.rewardId) },
-				select: { id: true, name: true, badgeType: { select: { name: true } } },
-			});
-
-			return {
-				requestId: Number(id),
-				rewardPrismaId: reward?.id ?? null,
-				rewardName: reward?.name ?? "Desconocido",
-				badgeTypeName: reward?.badgeType?.name ?? "Desconocido",
-				status: req.status, // 0=None, 1=Pending, 2=Approved, 3=Rejected, 4=Cancelled
-			};
-		}),
-	);
-
-	return requests.filter(r => r.status !== 0); // Excluir None
 }
-
-// ── Listar solicitudes de uso (profesor/admin) ──────────────────────────
 
 export async function listUseRequests() {
 	const session = await getSession();
@@ -645,10 +735,60 @@ export async function listUseRequests() {
 		where,
 		include: {
 			student: { select: { id: true, name: true, email: true } },
-			reward: { select: { id: true, name: true, badgeType: { select: { name: true } } } },
+			reward: { select: { id: true, name: true, subjectBadge: { include: { subjectOffering: { include: { subject: true } } } } } },
 		},
 		orderBy: { createdAt: "desc" },
 	});
+}
+
+// ── Insignias del alumno ─────────────────────────────────────────────────
+
+/**
+ * Devuelve las insignias del alumno agrupadas por asignatura.
+ */
+export async function getStudentBadgesBySubject() {
+	const session = await getSession();
+	ensureRole(session, ["STUDENT"]);
+
+	const awards = await prisma.badgeAward.findMany({
+		where: { userId: session.userId! },
+		include: {
+			subjectBadge: { include: { subjectOffering: { include: { subject: true } } } },
+			prizeCategory: { include: { assignment: { select: { id: true, name: true } } } },
+		},
+		orderBy: { awardedAt: "desc" },
+	});
+
+	type Group = {
+		subjectBadgeId: string;
+		subjectName: string;
+		subjectCode: string;
+		group: string;
+		academicYear: string;
+		totalBadges: number;
+		awards: typeof awards;
+	};
+
+	const grouped = new Map<string, Group>();
+	for (const a of awards) {
+		const key = a.subjectBadgeId;
+		const existing = grouped.get(key);
+		if (existing) {
+			existing.totalBadges += a.prizeCategory.badgeReward;
+			existing.awards.push(a);
+		} else {
+			grouped.set(key, {
+				subjectBadgeId: a.subjectBadgeId,
+				subjectName: a.subjectBadge.subjectOffering.subject.name,
+				subjectCode: a.subjectBadge.subjectOffering.subject.code,
+				group: a.subjectBadge.subjectOffering.group,
+				academicYear: a.subjectBadge.subjectOffering.academicYear,
+				totalBadges: a.prizeCategory.badgeReward,
+				awards: [a],
+			});
+		}
+	}
+	return [...grouped.values()];
 }
 
 // ── Stats ────────────────────────────────────────────────────────────────
@@ -656,109 +796,401 @@ export async function listUseRequests() {
 export async function getBadgeStats() {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
+	await autoCloseExpiredAssignments();
 
-	const where = session.role === "ADMIN" ? {} : { creatorId: session.userId! };
-	const taskWhere = session.role === "ADMIN" ? {} : { badgeType: { creatorId: session.userId! } };
-	const rewardWhere = session.role === "ADMIN" ? {} : { reward: { creatorId: session.userId! } };
+	const isAdmin = session.role === "ADMIN";
+	const assignmentWhere = isAdmin ? {} : { creatorId: session.userId! };
+	const prizeWhere = isAdmin ? {} : { assignment: { creatorId: session.userId! } };
+	const awardWhere = isAdmin ? {} : { prizeCategory: { assignment: { creatorId: session.userId! } } };
+	const rewardWhere = isAdmin ? {} : { creatorId: session.userId! };
+	const useReqWhere = isAdmin ? {} : { reward: { creatorId: session.userId! } };
 
 	const [
-		totalBadgeTypes, totalTasks, activeTasks, totalAwards,
+		totalAssignments, openAssignments, reviewingAssignments, closedAssignments,
+		totalPrizes, totalAwards,
 		totalRewards, totalRedemptions,
 		pendingRequests, approvedRequests, rejectedRequests,
+		totalSubjectBadges,
 	] = await Promise.all([
-		prisma.badgeType.count({ where }),
-		prisma.task.count({ where: taskWhere }),
-		prisma.task.count({ where: { ...taskWhere, active: true } }),
-		prisma.badgeAward.count({ where: taskWhere }),
-		prisma.reward.count({ where: session.role === "ADMIN" ? {} : { badgeType: { creatorId: session.userId! } } }),
-		prisma.rewardRedemption.count({ where: rewardWhere }),
-		prisma.useRequest.count({ where: { ...rewardWhere, status: "PENDING" } }),
-		prisma.useRequest.count({ where: { ...rewardWhere, status: "APPROVED" } }),
-		prisma.useRequest.count({ where: { ...rewardWhere, status: "REJECTED" } }),
+		prisma.assignment.count({ where: assignmentWhere }),
+		prisma.assignment.count({ where: { ...assignmentWhere, status: "OPEN" } }),
+		prisma.assignment.count({ where: { ...assignmentWhere, status: "REVIEWING" } }),
+		prisma.assignment.count({ where: { ...assignmentWhere, status: "CLOSED" } }),
+		prisma.prizeCategory.count({ where: prizeWhere }),
+		prisma.badgeAward.count({ where: awardWhere }),
+		prisma.reward.count({ where: rewardWhere }),
+		prisma.rewardRedemption.count({ where: { reward: rewardWhere } }),
+		prisma.useRequest.count({ where: { ...useReqWhere, status: "PENDING" } }),
+		prisma.useRequest.count({ where: { ...useReqWhere, status: "APPROVED" } }),
+		prisma.useRequest.count({ where: { ...useReqWhere, status: "REJECTED" } }),
+		isAdmin
+			? prisma.subjectBadge.count()
+			: prisma.subjectBadge.count({
+				where: { subjectOffering: { professorId: session.userId! } },
+			}),
 	]);
 
 	return {
-		totalBadgeTypes, totalTasks, activeTasks, totalAwards,
+		totalSubjectBadges,
+		totalAssignments, openAssignments, reviewingAssignments, closedAssignments,
+		totalPrizes, totalAwards,
 		totalRewards, totalRedemptions,
 		pendingRequests, approvedRequests, rejectedRequests,
 	};
 }
 
-// ── Alumnos ──────────────────────────────────────────────────────────────
+// ── Alumnos por asignatura (para selección de ganadores) ────────────────
 
-export async function getStudentsForSubject(subjectOfferingId: string) {
+/**
+ * Devuelve los alumnos matriculados en la SubjectOffering de la assignment,
+ * con flag de si entregaron, y si ya ganaron en cada premio.
+ */
+export async function getStudentsForAssignment(assignmentPrismaId: string) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 
-	const offering = await prisma.subjectOffering.findUnique({
-		where: { id: subjectOfferingId },
-		include: { subject: true },
+	const assignment = await prisma.assignment.findUnique({
+		where: { id: assignmentPrismaId },
+		include: {
+			subjectBadge: { include: { subjectOffering: { include: { subject: true } } } },
+			prizes: { select: { id: true } },
+			submissions: { select: { studentId: true, submittedAt: true } },
+		},
 	});
-	if (!offering) throw new Error("Asignatura no encontrada");
+	if (!assignment) throw new Error("Tarea no encontrada");
+	if (session.role !== "ADMIN" && assignment.creatorId !== session.userId)
+		throw new Error("No autorizado");
 
 	const enrollments = await prisma.enrollment.findMany({
-		where: { subjectOfferingId },
+		where: { subjectOfferingId: assignment.subjectBadge.subjectOfferingId },
 		include: { user: { select: { id: true, name: true, email: true } } },
 	});
 
-	const badgeTypes = await prisma.badgeType.findMany({
-		where: { subjectOfferingId },
-		select: { id: true, name: true },
+	const submissionMap = new Map(assignment.submissions.map(s => [s.studentId, s.submittedAt]));
+
+	const prizeIds = assignment.prizes.map(p => p.id);
+	const awards = await prisma.badgeAward.findMany({
+		where: { prizeCategoryId: { in: prizeIds } },
+		select: { userId: true, prizeCategoryId: true },
 	});
-	const badgeTypeIds = badgeTypes.map(bt => bt.id);
+	// Agrupar premios ganados por alumno
+	const awardedByStudent = new Map<string, Set<string>>();
+	for (const a of awards) {
+		const set = awardedByStudent.get(a.userId) ?? new Set<string>();
+		set.add(a.prizeCategoryId);
+		awardedByStudent.set(a.userId, set);
+	}
 
-	const tasks = await prisma.task.findMany({
-		where: { badgeTypeId: { in: badgeTypeIds } },
-		select: { id: true, name: true, badgeTypeId: true },
+	const students = enrollments.map(e => ({
+		id: e.user.id,
+		name: e.user.name,
+		email: e.user.email,
+		submitted: submissionMap.has(e.user.id),
+		submittedAt: submissionMap.get(e.user.id) ?? null,
+		awardedPrizeIds: [...(awardedByStudent.get(e.user.id) ?? [])],
+	}));
+
+	// Ordenar: entregados primero, luego no entregados
+	students.sort((a, b) => {
+		if (a.submitted !== b.submitted) return a.submitted ? -1 : 1;
+		return a.name.localeCompare(b.name);
 	});
 
-	const students = await Promise.all(
-		enrollments.map(async (enrollment) => {
-			const [awards, redemptions] = await Promise.all([
-				prisma.badgeAward.findMany({
-					where: { userId: enrollment.user.id, badgeTypeId: { in: badgeTypeIds } },
-					select: { taskId: true, badgeTypeId: true, awardedAt: true },
-				}),
-				prisma.rewardRedemption.findMany({
-					where: { userId: enrollment.user.id, reward: { badgeTypeId: { in: badgeTypeIds } } },
-					include: { reward: { select: { name: true } } },
-				}),
-			]);
-
-			const completedTaskIds = new Set(awards.map(a => a.taskId));
-
-			return {
-				id: enrollment.user.id,
-				name: enrollment.user.name,
-				email: enrollment.user.email,
-				totalBadges: awards.length,
-				tasksCompleted: tasks.map(t => ({
-					taskId: t.id,
-					taskName: t.name,
-					completed: completedTaskIds.has(t.id),
-				})),
-				redemptions: redemptions.map(r => ({
-					rewardName: r.reward.name,
-					date: r.redeemedAt.toISOString(),
-				})),
-			};
-		}),
-	);
-
-	return { subject: offering.subject.name, students };
+	return {
+		assignment: {
+			id: assignment.id,
+			name: assignment.name,
+			status: assignment.status,
+			subject: assignment.subjectBadge.subjectOffering.subject.name,
+			group: assignment.subjectBadge.subjectOffering.group,
+		},
+		students,
+	};
 }
 
-// ── Subject Offerings (para selects) ─────────────────────────────────────
-
+/**
+ * Devuelve las SubjectOfferings que el profesor logueado imparte.
+ * Útil para selectores al crear assignments y rewards.
+ */
 export async function getMySubjectOfferings() {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 
 	const where = session.role === "ADMIN" ? {} : { professorId: session.userId! };
-
 	return prisma.subjectOffering.findMany({
 		where,
-		include: { subject: { select: { name: true, code: true } } },
-		orderBy: { academicYear: "desc" },
+		include: { subject: true, _count: { select: { enrollments: true } } },
+		orderBy: [{ academicYear: "desc" }, { group: "asc" }],
 	});
+}
+
+// ── Estadísticas del profesor (dashboard personal) ──────────────────────
+
+/**
+ * Agrega datos para el dashboard personal del profesor logueado:
+ * resumen numérico, alertas, series mensuales (6 meses), tops y actividad reciente.
+ */
+export async function getMyProfessorStats(): Promise<{
+	// Resumen
+	totalSubjectBadges: number;
+	totalAssignments: number;
+	openAssignments: number;
+	reviewingAssignments: number;
+	closedAssignments: number;
+	totalAwards: number;
+	totalRewards: number;
+	pendingRequests: number;
+	totalEnrolledStudents: number;
+
+	// Alertas
+	overdueAssignments: number;
+	pendingSubmissionsReview: number;
+
+	// Gráficos (6 meses, formato "abr 26")
+	assignmentsByMonth: { month: string; count: number }[];
+	awardsByMonth: { month: string; count: number }[];
+
+	// Top lists
+	topSubjectsByEnrollment: { subjectName: string; group: string; enrollmentCount: number }[];
+	topAssignmentsBySubmissions: { assignmentName: string; subjectName: string; submissionCount: number; status: string }[];
+
+	// Actividad reciente
+	recentAwards: { studentName: string; prizeName: string; assignmentName: string; date: string }[];
+	recentUseRequests: { studentName: string; rewardName: string; status: string; date: string }[];
+}> {
+	const session = await getSession();
+	ensureRole(session, ["PROFESSOR"]);
+	const userId = session.userId!;
+
+	await autoCloseExpiredAssignments();
+
+	const now = new Date();
+	const startMonth = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+
+	// ── 1. Resumen numérico ───────────────────────────────────────────────
+	const [
+		totalSubjectBadges,
+		totalAssignments,
+		openAssignments,
+		reviewingAssignments,
+		closedAssignments,
+		totalAwards,
+		totalRewards,
+		pendingRequests,
+		enrollmentAggregate,
+		overdueAssignments,
+		pendingSubmissionsReview,
+	] = await Promise.all([
+		prisma.subjectBadge.count({
+			where: { subjectOffering: { professorId: userId } },
+		}),
+		prisma.assignment.count({ where: { creatorId: userId } }),
+		prisma.assignment.count({ where: { creatorId: userId, status: "OPEN" } }),
+		prisma.assignment.count({ where: { creatorId: userId, status: "REVIEWING" } }),
+		prisma.assignment.count({ where: { creatorId: userId, status: "CLOSED" } }),
+		prisma.badgeAward.count({ where: { awardedById: userId } }),
+		prisma.reward.count({ where: { creatorId: userId } }),
+		prisma.useRequest.count({
+			where: { status: "PENDING", reward: { creatorId: userId } },
+		}),
+		prisma.enrollment.count({
+			where: { subjectOffering: { professorId: userId } },
+		}),
+		prisma.assignment.count({
+			where: { creatorId: userId, status: "OPEN", deadline: { lt: now } },
+		}),
+		prisma.taskSubmission.count({
+			where: { assignment: { creatorId: userId, status: "REVIEWING" } },
+		}),
+	]);
+
+	const totalEnrolledStudents = enrollmentAggregate;
+
+	// ── 2. Series mensuales (6 meses) ─────────────────────────────────────
+	const buildMonthlyBuckets = <T extends { createdAt?: Date; awardedAt?: Date }>(
+		records: T[],
+		dateField: "createdAt" | "awardedAt",
+	) => {
+		const buckets = new Map<string, number>();
+		for (let i = 0; i < 6; i++) {
+			const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+			const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+			buckets.set(key, 0);
+		}
+		for (const r of records) {
+			const d = r[dateField] as Date;
+			const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+			if (buckets.has(key)) buckets.set(key, buckets.get(key)! + 1);
+		}
+		return Array.from(buckets.entries()).map(([key, count]) => {
+			const [year, month] = key.split("-");
+			const d = new Date(Number(year), Number(month) - 1, 1);
+			return {
+				month: d.toLocaleDateString("es-ES", { month: "short", year: "2-digit" }),
+				count,
+			};
+		});
+	};
+
+	const [assignmentsRaw, awardsRaw] = await Promise.all([
+		prisma.assignment.findMany({
+			where: { creatorId: userId, createdAt: { gte: startMonth } },
+			select: { createdAt: true },
+		}),
+		prisma.badgeAward.findMany({
+			where: { awardedById: userId, awardedAt: { gte: startMonth } },
+			select: { awardedAt: true },
+		}),
+	]);
+
+	const assignmentsByMonth = buildMonthlyBuckets(assignmentsRaw, "createdAt");
+	const awardsByMonth = buildMonthlyBuckets(awardsRaw, "awardedAt");
+
+	// ── 3. Tops ───────────────────────────────────────────────────────────
+	const topOfferings = await prisma.subjectOffering.findMany({
+		where: { professorId: userId },
+		include: { subject: true, _count: { select: { enrollments: true } } },
+		orderBy: { enrollments: { _count: "desc" } },
+		take: 5,
+	});
+	const topSubjectsByEnrollment = topOfferings.map(o => ({
+		subjectName: o.subject.name,
+		group: o.group,
+		enrollmentCount: o._count.enrollments,
+	}));
+
+	const topAssignments = await prisma.assignment.findMany({
+		where: { creatorId: userId },
+		include: {
+			_count: { select: { submissions: true } },
+			subjectBadge: { include: { subjectOffering: { include: { subject: true } } } },
+		},
+		orderBy: { submissions: { _count: "desc" } },
+		take: 5,
+	});
+	const topAssignmentsBySubmissions = topAssignments.map(a => ({
+		assignmentName: a.name,
+		subjectName: a.subjectBadge.subjectOffering.subject.name,
+		submissionCount: a._count.submissions,
+		status: a.status,
+	}));
+
+	// ── 4. Actividad reciente ─────────────────────────────────────────────
+	const recentAwardsRaw = await prisma.badgeAward.findMany({
+		where: { awardedById: userId },
+		include: {
+			user: { select: { name: true } },
+			prizeCategory: {
+				select: { name: true, assignment: { select: { name: true } } },
+			},
+		},
+		orderBy: { awardedAt: "desc" },
+		take: 5,
+	});
+	const recentAwards = recentAwardsRaw.map(a => ({
+		studentName: a.user.name,
+		prizeName: a.prizeCategory.name,
+		assignmentName: a.prizeCategory.assignment.name,
+		date: a.awardedAt.toISOString(),
+	}));
+
+	const recentUseRequestsRaw = await prisma.useRequest.findMany({
+		where: { reward: { creatorId: userId } },
+		include: {
+			student: { select: { name: true } },
+			reward: { select: { name: true } },
+		},
+		orderBy: { createdAt: "desc" },
+		take: 5,
+	});
+	const recentUseRequests = recentUseRequestsRaw.map(r => ({
+		studentName: r.student.name,
+		rewardName: r.reward.name,
+		status: r.status,
+		date: r.createdAt.toISOString(),
+	}));
+
+	return {
+		totalSubjectBadges,
+		totalAssignments,
+		openAssignments,
+		reviewingAssignments,
+		closedAssignments,
+		totalAwards,
+		totalRewards,
+		pendingRequests,
+		totalEnrolledStudents,
+		overdueAssignments,
+		pendingSubmissionsReview,
+		assignmentsByMonth,
+		awardsByMonth,
+		topSubjectsByEnrollment,
+		topAssignmentsBySubmissions,
+		recentAwards,
+		recentUseRequests,
+	};
+}
+
+/**
+ * Resumen de insignias del estudiante para el dashboard:
+ * - earnedBadges: total de insignias ganadas (suma de badgeReward)
+ * - availableAssignments: assignments OPEN donde el alumno no ha entregado
+ * - pendingRedemptions: use requests pendientes del alumno
+ * - recentAwards: últimas 5 insignias obtenidas con nombre del premio y asignatura
+ */
+export async function getMyBadgeSummary() {
+	const session = await getSession();
+	ensureRole(session, ["STUDENT"]);
+
+	const userId = session.userId!;
+
+	// Insignias ganadas
+	const awards = await prisma.badgeAward.findMany({
+		where: { userId },
+		include: {
+			prizeCategory: { select: { name: true, badgeReward: true } },
+			subjectBadge: { include: { subjectOffering: { include: { subject: true } } } },
+		},
+		orderBy: { awardedAt: "desc" },
+	});
+
+	const earnedBadges = awards.reduce((sum, a) => sum + a.prizeCategory.badgeReward, 0);
+
+	const recentAwards = awards.slice(0, 5).map((a) => ({
+		prizeName: a.prizeCategory.name,
+		badgeReward: a.prizeCategory.badgeReward,
+		subjectName: a.subjectBadge.subjectOffering.subject.name,
+		date: a.awardedAt.toISOString(),
+	}));
+
+	// Tareas disponibles: OPEN en asignaturas matriculadas donde no ha entregado
+	const enrollments = await prisma.enrollment.findMany({
+		where: { userId },
+		select: { subjectOfferingId: true },
+	});
+	const offeringIds = enrollments.map((e) => e.subjectOfferingId);
+
+	let availableAssignments = 0;
+	if (offeringIds.length > 0) {
+		const open = await prisma.assignment.findMany({
+			where: {
+				status: "OPEN",
+				subjectBadge: { subjectOfferingId: { in: offeringIds } },
+			},
+			include: { submissions: { where: { studentId: userId }, take: 1 } },
+		});
+		availableAssignments = open.filter((a) => a.submissions.length === 0).length;
+	}
+
+	// Solicitudes de uso pendientes
+	const pendingRedemptions = await prisma.useRequest.count({
+		where: { studentId: userId, status: "PENDING" },
+	});
+
+	return {
+		earnedBadges,
+		availableAssignments,
+		pendingRedemptions,
+		recentAwards,
+	};
 }

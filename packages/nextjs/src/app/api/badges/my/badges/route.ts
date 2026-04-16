@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { getStudentBadges } from "@/actions/badges";
+import { getStudentBadgesBySubject } from "@/actions/badges";
 
 export async function GET() {
 	try {
-		const result = await getStudentBadges();
+		const result = await getStudentBadgesBySubject();
 		return NextResponse.json(result);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Error al obtener badges del estudiante";

@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * Catálogo de recompensas canjeables + historial de canjes del estudiante.
+ * Catálogo de recompensas canjeables + historial de canjes del alumno.
+ * Las insignias son por asignatura, así que el balance se calcula por subjectBadgeId.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -20,24 +21,32 @@ interface Reward {
   description: string | null;
   badgeCost: number;
   supply: number;
-  badgeType: { id: string; name: string; tokenId: number };
+  subjectBadge: {
+    id: string;
+    subjectOffering: { subject: { name: string; code: string }; group: string };
+  };
   _count: { redemptions: number };
 }
 
-interface BadgeAward {
-  badgeType: { id: string };
+interface BadgeBySubject {
+  subjectBadgeId: string;
+  totalBadges: number;
 }
 
 interface Redemption {
   id: string;
   redeemedAt: string;
-  reward: { name: string; badgeCost: number; badgeType: { name: string } };
+  reward: {
+    name: string;
+    badgeCost: number;
+    subjectBadge: { subjectOffering: { subject: { name: string } } };
+  };
 }
 
 export default function StudentRewardsPage() {
   const { addToast } = useToast();
   const [rewards, setRewards] = useState<Reward[]>([]);
-  const [badges, setBadges] = useState<BadgeAward[]>([]);
+  const [badgeBalances, setBadgeBalances] = useState<Map<string, number>>(new Map());
   const [redemptions, setRedemptions] = useState<Redemption[]>([]);
   const [loading, setLoading] = useState(true);
   const [redeeming, setRedeeming] = useState<string | null>(null);
@@ -50,19 +59,18 @@ export default function StudentRewardsPage() {
         fetch("/api/badges/my/redemptions"),
       ]);
       if (rewardsRes.ok) setRewards(await rewardsRes.json());
-      if (badgesRes.ok) setBadges(await badgesRes.json());
+      if (badgesRes.ok) {
+        const groups: BadgeBySubject[] = await badgesRes.json();
+        const map = new Map<string, number>();
+        for (const g of groups) map.set(g.subjectBadgeId, g.totalBadges);
+        setBadgeBalances(map);
+      }
       if (redemptionsRes.ok) setRedemptions(await redemptionsRes.json());
     } catch { /* no-op */ }
     setLoading(false);
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
-
-  // Contar badges por tipo
-  const badgeCountByType = new Map<string, number>();
-  for (const b of badges) {
-    badgeCountByType.set(b.badgeType.id, (badgeCountByType.get(b.badgeType.id) || 0) + 1);
-  }
 
   async function handleRedeem(rewardId: string) {
     setRedeeming(rewardId);
@@ -91,20 +99,23 @@ export default function StudentRewardsPage() {
           <EmptyState title="Sin recompensas" description="No hay recompensas disponibles actualmente." />
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {rewards.map((r) => (
-              <RewardCard
-                key={r.id}
-                name={r.name}
-                description={r.description}
-                badgeCost={r.badgeCost}
-                supply={r.supply}
-                redemptionCount={r._count.redemptions}
-                badgeTypeName={r.badgeType.name}
-                studentBadgeCount={badgeCountByType.get(r.badgeType.id) || 0}
-                onRedeem={() => handleRedeem(r.id)}
-                redeeming={redeeming === r.id}
-              />
-            ))}
+            {rewards.map((r) => {
+              const subjectName = `${r.subjectBadge.subjectOffering.subject.code} · ${r.subjectBadge.subjectOffering.group}`;
+              return (
+                <RewardCard
+                  key={r.id}
+                  name={r.name}
+                  description={r.description}
+                  badgeCost={r.badgeCost}
+                  supply={r.supply}
+                  redemptionCount={r._count.redemptions}
+                  subjectName={subjectName}
+                  studentBadgeCount={badgeBalances.get(r.subjectBadge.id) || 0}
+                  onRedeem={() => handleRedeem(r.id)}
+                  redeeming={redeeming === r.id}
+                />
+              );
+            })}
           </div>
         )}
       </section>
@@ -118,7 +129,9 @@ export default function StudentRewardsPage() {
                 <div key={r.id} className="flex items-center justify-between p-4">
                   <div>
                     <p className="text-sm font-medium text-text">{r.reward.name}</p>
-                    <p className="text-xs text-text-muted">{r.reward.badgeCost} {r.reward.badgeType.name}</p>
+                    <p className="text-xs text-text-muted">
+                      {r.reward.badgeCost} insignias · {r.reward.subjectBadge.subjectOffering.subject.name}
+                    </p>
                   </div>
                   <span className="text-xs text-text-muted">
                     {new Date(r.redeemedAt).toLocaleDateString("es-ES")}

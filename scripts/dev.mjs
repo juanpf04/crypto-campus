@@ -248,6 +248,14 @@ await runNodeScript("scripts/seed-products.mjs", {
   nonCriticalMessage: "Seed de productos terminó con errores (no crítico, continuando...)",
 });
 
+// 9b. Seed de tareas, premios y recompensas para cada asignatura (idempotente)
+log("Cargando tareas y premios de insignias...");
+await runNodeScript("scripts/seed-badges.mjs", {
+  prefix: "[seed-badges]",
+  allowFailure: true,
+  nonCriticalMessage: "Seed de insignias terminó con errores (no crítico, continuando...)",
+});
+
 // 9. Seed de ítems de la biblioteca (idempotente)
 log("Cargando catálogo de biblioteca...");
 await runNodeScript("scripts/seed-library.mjs", {

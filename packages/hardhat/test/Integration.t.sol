@@ -72,9 +72,10 @@ contract IntegrationTest is Test {
         campusShop.addProduct(80, 10);
 
         vm.startPrank(professor);
-        badgeSystem.createBadgeType();
-        badgeSystem.createTask(1, 3);
-        badgeSystem.createReward(1, 2, 10);
+        badgeSystem.createSubjectBadge();           // subjectBadgeId = 1
+        badgeSystem.createAssignment(1);             // assignmentId = 1
+        badgeSystem.addPrizeCategory(1, 3, 5);       // prizeCategoryId = 1: 3 insignias, max 5
+        badgeSystem.createReward(1, 2, 10);          // rewardId = 1
         vm.stopPrank();
 
         vm.prank(student1);
@@ -87,10 +88,11 @@ contract IntegrationTest is Test {
         vm.prank(student2);
         campusShop.purchase(1);
 
+        address[] memory winners = new address[](2);
+        winners[0] = student1;
+        winners[1] = student2;
         vm.prank(professor);
-        badgeSystem.awardBadge(1, student1);
-        vm.prank(professor);
-        badgeSystem.awardBadge(1, student2);
+        badgeSystem.awardPrize(1, winners);
 
         vm.prank(student1);
         badgeSystem.redeemReward(1);
@@ -161,16 +163,19 @@ contract IntegrationTest is Test {
     }
 
     function test_FullBadgeUseRequestFlow() public {
-        // El profesor crea tipo de insignia, tarea y recompensa.
+        // El profesor crea insignia de asignatura, tarea con premio y recompensa.
         vm.startPrank(professor);
-        badgeSystem.createBadgeType(); // badgeTypeId = 1
-        badgeSystem.createTask(1, 3); // taskId = 1, otorga 3 insignias
-        badgeSystem.createReward(1, 2, 10); // rewardId = 1, cuesta 2 insignias
+        badgeSystem.createSubjectBadge();           // subjectBadgeId = 1
+        badgeSystem.createAssignment(1);             // assignmentId = 1
+        badgeSystem.addPrizeCategory(1, 3, 5);       // prizeCategoryId = 1
+        badgeSystem.createReward(1, 2, 10);          // rewardId = 1
         vm.stopPrank();
 
-        // El profesor otorga insignias a student1.
+        // El profesor otorga el premio a student1.
+        address[] memory winners = new address[](1);
+        winners[0] = student1;
         vm.prank(professor);
-        badgeSystem.awardBadge(1, student1);
+        badgeSystem.awardPrize(1, winners);
 
         // student1 canjea recompensa (quema 2 insignias y recibe token de recompensa).
         vm.prank(student1);

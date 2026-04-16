@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Solicitudes de uso de recompensas del estudiante.
+ * Solicitudes de uso de recompensas del alumno.
  * Muestra solicitudes con estado y permite cancelar las pendientes.
  */
 
@@ -14,12 +14,18 @@ import { SectionTitle } from "@/components/shared/SectionTitle";
 import { UseRequestCard } from "@/components/shared/UseRequestCard";
 import { icons } from "@/components/ui/icons";
 
+const STATUS_TO_NUMBER: Record<string, number> = {
+  PENDING: 1, APPROVED: 2, REJECTED: 3, CANCELLED: 4,
+};
+
 interface UseRequest {
+  id: string;
   requestId: number;
-  rewardPrismaId: string | null;
-  rewardName: string;
-  badgeTypeName: string;
-  status: number; // 1=Pending, 2=Approved, 3=Rejected, 4=Cancelled
+  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+  reward: {
+    name: string;
+    subjectBadge: { subjectOffering: { subject: { name: string; code: string }; group: string } };
+  };
 }
 
 export default function StudentRequestsPage() {
@@ -65,17 +71,20 @@ export default function StudentRequestsPage() {
           <EmptyState title="Sin solicitudes" description="No has solicitado el uso de ninguna recompensa." />
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {requests.map((r) => (
-              <UseRequestCard
-                key={r.requestId}
-                requestId={r.requestId}
-                rewardName={r.rewardName}
-                badgeTypeName={r.badgeTypeName}
-                status={r.status}
-                onCancel={() => handleCancel(r.requestId)}
-                processing={processing === r.requestId}
-              />
-            ))}
+            {requests.map((r) => {
+              const subjectName = `${r.reward.subjectBadge.subjectOffering.subject.code} · ${r.reward.subjectBadge.subjectOffering.group}`;
+              return (
+                <UseRequestCard
+                  key={r.id}
+                  requestId={r.requestId}
+                  rewardName={r.reward.name}
+                  subjectName={subjectName}
+                  status={STATUS_TO_NUMBER[r.status]}
+                  onCancel={() => handleCancel(r.requestId)}
+                  processing={processing === r.requestId}
+                />
+              );
+            })}
           </div>
         )}
       </section>

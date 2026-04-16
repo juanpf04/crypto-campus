@@ -39,14 +39,14 @@ model User {
   topupSimulations  CardTopupSimulation[]
   paymentLogs       PaymentSimulationLog[]
   roomBookings      RoomBooking[]
-  badgeAwards       BadgeAward[]
-  awardedBadgesTo   BadgeAward[]     @relation("AwardedBy")
-  badgeTypesCreated BadgeType[]      @relation("BadgeTypeCreator")
-  tasksCreated      Task[]           @relation("TaskCreator")
-  rewardsCreated    Reward[]         @relation("RewardCreator")
-  rewardRedemptions RewardRedemption[]
-  useRequests       UseRequest[]     @relation("UseRequestStudent")
-  subjectOfferings  SubjectOffering[] @relation("OfferingProfessor")
+  badgeAwards         BadgeAward[]
+  awardedBadgesTo     BadgeAward[]      @relation("AwardedBy")
+  assignmentsCreated  Assignment[]      @relation("AssignmentCreator")
+  taskSubmissions     TaskSubmission[]  @relation("AssignmentSubmissions")
+  rewardsCreated      Reward[]          @relation("RewardCreator")
+  rewardRedemptions   RewardRedemption[]
+  useRequests         UseRequest[]      @relation("UseRequestStudent")
+  subjectOfferings    SubjectOffering[] @relation("OfferingProfessor")
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ model SubjectOffering {
   subject     Subject   @relation(fields: [subjectId], references: [id])
   professor   User      @relation("OfferingProfessor", fields: [professorId], references: [id])
   enrollments Enrollment[]
-  badgeTypes  BadgeType[]
+  subjectBadge SubjectBadge?
 
   @@unique([subjectId, professorId, group, academicYear])
 }
@@ -94,79 +94,113 @@ model Enrollment {
 // INSIGNIAS (BADGES)
 // ─────────────────────────────────────────────────────────────
 
-// Tipo de insignia. tokenId = ID en BadgeSystem (ERC-1155).
-// Vinculado a una SubjectOffering para restringir el acceso por grupo.
-model BadgeType {
+// Insignia de una asignatura. 1:1 con SubjectOffering. Se autocrea on-chain
+// cuando el profesor publica su primera assignment. tokenId = ID ERC-1155.
+model SubjectBadge {
   id                String   @id @default(cuid())
-  tokenId           Int      @unique  // ID en el contrato BadgeSystem
-  name              String
-  description       String?
-  subjectOfferingId String
-  creatorId         String
+  tokenId           Int      @unique  // ID on-chain en BadgeSystem
+  subjectOfferingId String   @unique  // 1:1
   txHash            String
   createdAt         DateTime @default(now())
 
   subjectOffering SubjectOffering @relation(fields: [subjectOfferingId], references: [id])
-  creator         User            @relation("BadgeTypeCreator", fields: [creatorId], references: [id])
-  tasks           Task[]
+  assignments     Assignment[]
   rewards         Reward[]
   awards          BadgeAward[]
 }
 
-// Tarea creada por un profesor. taskId = ID en BadgeSystem.
-model Task {
+enum AssignmentStatus {
+  OPEN       // alumnos pueden marcar como entregada
+  REVIEWING  // entregas cerradas, profesor revisando
+  CLOSED     // ya no se pueden otorgar premios
+}
+
+// Tarea/practica de una asignatura. assignmentId = ID on-chain.
+model Assignment {
+  id             String           @id @default(cuid())
+  assignmentId   Int              @unique
+  name           String
+  description    String?
+  subjectBadgeId String
+  status         AssignmentStatus @default(OPEN)
+  deadline       DateTime?
+  autoClose      Boolean          @default(false)
+  creatorId      String
+  txHash         String
+  createdAt      DateTime         @default(now())
+  closedAt       DateTime?
+
+  subjectBadge SubjectBadge     @relation(fields: [subjectBadgeId], references: [id])
+  creator      User             @relation("AssignmentCreator", fields: [creatorId], references: [id])
+  prizes       PrizeCategory[]
+  submissions  TaskSubmission[]
+}
+
+// Cada premio dentro de una assignment. prizeCategoryId = ID on-chain.
+model PrizeCategory {
+  id              String @id @default(cuid())
+  prizeCategoryId Int    @unique
+  name            String           // "Mejor nota", "Mejor diseño"...
+  description     String?
+  badgeReward     Int              // cuántas insignias se otorgan al ganador
+  maxWinners      Int              // cuántos alumnos pueden ganar este premio
+  assignmentId    String
+  txHash          String
+  createdAt       DateTime @default(now())
+
+  assignment Assignment   @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  awards     BadgeAward[]
+}
+
+// Simulación de "entrega": el alumno marca que ha completado la tarea.
+model TaskSubmission {
   id           String   @id @default(cuid())
-  taskId       Int      @unique  // ID en el contrato BadgeSystem
-  name         String
-  description  String?
-  badgeTypeId  String
-  rewardAmount Int
-  active       Boolean  @default(true)
-  creatorId    String
-  txHash       String
-  createdAt    DateTime @default(now())
+  assignmentId String
+  studentId    String
+  submittedAt  DateTime @default(now())
 
-  badgeType BadgeType @relation(fields: [badgeTypeId], references: [id])
-  creator   User      @relation("TaskCreator", fields: [creatorId], references: [id])
-  awards    BadgeAward[]
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student    User       @relation("AssignmentSubmissions", fields: [studentId], references: [id])
+
+  @@unique([assignmentId, studentId])
 }
 
-// Log de insignias entregadas. Un registro por cada awardBadge ejecutado.
+// Log de premios otorgados. Un registro por cada (alumno, premio).
 model BadgeAward {
-  id          String   @id @default(cuid())
-  userId      String
-  taskId      String
-  badgeTypeId String
-  awardedById String
-  txHash      String
-  awardedAt   DateTime @default(now())
+  id              String   @id @default(cuid())
+  userId          String
+  prizeCategoryId String
+  subjectBadgeId  String
+  awardedById     String
+  txHash          String
+  awardedAt       DateTime @default(now())
 
-  user      User      @relation(fields: [userId], references: [id])
-  task      Task      @relation(fields: [taskId], references: [id])
-  badgeType BadgeType @relation(fields: [badgeTypeId], references: [id])
-  awardedBy User      @relation("AwardedBy", fields: [awardedById], references: [id])
+  user          User          @relation(fields: [userId], references: [id])
+  prizeCategory PrizeCategory @relation(fields: [prizeCategoryId], references: [id], onDelete: Cascade)
+  subjectBadge  SubjectBadge  @relation(fields: [subjectBadgeId], references: [id])
+  awardedBy     User          @relation("AwardedBy", fields: [awardedById], references: [id])
 
-  @@unique([userId, taskId]) // un alumno solo puede ganar cada tarea una vez
+  @@unique([userId, prizeCategoryId])
 }
 
-// Recompensa canjeable con insignias. rewardId = ID en BadgeSystem.
+// Recompensa canjeable con insignias de una asignatura. rewardId = ID on-chain.
 model Reward {
-  id          String   @id @default(cuid())
-  rewardId    Int      @unique  // ID en el contrato BadgeSystem
-  name        String
-  description String?
-  badgeTypeId String
-  badgeCost   Int
-  supply      Int      // 0 = ilimitado
-  active      Boolean  @default(true)
-  creatorId   String
-  txHash      String
-  createdAt   DateTime @default(now())
+  id             String   @id @default(cuid())
+  rewardId       Int      @unique
+  name           String
+  description    String?
+  subjectBadgeId String
+  badgeCost      Int
+  supply         Int      // 0 = ilimitado
+  active         Boolean  @default(true)
+  creatorId      String
+  txHash         String
+  createdAt      DateTime @default(now())
 
-  badgeType   BadgeType          @relation(fields: [badgeTypeId], references: [id])
-  creator     User               @relation("RewardCreator", fields: [creatorId], references: [id])
-  redemptions RewardRedemption[]
-  useRequests UseRequest[]
+  subjectBadge SubjectBadge       @relation(fields: [subjectBadgeId], references: [id])
+  creator      User               @relation("RewardCreator", fields: [creatorId], references: [id])
+  redemptions  RewardRedemption[]
+  useRequests  UseRequest[]
 }
 
 // Log de canjes de recompensas.

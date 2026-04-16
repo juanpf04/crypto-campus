@@ -29,7 +29,9 @@ interface Reward {
   badgeCost: number;
   supply: number;
   active: boolean;
-  badgeType: { id: string; name: string };
+  subjectBadge: {
+    subjectOffering: { group: string; subject: { name: string; code: string } };
+  };
   _count: { redemptions: number };
 }
 
@@ -113,8 +115,8 @@ export default function ProfessorRewardsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nombre</TableHead>
-                  <TableHead>Tipo de insignia</TableHead>
-                  <TableHead>Coste (badges)</TableHead>
+                  <TableHead>Asignatura</TableHead>
+                  <TableHead>Coste (insignias)</TableHead>
                   <TableHead>Stock</TableHead>
                   <TableHead>Canjes</TableHead>
                   <TableHead>Estado</TableHead>
@@ -124,7 +126,9 @@ export default function ProfessorRewardsPage() {
                 {rewards.map((reward) => (
                   <TableRow key={reward.id}>
                     <TableCell className="font-medium">{reward.name}</TableCell>
-                    <TableCell className="text-text-muted">{reward.badgeType.name}</TableCell>
+                    <TableCell className="text-text-muted">
+                      {reward.subjectBadge.subjectOffering.subject.code} · {reward.subjectBadge.subjectOffering.group}
+                    </TableCell>
                     <TableCell>{reward.badgeCost}</TableCell>
                     <TableCell>{reward.supply === 0 ? "Ilimitado" : reward.supply}</TableCell>
                     <TableCell>{reward._count.redemptions}</TableCell>

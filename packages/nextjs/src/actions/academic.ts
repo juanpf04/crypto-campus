@@ -70,7 +70,8 @@ export async function getSubject(id: string) {
 			offerings: {
 				include: {
 					professor: { select: { id: true, name: true, email: true } },
-					_count: { select: { enrollments: true, badgeTypes: true } },
+					_count: { select: { enrollments: true } },
+					subjectBadge: { select: { id: true } },
 				},
 				orderBy: [{ academicYear: "desc" }, { group: "asc" }],
 			},
@@ -123,12 +124,12 @@ export async function deleteOffering(id: string) {
 	const session = await getSession();
 	ensureRole(session, ["ADMIN"]);
 
-	const [enrollments, badgeTypes] = await Promise.all([
+	const [enrollments, subjectBadge] = await Promise.all([
 		prisma.enrollment.count({ where: { subjectOfferingId: id } }),
-		prisma.badgeType.count({ where: { subjectOfferingId: id } }),
+		prisma.subjectBadge.findUnique({ where: { subjectOfferingId: id } }),
 	]);
 	if (enrollments > 0) throw new Error("No se puede eliminar: tiene matrículas asociadas");
-	if (badgeTypes > 0) throw new Error("No se puede eliminar: tiene tipos de insignia asociados");
+	if (subjectBadge) throw new Error("No se puede eliminar: tiene insignia de asignatura creada");
 
 	await prisma.subjectOffering.delete({ where: { id } });
 	return { success: true };

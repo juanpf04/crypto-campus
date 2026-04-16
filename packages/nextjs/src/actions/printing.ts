@@ -641,3 +641,48 @@ export async function executePrintJobAsAdmin(input: ExecutePrintAsAdminInput) {
 		throw new Error(`Error al ejecutar trabajo de impresión admin: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
+
+/**
+ * Devuelve el conteo de páginas impresas por mes del usuario autenticado
+ * en los últimos 6 meses (incluyendo el mes actual).
+ * Retorna array de { month: "abr 2026", count: number } en orden cronológico.
+ */
+export async function getMyPrintsByMonth(): Promise<{ month: string; count: number }[]> {
+	const session = await getSession();
+	ensureRole(session, ["STUDENT", "PROFESSOR", "LIBRARIAN", "ADMIN"]);
+
+	// Seis meses contando el actual, inicio del mes más antiguo
+	const now = new Date();
+	const startMonth = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+
+	const logs = await prisma.printLog.findMany({
+		where: {
+			userId: session.userId!,
+			createdAt: { gte: startMonth },
+		},
+		select: { pages: true, createdAt: true },
+	});
+
+	// Agrupar por "YYYY-MM"
+	const buckets = new Map<string, number>();
+	for (let i = 0; i < 6; i++) {
+		const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+		const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+		buckets.set(key, 0);
+	}
+
+	for (const l of logs) {
+		const d = l.createdAt;
+		const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+		if (buckets.has(key)) buckets.set(key, buckets.get(key)! + l.pages);
+	}
+
+	return Array.from(buckets.entries()).map(([key, count]) => {
+		const [year, month] = key.split("-");
+		const d = new Date(Number(year), Number(month) - 1, 1);
+		return {
+			month: d.toLocaleDateString("es-ES", { month: "short", year: "2-digit" }),
+			count,
+		};
+	});
+}

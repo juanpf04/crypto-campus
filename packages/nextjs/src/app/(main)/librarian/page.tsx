@@ -15,13 +15,13 @@ import { SectionTitle } from "@/components/shared/SectionTitle";
 import { CompoundCard } from "@/components/shared/CompoundCard";
 import { DashboardGreeting } from "@/components/shared/DashboardGreeting";
 import { ActionRow } from "@/components/shared/ActionRow";
-import { StatusBadge } from "@/components/shared/StatusBadge";
+import { AlertCalloutCard } from "@/components/shared/AlertCalloutCard";
+import { DashboardBarChart } from "@/components/shared/DashboardBarChart";
+import { DashboardPieChart } from "@/components/shared/DashboardPieChart";
+import { TopListCard } from "@/components/shared/TopListCard";
+import { RecentActivityCard } from "@/components/shared/RecentActivityCard";
 import { TYPE_LABELS } from "@/lib/library-constants";
-import Link from "next/link";
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell,
-} from "recharts";
+import { LIBRARY_TYPE_COLORS } from "@/lib/dashboard-colors";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────
 
@@ -47,15 +47,6 @@ interface RoomStats {
   todayBookings: number;
   cancelledBookings: number;
 }
-
-// ── Constantes ────────────────────────────────────────────────────────────
-
-const PIE_COLORS: Record<string, string> = {
-  BOOK: "#3b82f6",
-  BOARD_GAME: "#8b5cf6",
-  VIDEO_GAME: "#f59e0b",
-  OTHER: "#6b7280",
-};
 
 // ── Componente ────────────────────────────────────────────────────────────
 
@@ -96,20 +87,14 @@ export default function LibrarianDashboard() {
 
       {/* ── Alerta de préstamos vencidos ── */}
       {ls && ls.overdueLoans > 0 && (
-        <Link href="/librarian/loans?status=PICKED_UP" className="block">
-          <Card className="flex items-center gap-4 border-warning/50 bg-warning/5 hover:border-warning transition-colors">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-warning/15 text-warning">
-              {icons.alert}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-medium text-text">
-                {ls.overdueLoans} préstamo{ls.overdueLoans !== 1 ? "s" : ""} vencido{ls.overdueLoans !== 1 ? "s" : ""}
-              </p>
-              <p className="text-sm text-text-muted">Requieren acción inmediata — revisar y forzar devolución si es necesario</p>
-            </div>
-            <span className="text-sm text-warning font-medium shrink-0">Ver préstamos →</span>
-          </Card>
-        </Link>
+        <AlertCalloutCard
+          variant="warning"
+          icon={icons.alert}
+          title={`${ls.overdueLoans} préstamo${ls.overdueLoans !== 1 ? "s" : ""} vencido${ls.overdueLoans !== 1 ? "s" : ""}`}
+          description="Requieren acción inmediata — revisar y forzar devolución si es necesario"
+          actionText="Ver préstamos"
+          href="/librarian/loans?status=PICKED_UP"
+        />
       )}
 
       {/* ── Resumen rápido ── */}
@@ -131,79 +116,23 @@ export default function LibrarianDashboard() {
         <section className="space-y-4">
           <SectionTitle icon={icons.history}>Actividad</SectionTitle>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {/* Gráfico de barras — Préstamos por mes */}
-            <Card className="space-y-3">
-              <h3 className="font-medium text-text">Préstamos por mes</h3>
-              {ls.loansByMonth.some((m) => m.count > 0) ? (
-                <div className="h-56">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={ls.loansByMonth} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                      <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="var(--color-text-muted)" />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 12 }} stroke="var(--color-text-muted)" />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: "var(--color-card)", border: "1px solid var(--color-border-default)", borderRadius: 8, fontSize: 13 }}
-                        labelStyle={{ color: "var(--color-text)" }}
-                        itemStyle={{ color: "var(--color-primary)" }}
-                        formatter={(value) => [`${value} préstamos`, ""]}
-                      />
-                      <Bar dataKey="count" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <p className="text-sm text-text-muted py-8 text-center">No hay datos de préstamos en los últimos 6 meses</p>
-              )}
-            </Card>
+            <DashboardBarChart
+              title="Préstamos por mes"
+              data={ls.loansByMonth}
+              emptyMessage="No hay datos de préstamos en los últimos 6 meses"
+              formatter={(v) => `${v} préstamos`}
+            />
 
-            {/* Gráfico circular — Distribución del catálogo */}
-            <Card className="space-y-3">
-              <h3 className="font-medium text-text">Distribución del catálogo</h3>
-              {ls.itemsByType.length > 0 ? (
-                <div className="flex items-center gap-6">
-                  <div className="h-48 w-48 shrink-0">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={ls.itemsByType}
-                          dataKey="count"
-                          nameKey="type"
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={40}
-                          outerRadius={70}
-                          paddingAngle={2}
-                        >
-                          {ls.itemsByType.map((entry) => (
-                            <Cell key={entry.type} fill={PIE_COLORS[entry.type] || "#6b7280"} />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          contentStyle={{ backgroundColor: "var(--color-card)", border: "1px solid var(--color-border-default)", borderRadius: 8, fontSize: 13 }}
-                          formatter={(value, _name, props) => [
-                            `${value} ítems`,
-                            TYPE_LABELS[(props as { payload: { type: string } }).payload.type] || (props as { payload: { type: string } }).payload.type,
-                          ]}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="space-y-2 flex-1">
-                    {ls.itemsByType.map((entry) => (
-                      <div key={entry.type} className="flex items-center gap-2">
-                        <span
-                          className="h-3 w-3 rounded-full shrink-0"
-                          style={{ backgroundColor: PIE_COLORS[entry.type] || "#6b7280" }}
-                        />
-                        <span className="text-sm text-text flex-1">{TYPE_LABELS[entry.type] || entry.type}</span>
-                        <span className="text-sm font-medium text-text-muted">{entry.count}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-text-muted py-8 text-center">No hay ítems en el catálogo</p>
-              )}
-            </Card>
+            <DashboardPieChart
+              title="Distribución del catálogo"
+              data={ls.itemsByType}
+              dataKey="count"
+              nameKey="type"
+              colorMap={LIBRARY_TYPE_COLORS}
+              labelMap={TYPE_LABELS}
+              unitLabel="ítems"
+              emptyMessage="No hay ítems en el catálogo"
+            />
           </div>
         </section>
       )}
@@ -212,49 +141,27 @@ export default function LibrarianDashboard() {
       {ls && (
         <section className="space-y-4">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {/* Top 5 ítems más prestados */}
-            <Card className="space-y-3">
-              <h3 className="font-medium text-text">Top ítems más prestados</h3>
-              {ls.topItems.length > 0 ? (
-                <div className="space-y-2">
-                  {ls.topItems.map((item, i) => (
-                    <div key={i} className="flex items-center gap-3 py-1.5">
-                      <span className="text-sm font-bold text-text-muted w-5 text-right">{i + 1}.</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-text truncate">{item.title}</p>
-                        <p className="text-xs text-text-muted">{TYPE_LABELS[item.type] || item.type}</p>
-                      </div>
-                      <span className="text-sm font-semibold text-primary shrink-0">{item.loanCount}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-text-muted py-4 text-center">Sin datos de préstamos</p>
-              )}
-            </Card>
+            <TopListCard
+              title="Top ítems más prestados"
+              items={ls.topItems.map((i) => ({
+                title: i.title,
+                subtitle: TYPE_LABELS[i.type] || i.type,
+                stat: i.loanCount,
+              }))}
+              emptyMessage="Sin datos de préstamos"
+            />
 
-            {/* Actividad reciente */}
-            <Card className="space-y-3">
-              <h3 className="font-medium text-text">Actividad reciente</h3>
-              {ls.recentLoans.length > 0 ? (
-                <div className="space-y-2">
-                  {ls.recentLoans.map((loan, i) => (
-                    <div key={i} className="flex items-center gap-3 py-1.5">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-text truncate">{loan.title}</p>
-                        <p className="text-xs text-text-muted">{loan.userName}</p>
-                      </div>
-                      <StatusBadge status={loan.status} />
-                      <span className="text-xs text-text-muted shrink-0">
-                        {new Date(loan.date).toLocaleDateString("es-ES", { day: "2-digit", month: "short" })}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-text-muted py-4 text-center">Sin actividad reciente</p>
-              )}
-            </Card>
+            <RecentActivityCard
+              title="Actividad reciente"
+              items={ls.recentLoans.map((l) => ({
+                id: l.title + l.date,
+                title: l.title,
+                subtitle: l.userName,
+                status: l.status,
+                date: l.date,
+              }))}
+              emptyMessage="Sin actividad reciente"
+            />
           </div>
         </section>
       )}

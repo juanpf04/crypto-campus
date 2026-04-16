@@ -25,7 +25,9 @@ interface Reward {
   badgeCost: number;
   supply: number;
   active: boolean;
-  badgeType: { name: string; tokenId: number };
+  subjectBadge: {
+    subjectOffering: { group: string; subject: { name: string; code: string } };
+  };
   creator?: { name: string };
   _count: { redemptions: number };
 }
@@ -82,7 +84,7 @@ export default function AdminRewardsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre</TableHead>
-                <TableHead>Tipo de insignia</TableHead>
+                <TableHead>Asignatura</TableHead>
                 <TableHead>Creador</TableHead>
                 <TableHead>Coste</TableHead>
                 <TableHead>Stock</TableHead>
@@ -95,12 +97,14 @@ export default function AdminRewardsPage() {
                 <TableRow key={reward.id}>
                   <TableCell className="font-medium">{reward.name}</TableCell>
                   <TableCell className="text-text-muted">
-                    {reward.badgeType?.name ?? "—"}
+                    {reward.subjectBadge?.subjectOffering
+                      ? `${reward.subjectBadge.subjectOffering.subject.code} · ${reward.subjectBadge.subjectOffering.group}`
+                      : "—"}
                   </TableCell>
                   <TableCell className="text-text-muted">
                     {reward.creator?.name ?? "—"}
                   </TableCell>
-                  <TableCell>{reward.badgeCost} badges</TableCell>
+                  <TableCell>{reward.badgeCost} insignias</TableCell>
                   <TableCell>
                     {reward.supply === 0 ? "Ilimitado" : reward.supply}
                   </TableCell>

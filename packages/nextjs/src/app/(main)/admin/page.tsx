@@ -2,36 +2,69 @@
 
 /**
  * Dashboard del ADMIN.
- *
- * Visión global de la plataforma para el administrador/secretario:
- * - Usuarios: totales (clicable → lista), por rol (datos reales)
- * - Biblioteca: estado general del servicio
- * - Tienda: productos, pedidos, tokens SHOP
- * - Insignias: tipos creados, badges otorgados
- * - Impresión: impresoras activas (clicable → gestión), impresiones (clicable → historial)
+ * Panel completo con alertas, estadísticas, gráficos (Recharts), top items,
+ * actividad reciente y accesos rápidos por dominio.
  */
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import { useAuthUser } from "@/hooks/useAuthUser";
 import { icons } from "@/components/ui/icons";
+import { Card } from "@/components/ui/Card";
+import { Spinner } from "@/components/ui/Spinner";
 import { StatCard } from "@/components/shared/StatCard";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { CompoundCard } from "@/components/shared/CompoundCard";
 import { DashboardGreeting } from "@/components/shared/DashboardGreeting";
-import { Card } from "@/components/ui/Card";
-import { Spinner } from "@/components/ui/Spinner";
+import { ActionRow } from "@/components/shared/ActionRow";
+import { AlertCalloutCard } from "@/components/shared/AlertCalloutCard";
+import { DashboardBarChart } from "@/components/shared/DashboardBarChart";
+import { DashboardPieChart } from "@/components/shared/DashboardPieChart";
+import { TopListCard } from "@/components/shared/TopListCard";
+import { RecentActivityCard } from "@/components/shared/RecentActivityCard";
+import { TYPE_LABELS } from "@/lib/library-constants";
+import { USER_ROLE_COLORS } from "@/lib/dashboard-colors";
 
-/** Icono de flecha diagonal ↗ para cards clicables */
-function ClickableArrow() {
-  return (
-    <span className="absolute top-4 right-4 grid h-8 w-8 place-items-center rounded-md bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-colors">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-        <line x1="7" y1="17" x2="17" y2="7" />
-        <polyline points="7 7 17 7 17 17" />
-      </svg>
-    </span>
-  );
+// ── Tipos ─────────────────────────────────────────────────────────────────
+
+interface LibraryStats {
+  totalItems: number;
+  activeItems: number;
+  totalLoans: number;
+  queuedLoans: number;
+  pendingPickups: number;
+  activeLoans: number;
+  overdueLoans: number;
+  onTimeRate: number;
+  loansByMonth: { month: string; count: number }[];
+  itemsByType: { type: string; count: number }[];
+  topItems: { title: string; type: string; loanCount: number }[];
+  recentLoans: { title: string; userName: string; status: string; date: string }[];
+}
+
+interface RoomStats {
+  totalRooms: number;
+  activeRooms: number;
+  totalBookings: number;
+  todayBookings: number;
+  cancelledBookings: number;
+}
+
+interface BadgeStats {
+  totalSubjectBadges: number;
+  totalAwards: number;
+  totalRewards: number;
+  totalRedemptions: number;
+  pendingRequests: number;
+}
+
+interface ShopStats {
+  activeProducts: number;
+  totalProducts: number;
+  totalOrders: number;
+  tokensInCirculation: number;
+  PAID: number;
+  DELIVERED: number;
+  RETURNED: number;
 }
 
 interface UserCounts {
@@ -42,34 +75,38 @@ interface UserCounts {
   admins: number;
 }
 
+// ── Componente ────────────────────────────────────────────────────────────
+
 export default function AdminDashboard() {
-  const { user, loading } = useAuthUser();
-
+  const { user, loading: authLoading } = useAuthUser();
+  const [libraryStats, setLibraryStats] = useState<LibraryStats | null>(null);
+  const [roomStats, setRoomStats] = useState<RoomStats | null>(null);
+  const [badgeStats, setBadgeStats] = useState<BadgeStats | null>(null);
+  const [shopStats, setShopStats] = useState<ShopStats | null>(null);
   const [userCounts, setUserCounts] = useState<UserCounts | null>(null);
-  const [activePrinters, setActivePrinters] = useState<number | string>("—");
-  const [totalPrintLogs, setTotalPrintLogs] = useState<number | string>("—");
-  const [shopStats, setShopStats] = useState<{ products: number | string; orders: number | string; tokensInCirculation: number | string }>({
-    products: "—",
-    orders: "—",
-    tokensInCirculation: "—",
-  });
-  const [libraryStats, setLibraryStats] = useState<{ activeItems: number | string; activeLoans: number | string; pendingPickups: number | string }>({
-    activeItems: "—", activeLoans: "—", pendingPickups: "—",
-  });
-  const [roomStats, setRoomStats] = useState<{ activeRooms: number | string; todayBookings: number | string }>({
-    activeRooms: "—", todayBookings: "—",
-  });
-  const [badgeStats, setBadgeStats] = useState<{ totalBadgeTypes: number | string; totalAwards: number | string }>({
-    totalBadgeTypes: "—", totalAwards: "—",
-  });
+  const [activePrinters, setActivePrinters] = useState<number>(0);
+  const [totalPrintLogs, setTotalPrintLogs] = useState<number>(0);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!user) return;
+  const loadStats = useCallback(async () => {
+    try {
+      const [libRes, roomRes, badgeRes, shopRes, usersRes, printersRes, printLogsRes] = await Promise.all([
+        fetch("/api/library/stats"),
+        fetch("/api/rooms/stats"),
+        fetch("/api/badges/stats"),
+        fetch("/api/shop/stats"),
+        fetch("/api/admin/users"),
+        fetch("/api/printer"),
+        fetch("/api/printer/logs/admin?limit=500&offset=0"),
+      ]);
 
-    // Usuarios registrados con conteo por rol
-    fetch("/api/admin/users")
-      .then((r) => r.json())
-      .then((data) => {
+      if (libRes.ok) setLibraryStats(await libRes.json());
+      if (roomRes.ok) setRoomStats(await roomRes.json());
+      if (badgeRes.ok) setBadgeStats(await badgeRes.json());
+      if (shopRes.ok) setShopStats(await shopRes.json());
+
+      if (usersRes.ok) {
+        const data = await usersRes.json();
         const users = data.users ?? [];
         setUserCounts({
           total: users.length,
@@ -78,270 +115,211 @@ export default function AdminDashboard() {
           librarians: users.filter((u: { role: string }) => u.role === "LIBRARIAN").length,
           admins: users.filter((u: { role: string }) => u.role === "ADMIN").length,
         });
-      })
-      .catch(() => {});
+      }
 
-    // Impresoras activas
-    fetch("/api/printer")
-      .then((r) => r.json())
-      .then((data) => setActivePrinters(Array.isArray(data) ? data.length : "—"))
-      .catch(() => {});
+      if (printersRes.ok) {
+        const data = await printersRes.json();
+        setActivePrinters(Array.isArray(data) ? data.length : 0);
+      }
+      if (printLogsRes.ok) {
+        const data = await printLogsRes.json();
+        setTotalPrintLogs(Array.isArray(data) ? data.length : 0);
+      }
+    } catch {
+      // Stats no críticas
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-    // Total impresiones del sistema
-    fetch("/api/printer/logs/admin?limit=200&offset=0")
-      .then((r) => r.json())
-      .then((data) => setTotalPrintLogs(Array.isArray(data) ? data.length : "—"))
-      .catch(() => {});
+  useEffect(() => { loadStats(); }, [loadStats]);
 
-    // Estadísticas de la biblioteca
-    fetch("/api/library/stats")
-      .then((r) => r.json())
-      .then((data) => {
-        setLibraryStats({
-          activeItems: data.activeItems ?? "—",
-          activeLoans: data.activeLoans ?? "—",
-          pendingPickups: data.pendingPickups ?? "—",
-        });
-      })
-      .catch(() => {});
-
-    // Estadísticas de salas
-    fetch("/api/rooms/stats")
-      .then((r) => r.json())
-      .then((data) => {
-        setRoomStats({
-          activeRooms: data.activeRooms ?? "—",
-          todayBookings: data.todayBookings ?? "—",
-        });
-      })
-      .catch(() => {});
-
-    // Estadísticas de insignias
-    fetch("/api/badges/stats")
-      .then((r) => r.json())
-      .then((data) => {
-        setBadgeStats({
-          totalBadgeTypes: data.totalBadgeTypes ?? "—",
-          totalAwards: data.totalAwards ?? "—",
-        });
-      })
-      .catch(() => {});
-
-    // Estadísticas de la tienda
-    fetch("/api/shop/stats")
-      .then((r) => r.json())
-      .then((data) => {
-        setShopStats({
-          products: data.activeProducts ?? "—",
-          orders: data.totalOrders ?? "—",
-          tokensInCirculation: data.tokensInCirculation ?? "—",
-        });
-      })
-      .catch(() => {});
-  }, [user]);
-
-  if (loading || !user) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
+  if (authLoading || !user) {
+    return <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>;
   }
+
+  const ls = libraryStats;
+  const rs = roomStats;
+  const bs = badgeStats;
+  const ss = shopStats;
+  const uc = userCounts;
+  const val = (v: number | undefined) => loading ? "—" : String(v ?? 0);
+
+  // Datos para el PieChart de usuarios por rol
+  const usersByRole = uc ? [
+    { role: "Estudiantes", count: uc.students },
+    { role: "Profesores", count: uc.professors },
+    { role: "Bibliotecarios", count: uc.librarians },
+    { role: "Admins", count: uc.admins },
+  ].filter((r) => r.count > 0) : [];
 
   return (
     <div className="space-y-10">
-      <DashboardGreeting
-        name={user.name}
-        subtitle="Panel de administración de CryptoCampus."
-      />
+      <DashboardGreeting name={user.name} subtitle="Panel de administración de CryptoCampus." />
 
-      {/* ── Sección: Usuarios ── */}
+      {/* ── Alertas contextuales ── */}
+      {(ls && ls.overdueLoans > 0) || (bs && bs.pendingRequests > 0) || (ss && ss.PAID > 5) ? (
+        <div className="space-y-3">
+          {ls && ls.overdueLoans > 0 && (
+            <AlertCalloutCard
+              variant="warning"
+              icon={icons.alert}
+              title={`${ls.overdueLoans} préstamo${ls.overdueLoans !== 1 ? "s" : ""} vencido${ls.overdueLoans !== 1 ? "s" : ""}`}
+              description="Revisar y forzar devolución si es necesario"
+              actionText="Ver préstamos"
+              href="/admin/library/loans?status=PICKED_UP"
+            />
+          )}
+          {bs && bs.pendingRequests > 0 && (
+            <AlertCalloutCard
+              variant="info"
+              icon={icons.pending}
+              title={`${bs.pendingRequests} solicitud${bs.pendingRequests !== 1 ? "es" : ""} de recompensa pendiente${bs.pendingRequests !== 1 ? "s" : ""}`}
+              description="Revisar y aprobar o rechazar"
+              actionText="Ver solicitudes"
+              href="/admin/badges/rewards/requests"
+            />
+          )}
+          {ss && ss.PAID > 5 && (
+            <AlertCalloutCard
+              variant="info"
+              icon={icons.orders}
+              title={`${ss.PAID} pedido${ss.PAID !== 1 ? "s" : ""} pendiente${ss.PAID !== 1 ? "s" : ""} de entrega`}
+              description="Gestionar entregas en la tienda"
+              actionText="Ver pedidos"
+              href="/admin/shop/orders?status=PAID"
+            />
+          )}
+        </div>
+      ) : null}
+
+      {/* ── Resumen ejecutivo ── */}
       <section className="space-y-4">
-        <SectionTitle icon={icons.users}>Usuarios</SectionTitle>
+        <SectionTitle icon={icons.items}>Resumen</SectionTitle>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {/* Card clicable → lista de usuarios */}
-          <Link href="/admin/users" className="group">
-            <Card className="relative h-full hover:border-primary/50 transition-colors">
-              <div className="flex items-center gap-4">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                  {icons.users}
-                </div>
-                <div>
-                  <p className="text-sm text-text-muted">Usuarios totales</p>
-                  <p className="text-2xl font-bold text-text">{userCounts?.total ?? "—"}</p>
-                  <p className="text-xs text-text-muted">Registrados en la plataforma</p>
-                </div>
-              </div>
-              <ClickableArrow />
-            </Card>
-          </Link>
-
+          <StatCard
+            title="Usuarios totales"
+            value={val(uc?.total)}
+            subtitle={`${uc?.students ?? 0} estudiantes`}
+            icon={icons.users}
+          />
           <CompoundCard
             icon={icons.student}
-            title="Usuarios por rol"
-            className="sm:col-span-2 lg:col-span-3"
+            title="Por rol"
             slots={[
-              { value: userCounts?.students ?? "—", label: "Estudiantes", color: "text-primary" },
-              { value: userCounts?.professors ?? "—", label: "Profesores", color: "text-success" },
-              { value: userCounts?.librarians ?? "—", label: "Bibliotecarios", color: "text-warning" },
-              { value: userCounts?.admins ?? "—", label: "Admins", color: "text-danger" },
+              { value: uc?.students ?? 0, label: "Estudiantes", color: "text-primary" },
+              { value: uc?.professors ?? 0, label: "Profesores", color: "text-success" },
+              { value: uc?.librarians ?? 0, label: "Biblioteca", color: "text-warning" },
+              { value: uc?.admins ?? 0, label: "Admins", color: "text-danger" },
             ]}
+          />
+          <CompoundCard
+            icon={icons.token}
+            title="Tokens en circulación"
+            slots={[
+              { value: val(ss?.tokensInCirculation), label: "SHOP", color: "text-primary" },
+              { value: val(bs?.totalAwards), label: "Badges", color: "text-warning" },
+            ]}
+          />
+          <StatCard
+            title="Préstamos activos"
+            value={val(ls?.activeLoans)}
+            subtitle={`${ls?.onTimeRate ?? 100}% puntualidad`}
+            icon={icons.loans}
           />
         </div>
       </section>
 
-      {/* ── Sección: Biblioteca ── */}
+      {/* ── Gráficos ── */}
+      {ls && (
+        <section className="space-y-4">
+          <SectionTitle icon={icons.history}>Actividad del sistema</SectionTitle>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <DashboardBarChart
+              title="Préstamos por mes"
+              data={ls.loansByMonth}
+              emptyMessage="No hay datos de préstamos en los últimos 6 meses"
+              formatter={(v) => `${v} préstamos`}
+            />
+
+            <DashboardPieChart
+              title="Usuarios por rol"
+              data={usersByRole}
+              dataKey="count"
+              nameKey="role"
+              colorMap={USER_ROLE_COLORS}
+              unitLabel="usuarios"
+              emptyMessage="No hay usuarios registrados"
+            />
+          </div>
+        </section>
+      )}
+
+      {/* ── Datos detallados ── */}
+      {ls && (
+        <section className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <TopListCard
+              title="Top ítems más prestados"
+              items={ls.topItems.map((i) => ({
+                title: i.title,
+                subtitle: TYPE_LABELS[i.type] || i.type,
+                stat: i.loanCount,
+              }))}
+              emptyMessage="Sin datos de préstamos"
+            />
+
+            <RecentActivityCard
+              title="Actividad reciente"
+              items={ls.recentLoans.map((l) => ({
+                id: l.title + l.date,
+                title: l.title,
+                subtitle: l.userName,
+                status: l.status,
+                date: l.date,
+              }))}
+              emptyMessage="Sin actividad reciente"
+            />
+          </div>
+        </section>
+      )}
+
+      {/* ── Gestión por dominio ── */}
       <section className="space-y-4">
-        <SectionTitle icon={icons.library}>Biblioteca</SectionTitle>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Link href="/admin/library/items" className="group">
-            <Card className="relative h-full hover:border-primary/50 transition-colors">
-              <div className="flex items-center gap-4">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                  {icons.library}
-                </div>
-                <div>
-                  <p className="text-sm text-text-muted">Ítems en catálogo</p>
-                  <p className="text-2xl font-bold text-text">{libraryStats.activeItems}</p>
-                  <p className="text-xs text-text-muted">Títulos activos</p>
-                </div>
-              </div>
-              <ClickableArrow />
-            </Card>
-          </Link>
-          <Link href="/admin/library/loans" className="group">
-            <Card className="relative h-full hover:border-primary/50 transition-colors">
-              <div className="flex items-center gap-4">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                  {icons.loans}
-                </div>
-                <div>
-                  <p className="text-sm text-text-muted">Préstamos activos</p>
-                  <p className="text-2xl font-bold text-text">{libraryStats.activeLoans}</p>
-                  <p className="text-xs text-text-muted">{libraryStats.pendingPickups} por recoger</p>
-                </div>
-              </div>
-              <ClickableArrow />
-            </Card>
-          </Link>
-          <Link href="/admin/library/rooms" className="group">
-            <Card className="relative h-full hover:border-primary/50 transition-colors">
-              <div className="flex items-center gap-4">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                  {icons.rooms}
-                </div>
-                <div>
-                  <p className="text-sm text-text-muted">Salas activas</p>
-                  <p className="text-2xl font-bold text-text">{roomStats.activeRooms}</p>
-                  <p className="text-xs text-text-muted">{roomStats.todayBookings} reservas hoy</p>
-                </div>
-              </div>
-              <ClickableArrow />
-            </Card>
-          </Link>
-        </div>
-      </section>
+        <SectionTitle icon={icons.items}>Gestión</SectionTitle>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {/* Usuarios */}
+          <Card className="overflow-hidden p-0">
+            <ActionRow href="/admin/users" icon={icons.users} title="Usuarios" description="Gestionar cuentas y roles" stat={`${uc?.total ?? "—"} total`} />
+            <ActionRow href="/admin/users/new" icon={icons.student} title="Crear usuario" description="Añadir nueva cuenta" stat="" isLast />
+          </Card>
 
-      {/* ── Sección: Tienda ── */}
-      <section className="space-y-4">
-        <SectionTitle icon={icons.shop}>Tienda</SectionTitle>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Link href="/admin/shop/products" className="group">
-            <Card className="relative h-full hover:border-primary/50 transition-colors">
-              <div className="flex items-center gap-4">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                  {icons.shop}
-                </div>
-                <div>
-                  <p className="text-sm text-text-muted">Productos activos</p>
-                  <p className="text-2xl font-bold text-text">{shopStats.products}</p>
-                  <p className="text-xs text-text-muted">En el catálogo</p>
-                </div>
-              </div>
-              <ClickableArrow />
-            </Card>
-          </Link>
+          {/* Biblioteca */}
+          <Card className="overflow-hidden p-0">
+            <ActionRow href="/admin/library/items" icon={icons.library} title="Catálogo" description="Ítems y colecciones" stat={`${ls?.activeItems ?? "—"} activos`} />
+            <ActionRow href="/admin/library/loans" icon={icons.loans} title="Préstamos" description="Historial de préstamos" stat={`${ls?.totalLoans ?? "—"} total`} />
+            <ActionRow href="/admin/library/rooms" icon={icons.rooms} title="Salas" description="Gestión de salas de estudio" stat={`${rs?.activeRooms ?? "—"} activas`} isLast />
+          </Card>
 
-          <Link href="/admin/shop/orders" className="group">
-            <Card className="relative h-full hover:border-primary/50 transition-colors">
-              <div className="flex items-center gap-4">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                  {icons.orders}
-                </div>
-                <div>
-                  <p className="text-sm text-text-muted">Pedidos totales</p>
-                  <p className="text-2xl font-bold text-text">{shopStats.orders}</p>
-                  <p className="text-xs text-text-muted">Realizados en la plataforma</p>
-                </div>
-              </div>
-              <ClickableArrow />
-            </Card>
-          </Link>
+          {/* Tienda */}
+          <Card className="overflow-hidden p-0">
+            <ActionRow href="/admin/shop/products" icon={icons.shop} title="Productos" description="Catálogo de la tienda" stat={`${ss?.activeProducts ?? "—"} activos`} />
+            <ActionRow href="/admin/shop/orders" icon={icons.orders} title="Pedidos" description="Gestión de pedidos" stat={`${ss?.totalOrders ?? "—"} total`} />
+            <ActionRow href="/admin/shop/transactions" icon={icons.token} title="Transacciones" description="Movimientos de ShopTokens" stat="" isLast />
+          </Card>
 
-          <Link href="/admin/shop/transactions" className="group">
-            <Card className="relative h-full hover:border-primary/50 transition-colors">
-              <div className="flex items-center gap-4">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                  {icons.token}
-                </div>
-                <div>
-                  <p className="text-sm text-text-muted">ShopTokens en circulación</p>
-                  <p className="text-2xl font-bold text-text">{shopStats.tokensInCirculation}</p>
-                  <p className="text-xs text-text-muted">Ver log de transacciones</p>
-                </div>
-              </div>
-              <ClickableArrow />
-            </Card>
-          </Link>
-        </div>
-      </section>
+          {/* Insignias */}
+          <Card className="overflow-hidden p-0">
+            <ActionRow href="/admin/badges" icon={icons.badge} title="Insignias" description="Tipos de badge y tareas" stat={`${bs?.totalSubjectBadges ?? "—"} tipos`} />
+            <ActionRow href="/admin/badges/rewards" icon={icons.reward} title="Recompensas" description="Catálogo de recompensas" stat={`${bs?.totalRewards ?? "—"} total`} />
+            <ActionRow href="/admin/badges/rewards/requests" icon={icons.pending} title="Solicitudes" description="Aprobar/rechazar canjes" stat={`${bs?.pendingRequests ?? "—"} pendientes`} isLast />
+          </Card>
 
-      {/* ── Sección: Insignias ── */}
-      <section className="space-y-4">
-        <SectionTitle icon={icons.badge}>Insignias</SectionTitle>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard title="Tipos de insignia" value={badgeStats.totalBadgeTypes} subtitle="Creados por profesores" icon={icons.badge} />
-          <StatCard title="Insignias otorgadas" value={badgeStats.totalAwards} subtitle="Total en la plataforma" icon={icons.badge} />
-        </div>
-      </section>
-
-      {/* ── Sección: Impresión ── */}
-      <section className="space-y-4">
-        <SectionTitle icon={icons.print}>Impresión</SectionTitle>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {/* Impresoras → gestión de impresoras */}
-          <Link href="/admin/printing/printers" className="group">
-            <Card className="relative h-full hover:border-primary/50 transition-colors">
-              <div className="flex items-center gap-4">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                  {icons.print}
-                </div>
-                <div>
-                  <p className="text-sm text-text-muted">Impresoras activas</p>
-                  <p className="text-2xl font-bold text-text">{activePrinters}</p>
-                  <p className="text-xs text-text-muted">Disponibles para imprimir</p>
-                </div>
-              </div>
-              <ClickableArrow />
-            </Card>
-          </Link>
-
-          {/* Impresiones → historial */}
-          <Link href="/admin/printing/logs" className="group">
-            <Card className="relative h-full hover:border-primary/50 transition-colors">
-              <div className="flex items-center gap-4">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                  {icons.orders}
-                </div>
-                <div>
-                  <p className="text-sm text-text-muted">Impresiones realizadas</p>
-                  <p className="text-2xl font-bold text-text">{totalPrintLogs}</p>
-                  <p className="text-xs text-text-muted">Total en la plataforma</p>
-                </div>
-              </div>
-              <ClickableArrow />
-            </Card>
-          </Link>
+          {/* Impresión */}
+          <Card className="overflow-hidden p-0 lg:col-span-2">
+            <ActionRow href="/admin/printing/printers" icon={icons.print} title="Impresoras" description="Gestionar impresoras físicas" stat={`${activePrinters} activas`} />
+            <ActionRow href="/admin/printing/logs" icon={icons.history} title="Historial de impresiones" description="Ver todas las impresiones" stat={`${totalPrintLogs} registros`} isLast />
+          </Card>
         </div>
       </section>
     </div>

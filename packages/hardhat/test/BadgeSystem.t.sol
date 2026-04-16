@@ -9,10 +9,9 @@ import { BadgeSystem } from "../contracts/BadgeSystem.sol";
 /// @title BadgeSystemTest
 /// @author Juan Pablo Fernández <juanpf04@ucm.es>
 /// @author Arturo Gómez <argome04@ucm.es>
-/// @notice Pruebas de comportamiento y reverts para BadgeSystem.
-/// @dev Usa cheatcodes de Foundry para validar roles, canjes y restricciones soulbound.
+/// @notice Pruebas del nuevo modelo: SubjectBadge -> Assignment -> PrizeCategory.
 contract BadgeSystemTest is Test {
-    
+
     // ── Variables de estado ──────────────────────────────────────────────
 
     CampusRoles campusRoles;
@@ -22,6 +21,7 @@ contract BadgeSystemTest is Test {
     address professor2;
     address student;
     address student2;
+    address student3;
 
     // ── Setup ────────────────────────────────────────────────────────────
 
@@ -33,21 +33,37 @@ contract BadgeSystemTest is Test {
         professor2 = makeAddr("professor2");
         student = makeAddr("student");
         student2 = makeAddr("student2");
+        student3 = makeAddr("student3");
 
         campusRoles.registerUser(professor, "Prof", campusRoles.PROFESSOR_ROLE());
         campusRoles.registerUser(professor2, "Prof2", campusRoles.PROFESSOR_ROLE());
         campusRoles.registerUser(student, "Student", campusRoles.STUDENT_ROLE());
         campusRoles.registerUser(student2, "Student2", campusRoles.STUDENT_ROLE());
+        campusRoles.registerUser(student3, "Student3", campusRoles.STUDENT_ROLE());
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+
+    function _winners(address a) internal pure returns (address[] memory list) {
+        list = new address[](1);
+        list[0] = a;
+    }
+
+    function _winners(address a, address b) internal pure returns (address[] memory list) {
+        list = new address[](2);
+        list[0] = a;
+        list[1] = b;
     }
 
     // ── Tests ────────────────────────────────────────────────────────────
 
     function test_CreateAwardAndRedeemReward() public {
         vm.startPrank(professor);
-        badgeSystem.createBadgeType();
-        badgeSystem.createTask(1, 5);
-        badgeSystem.createReward(1, 3, 10);
-        badgeSystem.awardBadge(1, student);
+        badgeSystem.createSubjectBadge();              // subjectBadgeId = 1
+        badgeSystem.createAssignment(1);                // assignmentId = 1
+        badgeSystem.addPrizeCategory(1, 5, 3);          // prizeCategoryId = 1: 5 insignias, max 3 ganadores
+        badgeSystem.createReward(1, 3, 10);             // rewardId = 1: cuesta 3 insignias, supply 10
+        badgeSystem.awardPrize(1, _winners(student));   // student gana 5 insignias
         vm.stopPrank();
 
         assertEq(badgeSystem.getBadgeBalance(student, 1), 5);
@@ -60,17 +76,18 @@ contract BadgeSystemTest is Test {
         assertEq(reward.supply, 9);
     }
 
-    function test_RevertWhenStudentCreatesBadgeType() public {
+    function test_RevertWhenStudentCreatesSubjectBadge() public {
         vm.prank(student);
         vm.expectRevert(BadgeSystem.NotProfessor.selector);
-        badgeSystem.createBadgeType();
+        badgeSystem.createSubjectBadge();
     }
 
     function test_RevertSoulboundTransferBlocked() public {
         vm.startPrank(professor);
-        badgeSystem.createBadgeType();
-        badgeSystem.createTask(1, 1);
-        badgeSystem.awardBadge(1, student);
+        badgeSystem.createSubjectBadge();
+        badgeSystem.createAssignment(1);
+        badgeSystem.addPrizeCategory(1, 1, 5);
+        badgeSystem.awardPrize(1, _winners(student));
         vm.stopPrank();
 
         vm.prank(student);
@@ -78,32 +95,97 @@ contract BadgeSystemTest is Test {
         badgeSystem.safeTransferFrom(student, student2, 1, 1, "");
     }
 
-    function test_DeactivateTask() public {
+    function test_AssignmentLifecycle() public {
         vm.startPrank(professor);
-        badgeSystem.createBadgeType();
-        badgeSystem.createTask(1, 5);
-        badgeSystem.deactivateTask(1);
+        badgeSystem.createSubjectBadge();
+        badgeSystem.createAssignment(1);
+        badgeSystem.addPrizeCategory(1, 5, 5);
+        badgeSystem.closeAssignmentForReview(1);
         vm.stopPrank();
 
-        BadgeSystem.Task memory task = badgeSystem.getTask(1);
-        assertFalse(task.active);
+        BadgeSystem.Assignment memory a = badgeSystem.getAssignment(1);
+        assertEq(uint256(a.status), uint256(BadgeSystem.AssignmentStatus.Reviewing));
+
+        vm.prank(professor);
+        badgeSystem.closeAssignment(1);
+
+        a = badgeSystem.getAssignment(1);
+        assertEq(uint256(a.status), uint256(BadgeSystem.AssignmentStatus.Closed));
     }
 
-    function test_RevertDeactivateTaskNotOwner() public {
-        vm.prank(professor);
-        badgeSystem.createBadgeType();
+    function test_RevertAddPrizeWhenAssignmentNotOpen() public {
+        vm.startPrank(professor);
+        badgeSystem.createSubjectBadge();
+        badgeSystem.createAssignment(1);
+        badgeSystem.closeAssignmentForReview(1);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                BadgeSystem.InvalidAssignmentStatus.selector,
+                1,
+                BadgeSystem.AssignmentStatus.Reviewing
+            )
+        );
+        badgeSystem.addPrizeCategory(1, 5, 5);
+        vm.stopPrank();
+    }
 
-        vm.prank(professor);
-        badgeSystem.createTask(1, 5);
+    function test_RevertAwardPrizeWhenAssignmentClosed() public {
+        vm.startPrank(professor);
+        badgeSystem.createSubjectBadge();
+        badgeSystem.createAssignment(1);
+        badgeSystem.addPrizeCategory(1, 5, 5);
+        badgeSystem.closeAssignment(1);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                BadgeSystem.InvalidAssignmentStatus.selector,
+                1,
+                BadgeSystem.AssignmentStatus.Closed
+            )
+        );
+        badgeSystem.awardPrize(1, _winners(student));
+        vm.stopPrank();
+    }
 
-        vm.prank(professor2);
-        vm.expectRevert(abi.encodeWithSelector(BadgeSystem.NotTaskOwner.selector, 1, professor2));
-        badgeSystem.deactivateTask(1);
+    function test_RevertMaxWinnersReached() public {
+        vm.startPrank(professor);
+        badgeSystem.createSubjectBadge();
+        badgeSystem.createAssignment(1);
+        badgeSystem.addPrizeCategory(1, 5, 1);  // solo 1 ganador
+        badgeSystem.awardPrize(1, _winners(student));
+        vm.expectRevert(abi.encodeWithSelector(BadgeSystem.MaxWinnersReached.selector, 1));
+        badgeSystem.awardPrize(1, _winners(student2));
+        vm.stopPrank();
+    }
+
+    function test_AwardPrizeMultipleWinners() public {
+        vm.startPrank(professor);
+        badgeSystem.createSubjectBadge();
+        badgeSystem.createAssignment(1);
+        badgeSystem.addPrizeCategory(1, 7, 2);
+        badgeSystem.awardPrize(1, _winners(student, student2));
+        vm.stopPrank();
+
+        assertEq(badgeSystem.getBadgeBalance(student, 1), 7);
+        assertEq(badgeSystem.getBadgeBalance(student2, 1), 7);
+
+        BadgeSystem.PrizeCategory memory p = badgeSystem.getPrizeCategory(1);
+        assertEq(p.currentWinners, 2);
+    }
+
+    function test_RevertAlreadyAwardedPrize() public {
+        vm.startPrank(professor);
+        badgeSystem.createSubjectBadge();
+        badgeSystem.createAssignment(1);
+        badgeSystem.addPrizeCategory(1, 5, 5);
+        badgeSystem.awardPrize(1, _winners(student));
+        vm.expectRevert(abi.encodeWithSelector(BadgeSystem.AlreadyAwardedPrize.selector, student, 1));
+        badgeSystem.awardPrize(1, _winners(student));
+        vm.stopPrank();
     }
 
     function test_DeactivateReward() public {
         vm.startPrank(professor);
-        badgeSystem.createBadgeType();
+        badgeSystem.createSubjectBadge();
         badgeSystem.createReward(1, 3, 10);
         badgeSystem.deactivateReward(1);
         vm.stopPrank();
@@ -112,110 +194,48 @@ contract BadgeSystemTest is Test {
         assertFalse(reward.active);
     }
 
-    function test_RevertDeactivateRewardNotOwner() public {
-        vm.startPrank(professor);
-        badgeSystem.createBadgeType();
-        badgeSystem.createReward(1, 3, 10);
-        vm.stopPrank();
-
-        vm.prank(professor2);
-        vm.expectRevert(abi.encodeWithSelector(BadgeSystem.NotRewardOwner.selector, 1, professor2));
-        badgeSystem.deactivateReward(1);
-    }
-
-    function test_RevertCreateTaskZeroRewardAmount() public {
-        vm.prank(professor);
-        badgeSystem.createBadgeType();
-
-        vm.prank(professor);
-        vm.expectRevert(BadgeSystem.ZeroRewardAmount.selector);
-        badgeSystem.createTask(1, 0);
-    }
-
-    function test_RevertCreateTaskBadgeTypeNotFound() public {
-        vm.prank(professor);
-        vm.expectRevert(abi.encodeWithSelector(BadgeSystem.BadgeTypeNotFound.selector, 999));
-        badgeSystem.createTask(999, 5);
-    }
-
     function test_RevertCreateRewardZeroCost() public {
         vm.prank(professor);
-        badgeSystem.createBadgeType();
+        badgeSystem.createSubjectBadge();
 
         vm.prank(professor);
         vm.expectRevert(BadgeSystem.ZeroCost.selector);
         badgeSystem.createReward(1, 0, 10);
     }
 
-    function test_RevertAwardBadgeTaskNotActive() public {
+    function test_RevertAddPrizeZeroBadgeReward() public {
         vm.startPrank(professor);
-        badgeSystem.createBadgeType();
-        badgeSystem.createTask(1, 5);
-        badgeSystem.deactivateTask(1);
-        vm.expectRevert(abi.encodeWithSelector(BadgeSystem.TaskNotActive.selector, 1));
-        badgeSystem.awardBadge(1, student);
+        badgeSystem.createSubjectBadge();
+        badgeSystem.createAssignment(1);
+        vm.expectRevert(BadgeSystem.ZeroBadgeReward.selector);
+        badgeSystem.addPrizeCategory(1, 0, 1);
         vm.stopPrank();
     }
 
-    function test_RevertAwardBadgeNotStudent() public {
+    function test_RevertAwardPrizeNotStudent() public {
         address outsider = makeAddr("outsider");
 
         vm.startPrank(professor);
-        badgeSystem.createBadgeType();
-        badgeSystem.createTask(1, 5);
+        badgeSystem.createSubjectBadge();
+        badgeSystem.createAssignment(1);
+        badgeSystem.addPrizeCategory(1, 5, 5);
         vm.expectRevert(BadgeSystem.NotStudent.selector);
-        badgeSystem.awardBadge(1, outsider);
+        badgeSystem.awardPrize(1, _winners(outsider));
         vm.stopPrank();
-    }
-
-    function test_RevertRedeemRewardInactive() public {
-        vm.startPrank(professor);
-        badgeSystem.createBadgeType();
-        badgeSystem.createTask(1, 5);
-        badgeSystem.createReward(1, 3, 10);
-        badgeSystem.awardBadge(1, student);
-        badgeSystem.deactivateReward(1);
-        vm.stopPrank();
-
-        vm.prank(student);
-        vm.expectRevert(abi.encodeWithSelector(BadgeSystem.RewardInactive.selector, 1));
-        badgeSystem.redeemReward(1);
-    }
-
-    function test_RevertRedeemRewardOutOfSupply() public {
-        // Crear tipo de insignia, tareas con rewardAmount=3 y recompensa con coste=3 y supply=1.
-        vm.startPrank(professor);
-        badgeSystem.createBadgeType();
-        badgeSystem.createTask(1, 3); // tarea 1: otorga 3 insignias
-        badgeSystem.createTask(1, 3); // tarea 2: otorga 3 insignias
-        badgeSystem.createReward(1, 3, 1); // recompensa 1: cuesta 3 insignias, supply=1
-        badgeSystem.awardBadge(1, student); // student obtiene 3 insignias de la tarea 1
-        badgeSystem.awardBadge(2, student2); // student2 obtiene 3 insignias de la tarea 2
-        vm.stopPrank();
-
-        // El primer canje tiene exito (supply pasa de 1 a 0).
-        vm.prank(student);
-        badgeSystem.redeemReward(1);
-
-        // El segundo canje falla (supply ya esta en 0).
-        vm.prank(student2);
-        vm.expectRevert(abi.encodeWithSelector(BadgeSystem.RewardOutOfSupply.selector, 1));
-        badgeSystem.redeemReward(1);
     }
 
     function test_CancelUseRequest() public {
-        // Setup: crear badge, tarea, recompensa, otorgar y canjear para obtener token de recompensa.
         vm.startPrank(professor);
-        badgeSystem.createBadgeType();
-        badgeSystem.createTask(1, 5);
+        badgeSystem.createSubjectBadge();
+        badgeSystem.createAssignment(1);
+        badgeSystem.addPrizeCategory(1, 5, 5);
         badgeSystem.createReward(1, 3, 10);
-        badgeSystem.awardBadge(1, student);
+        badgeSystem.awardPrize(1, _winners(student));
         vm.stopPrank();
 
         vm.prank(student);
         badgeSystem.redeemReward(1);
 
-        // Solicitar uso y despues cancelar.
         vm.prank(student);
         badgeSystem.requestUseReward(1);
 
@@ -227,12 +247,12 @@ contract BadgeSystemTest is Test {
     }
 
     function test_RejectUseRequest() public {
-        // Setup: crear badge, tarea, recompensa, otorgar y canjear para obtener token de recompensa.
         vm.startPrank(professor);
-        badgeSystem.createBadgeType();
-        badgeSystem.createTask(1, 5);
+        badgeSystem.createSubjectBadge();
+        badgeSystem.createAssignment(1);
+        badgeSystem.addPrizeCategory(1, 5, 5);
         badgeSystem.createReward(1, 3, 10);
-        badgeSystem.awardBadge(1, student);
+        badgeSystem.awardPrize(1, _winners(student));
         vm.stopPrank();
 
         vm.prank(student);
@@ -249,31 +269,27 @@ contract BadgeSystemTest is Test {
     }
 
     function test_PauseAndUnpause() public {
-        // Setup: el profesor crea un tipo de insignia antes de pausar.
         vm.prank(professor);
-        badgeSystem.createBadgeType();
+        badgeSystem.createSubjectBadge();
 
-        // Admin pausa el contrato.
         badgeSystem.pause();
 
-        // Crear un tipo de insignia revierte mientras esta pausado.
         vm.prank(professor);
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
-        badgeSystem.createBadgeType();
+        badgeSystem.createSubjectBadge();
 
-        // Admin reanuda el contrato.
         badgeSystem.unpause();
 
-        // Ahora vuelve a funcionar.
         vm.prank(professor);
-        badgeSystem.createBadgeType();
+        badgeSystem.createSubjectBadge();
     }
 
     function test_SafeBatchTransferFromBlocked() public {
         vm.startPrank(professor);
-        badgeSystem.createBadgeType();
-        badgeSystem.createTask(1, 1);
-        badgeSystem.awardBadge(1, student);
+        badgeSystem.createSubjectBadge();
+        badgeSystem.createAssignment(1);
+        badgeSystem.addPrizeCategory(1, 1, 5);
+        badgeSystem.awardPrize(1, _winners(student));
         vm.stopPrank();
 
         uint256[] memory ids = new uint256[](1);

@@ -86,8 +86,9 @@ describe("Integration", async function () {
         await libraryManager.write.addBook([5n], { account: librarian.account });
         await campusShop.write.addProduct([80n, 10n]);
 
-        await badgeSystem.write.createBadgeType({ account: professor.account });
-        await badgeSystem.write.createTask([1n, 3n], { account: professor.account });
+        await badgeSystem.write.createSubjectBadge({ account: professor.account });
+        await badgeSystem.write.createAssignment([1n], { account: professor.account });
+        await badgeSystem.write.addPrizeCategory([1n, 3n, 5n], { account: professor.account });
         await badgeSystem.write.createReward([1n, 2n, 10n], { account: professor.account });
 
         await libraryManager.write.requestLoan([1n], { account: student1.account });
@@ -96,8 +97,10 @@ describe("Integration", async function () {
         await printer.write.print([student1.account.address, 15n]);
         await campusShop.write.purchase([1n], { account: student2.account });
 
-        await badgeSystem.write.awardBadge([1n, student1.account.address], { account: professor.account });
-        await badgeSystem.write.awardBadge([1n, student2.account.address], { account: professor.account });
+        await badgeSystem.write.awardPrize(
+            [1n, [student1.account.address, student2.account.address]],
+            { account: professor.account },
+        );
         await badgeSystem.write.redeemReward([1n], { account: student1.account });
 
         assert.equal(await libraryManager.read.balanceOf([student1.account.address, 1n]), 1n);
@@ -171,13 +174,17 @@ describe("Integration", async function () {
     it("Should complete full badge use-request flow", async function () {
         const { badgeSystem, professor, student1 } = await deployAll();
 
-        // Professor creates badge type, task (reward 3 badges), and reward (cost 2 badges, supply 10)
-        await badgeSystem.write.createBadgeType({ account: professor.account });
-        await badgeSystem.write.createTask([1n, 3n], { account: professor.account });
+        // Professor creates subject badge, assignment with prize, and reward
+        await badgeSystem.write.createSubjectBadge({ account: professor.account });
+        await badgeSystem.write.createAssignment([1n], { account: professor.account });
+        await badgeSystem.write.addPrizeCategory([1n, 3n, 5n], { account: professor.account });
         await badgeSystem.write.createReward([1n, 2n, 10n], { account: professor.account });
 
-        // Professor awards badge to student1 (gets 3 badges of type 1)
-        await badgeSystem.write.awardBadge([1n, student1.account.address], { account: professor.account });
+        // Professor awards prize to student1 (gets 3 badges)
+        await badgeSystem.write.awardPrize(
+            [1n, [student1.account.address]],
+            { account: professor.account },
+        );
         assert.equal(await badgeSystem.read.getBadgeBalance([student1.account.address, 1n]), 3n);
 
         // Student redeems reward (burns 2 badges, gets 1 reward token)

@@ -228,8 +228,19 @@ export async function deactivateItem(itemId: string) {
 	ensureRole(session, ["LIBRARIAN", "ADMIN"]);
 
 	try {
-		const existing = await prisma.libraryItem.findUnique({ where: { id: itemId } });
+		const existing = await prisma.libraryItem.findUnique({
+			where: { id: itemId },
+			include: {
+				loans: {
+					where: { status: { in: ["QUEUED" as LoanStatus, "RESERVED" as LoanStatus, "PICKED_UP" as LoanStatus] } },
+				},
+			},
+		});
 		if (!existing) throw new Error("Ítem no encontrado");
+
+		if (existing.loans.length > 0) {
+			throw new Error("No se puede desactivar un ítem con préstamos activos");
+		}
 
 		await prisma.libraryItem.update({
 			where: { id: itemId },
@@ -238,7 +249,7 @@ export async function deactivateItem(itemId: string) {
 
 		return { success: true };
 	} catch (error) {
-		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado" || error.message.includes("préstamos activos"))) throw error;
 		throw new Error(`Error al desactivar ítem: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }

@@ -10,33 +10,45 @@ import { CampusRoles } from "./CampusRoles.sol";
 /// @title BadgeSystem
 /// @author Juan Pablo Fernández <juanpf04@ucm.es>
 /// @author Arturo Gómez <argome04@ucm.es>
-/// @notice Sistema de insignias academicas soulbound no transferibles
-/// @dev Profesores crean insignias/tareas/recompensas y estudiantes las canjean.
+/// @notice Sistema de insignias academicas soulbound no transferibles, organizadas por asignatura.
+/// @dev Profesores crean assignments con varios premios y recompensas. Estudiantes ganan insignias
+///      por asignatura y las canjean por recompensas.
 contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
     // ── Type declarations ───────────────────────────────────────────────
 
     /// @notice Referencia al control de acceso del campus
     CampusRoles public immutable campusRoles;
 
-    // Los metadatos (nombre, descripcion) se guardan en Prisma vinculados por ID.
-    // En la blockchain solo guardamos lo estrictamente necesario para la logica.
-    struct BadgeType {
-        address creator;
+    /// @notice Insignia asociada a una asignatura. Una por SubjectOffering.
+    /// @dev El subjectBadgeId es el tokenId del ERC-1155 que reciben los alumnos.
+    struct SubjectBadge {
+        address professor;
         bool exists;
     }
 
-    struct Task {
-        uint256 badgeTypeId;
-        uint256 rewardAmount;
+    enum AssignmentStatus { None, Open, Reviewing, Closed }
+
+    /// @notice Tarea/practica que un profesor publica en una asignatura.
+    struct Assignment {
+        uint256 subjectBadgeId;
         address professor;
-        bool active;
+        AssignmentStatus status;
     }
 
+    /// @notice Cada premio dentro de una assignment (ej. mejor nota, mejor diseño).
+    struct PrizeCategory {
+        uint256 assignmentId;
+        uint256 badgeReward;
+        uint256 maxWinners;
+        uint256 currentWinners;
+    }
+
+    /// @notice Recompensa canjeable. Vinculada a la insignia de una asignatura.
     struct Reward {
-        uint256 badgeTypeId;   // tipo de insignia requerido
-        uint256 badgeCost;     // cuantas insignias cuesta
-        uint256 supply;        // supply restante (0 = ilimitado)
-        uint256 totalSupply;   // supply original (0 = ilimitado)
+        uint256 subjectBadgeId;
+        uint256 badgeCost;
+        uint256 supply;        // remanente (0 = ilimitado si totalSupply==0)
+        uint256 totalSupply;   // 0 = ilimitado
         address professor;
         bool active;
     }
@@ -58,39 +70,52 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
     // ── State variables ─────────────────────────────────────────────────
     uint256 public constant REWARD_TOKEN_OFFSET = 1_000_000;
 
-    uint256 public nextBadgeTypeId = 1;
-    mapping(uint256 => BadgeType) private _badgeTypes;
+    uint256 public nextSubjectBadgeId = 1;
+    mapping(uint256 => SubjectBadge) private _subjectBadges;
 
-    uint256 public nextTaskId = 1;
-    mapping(uint256 => Task) private _tasks;
+    uint256 public nextAssignmentId = 1;
+    mapping(uint256 => Assignment) private _assignments;
+
+    uint256 public nextPrizeCategoryId = 1;
+    mapping(uint256 => PrizeCategory) private _prizeCategories;
 
     uint256 public nextRewardId = 1;
     mapping(uint256 => Reward) private _rewards;
 
-    // Prevenir doble otorgamiento: student => taskId => awarded
-    mapping(address => mapping(uint256 => bool)) public taskAwarded;
+    /// @notice Evita que un alumno reciba dos veces el mismo premio.
+    mapping(address => mapping(uint256 => bool)) public prizeAwarded;
 
-    // Registro de canjes
     uint256 public nextRedemptionId = 1;
     mapping(uint256 => Redemption) private _redemptions;
     mapping(address => uint256[]) private _studentRedemptions;
 
-    // Solicitudes de uso de recompensa
     uint256 public nextUseRequestId = 1;
     mapping(uint256 => UseRequest) private _useRequests;
     mapping(address => uint256[]) private _studentUseRequests;
 
     // ── Events ──────────────────────────────────────────────────────────
-    event BadgeTypeCreated(uint256 indexed badgeTypeId, address indexed professor);
-    event TaskCreated(uint256 indexed taskId, uint256 indexed badgeTypeId, address indexed professor);
-    event TaskDeactivated(uint256 indexed taskId);
-    event BadgeAwarded(uint256 indexed taskId, address indexed student, uint256 indexed badgeTypeId, uint256 amount);
+    event SubjectBadgeCreated(uint256 indexed subjectBadgeId, address indexed professor);
+    event AssignmentCreated(uint256 indexed assignmentId, uint256 indexed subjectBadgeId, address indexed professor);
+    event AssignmentStatusChanged(uint256 indexed assignmentId, AssignmentStatus status);
+    event PrizeCategoryCreated(
+        uint256 indexed prizeCategoryId,
+        uint256 indexed assignmentId,
+        uint256 badgeReward,
+        uint256 maxWinners
+    );
+    event PrizeAwarded(
+        uint256 indexed prizeCategoryId,
+        address indexed student,
+        uint256 indexed subjectBadgeId,
+        uint256 amount
+    );
+
     event RewardCreated(uint256 indexed rewardId, uint256 badgeCost, uint256 supply, address indexed professor);
     event RewardDeactivated(uint256 indexed rewardId);
     event RewardRedeemed(
         uint256 indexed rewardId,
         address indexed student,
-        uint256 indexed badgeTypeId,
+        uint256 indexed subjectBadgeId,
         uint256 badgesBurned,
         uint256 redemptionId
     );
@@ -103,25 +128,29 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
     // ── Errors ──────────────────────────────────────────────────────────
     error NotProfessor();
     error NotStudent();
-    error BadgeTypeNotFound(uint256 badgeTypeId);
-    error TaskNotFound(uint256 taskId);
+    error NotAdmin();
+    error SubjectBadgeNotFound(uint256 subjectBadgeId);
+    error AssignmentNotFound(uint256 assignmentId);
+    error PrizeCategoryNotFound(uint256 prizeCategoryId);
     error RewardNotFound(uint256 rewardId);
-    error NotBadgeTypeOwner(uint256 badgeTypeId, address caller);
-    error NotTaskOwner(uint256 taskId, address caller);
+    error NotSubjectBadgeOwner(uint256 subjectBadgeId, address caller);
+    error NotAssignmentOwner(uint256 assignmentId, address caller);
     error NotRewardOwner(uint256 rewardId, address caller);
-    error AlreadyAwarded(address student, uint256 taskId);
-    error TaskNotActive(uint256 taskId);
+    error AlreadyAwardedPrize(address student, uint256 prizeCategoryId);
+    error InvalidAssignmentStatus(uint256 assignmentId, AssignmentStatus current);
+    error MaxWinnersReached(uint256 prizeCategoryId);
     error InsufficientBadges(uint256 available, uint256 required);
     error RewardOutOfSupply(uint256 rewardId);
     error RewardInactive(uint256 rewardId);
     error SoulboundTransferBlocked();
     error ZeroCost();
-    error ZeroRewardAmount();
+    error ZeroBadgeReward();
+    error ZeroMaxWinners();
+    error EmptyWinnersList();
     error UseRequestNotFound(uint256 requestId);
     error InvalidUseRequestState(uint256 requestId, UseRequestStatus current);
     error NotRequestOwner(uint256 requestId);
     error InsufficientRewardTokens(uint256 rewardId);
-    error NotAdmin();
 
     // ── Modifiers ───────────────────────────────────────────────────────
 
@@ -144,114 +173,175 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
         _;
     }
 
-    // ── Functions ───────────────────────────────────────────────────────
-
     // ── Constructor ─────────────────────────────────────────────────────
 
     constructor(address _campusRoles, string memory uri_) ERC1155(uri_) {
         campusRoles = CampusRoles(_campusRoles);
     }
 
-    // ── External functions ──────────────────────────────────────────────
-
-    // ── Badge type management ───────────────────────────────────────────
+    // ── Subject badge management ────────────────────────────────────────
 
     /**
-     * @dev Crea un nuevo tipo de insignia.
+     * @dev Crea la insignia de una asignatura. Una por SubjectOffering en Prisma.
+     *      Se llama una sola vez por asignatura, normalmente al crear la primera assignment.
      */
-    function createBadgeType() external onlyProfessorOrAdmin whenNotPaused returns (uint256 badgeTypeId) {
-        badgeTypeId = nextBadgeTypeId;
-        unchecked { ++nextBadgeTypeId; }
+    function createSubjectBadge() external onlyProfessorOrAdmin whenNotPaused returns (uint256 subjectBadgeId) {
+        subjectBadgeId = nextSubjectBadgeId;
+        unchecked { ++nextSubjectBadgeId; }
 
-        _badgeTypes[badgeTypeId] = BadgeType({
-            creator: msg.sender,
+        _subjectBadges[subjectBadgeId] = SubjectBadge({
+            professor: msg.sender,
             exists: true
         });
 
-        emit BadgeTypeCreated(badgeTypeId, msg.sender);
+        emit SubjectBadgeCreated(subjectBadgeId, msg.sender);
     }
 
-    // ── Task management ─────────────────────────────────────────────────
+    // ── Assignment management ───────────────────────────────────────────
 
     /**
-     * @dev Crea una tarea vinculada a un tipo de insignia.
-     *      Solo el creador del badgeType puede crear tareas para el.
+     * @dev Crea una assignment (tarea) en una asignatura. El profesor debe ser
+     *      el creador del subjectBadge.
      */
-    function createTask(
-        uint256 badgeTypeId,
-        uint256 rewardAmount
-    ) external onlyProfessorOrAdmin whenNotPaused returns (uint256 taskId) {
-        if (!_badgeTypes[badgeTypeId].exists) revert BadgeTypeNotFound(badgeTypeId);
-        if (_badgeTypes[badgeTypeId].creator != msg.sender)
-            revert NotBadgeTypeOwner(badgeTypeId, msg.sender);
-        if (rewardAmount == 0) revert ZeroRewardAmount();
+    function createAssignment(
+        uint256 subjectBadgeId
+    ) external onlyProfessorOrAdmin whenNotPaused returns (uint256 assignmentId) {
+        SubjectBadge storage badge = _subjectBadges[subjectBadgeId];
+        if (!badge.exists) revert SubjectBadgeNotFound(subjectBadgeId);
+        if (badge.professor != msg.sender) revert NotSubjectBadgeOwner(subjectBadgeId, msg.sender);
 
-        taskId = nextTaskId;
-        unchecked { ++nextTaskId; }
+        assignmentId = nextAssignmentId;
+        unchecked { ++nextAssignmentId; }
 
-        _tasks[taskId] = Task({
-            badgeTypeId: badgeTypeId,
-            rewardAmount: rewardAmount,
+        _assignments[assignmentId] = Assignment({
+            subjectBadgeId: subjectBadgeId,
             professor: msg.sender,
-            active: true
+            status: AssignmentStatus.Open
         });
 
-        emit TaskCreated(taskId, badgeTypeId, msg.sender);
+        emit AssignmentCreated(assignmentId, subjectBadgeId, msg.sender);
     }
 
     /**
-     * @dev Desactiva una tarea (solo su creador).
+     * @dev Añade una categoría de premio a una assignment. Solo se puede mientras
+     *      la assignment esté abierta.
      */
-    function deactivateTask(uint256 taskId) external onlyProfessorOrAdmin {
-        Task storage task = _tasks[taskId];
-        if (task.professor == address(0)) revert TaskNotFound(taskId);
-        if (task.professor != msg.sender) revert NotTaskOwner(taskId, msg.sender);
+    function addPrizeCategory(
+        uint256 assignmentId,
+        uint256 badgeReward,
+        uint256 maxWinners
+    ) external onlyProfessorOrAdmin whenNotPaused returns (uint256 prizeCategoryId) {
+        Assignment storage assignment = _assignments[assignmentId];
+        if (assignment.professor == address(0)) revert AssignmentNotFound(assignmentId);
+        if (assignment.professor != msg.sender) revert NotAssignmentOwner(assignmentId, msg.sender);
+        if (assignment.status != AssignmentStatus.Open)
+            revert InvalidAssignmentStatus(assignmentId, assignment.status);
+        if (badgeReward == 0) revert ZeroBadgeReward();
+        if (maxWinners == 0) revert ZeroMaxWinners();
 
-        task.active = false;
-        emit TaskDeactivated(taskId);
+        prizeCategoryId = nextPrizeCategoryId;
+        unchecked { ++nextPrizeCategoryId; }
+
+        _prizeCategories[prizeCategoryId] = PrizeCategory({
+            assignmentId: assignmentId,
+            badgeReward: badgeReward,
+            maxWinners: maxWinners,
+            currentWinners: 0
+        });
+
+        emit PrizeCategoryCreated(prizeCategoryId, assignmentId, badgeReward, maxWinners);
     }
 
-    // ── Badge awarding ──────────────────────────────────────────────────
+    /**
+     * @dev Cierra una assignment para entregas: pasa a Reviewing.
+     *      Los alumnos ya no pueden entregar pero el profe sí puede otorgar premios.
+     */
+    function closeAssignmentForReview(uint256 assignmentId) external onlyProfessorOrAdmin {
+        Assignment storage assignment = _assignments[assignmentId];
+        if (assignment.professor == address(0)) revert AssignmentNotFound(assignmentId);
+        if (assignment.professor != msg.sender) revert NotAssignmentOwner(assignmentId, msg.sender);
+        if (assignment.status != AssignmentStatus.Open)
+            revert InvalidAssignmentStatus(assignmentId, assignment.status);
+
+        assignment.status = AssignmentStatus.Reviewing;
+        emit AssignmentStatusChanged(assignmentId, AssignmentStatus.Reviewing);
+    }
 
     /**
-     * @dev Otorga insignias a un estudiante por completar una tarea.
+     * @dev Cierra definitivamente una assignment. Ya no se pueden otorgar más premios.
      */
-    function awardBadge(uint256 taskId, address student) external onlyProfessorOrAdmin whenNotPaused {
-        Task storage task = _tasks[taskId];
-        if (task.professor == address(0)) revert TaskNotFound(taskId);
-        if (task.professor != msg.sender) revert NotTaskOwner(taskId, msg.sender);
-        if (!task.active) revert TaskNotActive(taskId);
-        if (!campusRoles.hasRole(campusRoles.STUDENT_ROLE(), student))
-            revert NotStudent();
-        if (taskAwarded[student][taskId]) revert AlreadyAwarded(student, taskId);
+    function closeAssignment(uint256 assignmentId) external onlyProfessorOrAdmin {
+        Assignment storage assignment = _assignments[assignmentId];
+        if (assignment.professor == address(0)) revert AssignmentNotFound(assignmentId);
+        if (assignment.professor != msg.sender) revert NotAssignmentOwner(assignmentId, msg.sender);
+        if (assignment.status == AssignmentStatus.Closed)
+            revert InvalidAssignmentStatus(assignmentId, assignment.status);
 
-        taskAwarded[student][taskId] = true;
+        assignment.status = AssignmentStatus.Closed;
+        emit AssignmentStatusChanged(assignmentId, AssignmentStatus.Closed);
+    }
 
-        // Mintear insignias al estudiante
-        _mint(student, task.badgeTypeId, task.rewardAmount, "");
+    // ── Prize awarding ──────────────────────────────────────────────────
 
-        emit BadgeAwarded(taskId, student, task.badgeTypeId, task.rewardAmount);
+    /**
+     * @dev Otorga un premio a múltiples alumnos en una sola tx.
+     *      Solo válido cuando la assignment está Open o Reviewing.
+     */
+    function awardPrize(
+        uint256 prizeCategoryId,
+        address[] calldata winners
+    ) external onlyProfessorOrAdmin whenNotPaused {
+        if (winners.length == 0) revert EmptyWinnersList();
+
+        PrizeCategory storage prize = _prizeCategories[prizeCategoryId];
+        if (prize.assignmentId == 0) revert PrizeCategoryNotFound(prizeCategoryId);
+
+        Assignment storage assignment = _assignments[prize.assignmentId];
+        if (assignment.professor != msg.sender) revert NotAssignmentOwner(prize.assignmentId, msg.sender);
+        if (assignment.status == AssignmentStatus.Closed)
+            revert InvalidAssignmentStatus(prize.assignmentId, assignment.status);
+
+        if (prize.currentWinners + winners.length > prize.maxWinners)
+            revert MaxWinnersReached(prizeCategoryId);
+
+        bytes32 studentRole = campusRoles.STUDENT_ROLE();
+        uint256 subjectBadgeId = assignment.subjectBadgeId;
+
+        for (uint256 i = 0; i < winners.length; i++) {
+            address student = winners[i];
+            if (!campusRoles.hasRole(studentRole, student)) revert NotStudent();
+            if (prizeAwarded[student][prizeCategoryId])
+                revert AlreadyAwardedPrize(student, prizeCategoryId);
+
+            prizeAwarded[student][prizeCategoryId] = true;
+            _mint(student, subjectBadgeId, prize.badgeReward, "");
+
+            emit PrizeAwarded(prizeCategoryId, student, subjectBadgeId, prize.badgeReward);
+        }
+
+        unchecked { prize.currentWinners += winners.length; }
     }
 
     // ── Reward management ───────────────────────────────────────────────
 
     /**
-     * @dev Crea una recompensa canjeable con insignias.
+     * @dev Crea una recompensa canjeable con insignias de una asignatura.
      *      supply=0 significa ilimitado.
      */
     function createReward(
-        uint256 badgeTypeId,
+        uint256 subjectBadgeId,
         uint256 badgeCost,
         uint256 supply
     ) external onlyProfessorOrAdmin returns (uint256 rewardId) {
-        if (!_badgeTypes[badgeTypeId].exists) revert BadgeTypeNotFound(badgeTypeId);
+        SubjectBadge storage badge = _subjectBadges[subjectBadgeId];
+        if (!badge.exists) revert SubjectBadgeNotFound(subjectBadgeId);
         if (badgeCost == 0) revert ZeroCost();
 
         rewardId = nextRewardId;
         unchecked { ++nextRewardId; }
 
         _rewards[rewardId] = Reward({
-            badgeTypeId: badgeTypeId,
+            subjectBadgeId: subjectBadgeId,
             badgeCost: badgeCost,
             supply: supply,
             totalSupply: supply,
@@ -288,8 +378,8 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
         if (reward.totalSupply != 0 && reward.supply == 0)
             revert RewardOutOfSupply(rewardId);
 
-        // Verificar que el estudiante tiene suficientes insignias
-        uint256 studentBalance = balanceOf(msg.sender, reward.badgeTypeId);
+        // Verificar balance de insignias
+        uint256 studentBalance = balanceOf(msg.sender, reward.subjectBadgeId);
         if (studentBalance < reward.badgeCost)
             revert InsufficientBadges(studentBalance, reward.badgeCost);
 
@@ -309,22 +399,17 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
         _studentRedemptions[msg.sender].push(redemptionId);
 
         // --- Interactions ---
-        // Quemar insignias del estudiante
-        _burn(msg.sender, reward.badgeTypeId, reward.badgeCost);
+        _burn(msg.sender, reward.subjectBadgeId, reward.badgeCost);
 
-        // Mintear token de recompensa al estudiante como voucher
         uint256 rewardTokenId = REWARD_TOKEN_OFFSET + rewardId;
         _mint(msg.sender, rewardTokenId, 1, "");
 
-        emit RewardRedeemed(rewardId, msg.sender, reward.badgeTypeId, reward.badgeCost, redemptionId);
+        emit RewardRedeemed(rewardId, msg.sender, reward.subjectBadgeId, reward.badgeCost, redemptionId);
         emit RewardTokenMinted(rewardId, msg.sender, rewardTokenId);
     }
 
     // ── Reward use flow ─────────────────────────────────────────────────
 
-    /**
-     * @dev El estudiante solicita usar su token de recompensa.
-     */
     function requestUseReward(uint256 rewardId) external onlyStudent returns (uint256 requestId) {
         if (_rewards[rewardId].professor == address(0)) revert RewardNotFound(rewardId);
 
@@ -344,9 +429,6 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
         emit UseRequestCreated(requestId, msg.sender, rewardId);
     }
 
-    /**
-     * @dev El estudiante retira su solicitud de uso (solo si está Pending).
-     */
     function cancelUseRequest(uint256 requestId) external onlyStudent {
         UseRequest storage req = _useRequests[requestId];
         if (req.student == address(0)) revert UseRequestNotFound(requestId);
@@ -358,10 +440,6 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
         emit UseRequestCancelled(requestId);
     }
 
-    /**
-     * @dev El profesor aprueba el uso: quema el token de recompensa del estudiante.
-     *      Solo puede aprobarlo el profesor que creó la recompensa.
-     */
     function approveUseRequest(uint256 requestId) external onlyProfessorOrAdmin {
         UseRequest storage req = _useRequests[requestId];
         if (req.student == address(0)) revert UseRequestNotFound(requestId);
@@ -382,10 +460,6 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
         emit UseRequestApproved(requestId, student, rewardId);
     }
 
-    /**
-     * @dev El profesor rechaza la solicitud de uso. El token queda con el estudiante.
-     *      Solo puede rechazarlo el profesor que creó la recompensa.
-     */
     function rejectUseRequest(uint256 requestId) external onlyProfessorOrAdmin {
         UseRequest storage req = _useRequests[requestId];
         if (req.student == address(0)) revert UseRequestNotFound(requestId);
@@ -399,36 +473,38 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
         emit UseRequestRejected(requestId);
     }
 
-    /// @notice Pausa el contrato (solo admin)
+    // ── Pause control ───────────────────────────────────────────────────
+
     function pause() external {
-        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender))
-            revert NotAdmin();
+        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender)) revert NotAdmin();
         _pause();
     }
 
-    /// @notice Reanuda el contrato (solo admin)
     function unpause() external {
-        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender))
-            revert NotAdmin();
+        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender)) revert NotAdmin();
         _unpause();
     }
 
     // ── External view functions ─────────────────────────────────────────
 
-    function getBadgeType(uint256 badgeTypeId) external view returns (BadgeType memory) {
-        return _badgeTypes[badgeTypeId];
+    function getSubjectBadge(uint256 subjectBadgeId) external view returns (SubjectBadge memory) {
+        return _subjectBadges[subjectBadgeId];
     }
 
-    function getTask(uint256 taskId) external view returns (Task memory) {
-        return _tasks[taskId];
+    function getAssignment(uint256 assignmentId) external view returns (Assignment memory) {
+        return _assignments[assignmentId];
+    }
+
+    function getPrizeCategory(uint256 prizeCategoryId) external view returns (PrizeCategory memory) {
+        return _prizeCategories[prizeCategoryId];
     }
 
     function getReward(uint256 rewardId) external view returns (Reward memory) {
         return _rewards[rewardId];
     }
 
-    function getBadgeBalance(address student, uint256 badgeTypeId) external view returns (uint256) {
-        return balanceOf(student, badgeTypeId);
+    function getBadgeBalance(address student, uint256 subjectBadgeId) external view returns (uint256) {
+        return balanceOf(student, subjectBadgeId);
     }
 
     function getStudentRedemptions(address student) external view returns (uint256[] memory) {
@@ -451,12 +527,8 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
         return REWARD_TOKEN_OFFSET + rewardId;
     }
 
-    // ── Public pure functions ───────────────────────────────────────────
+    // ── Soulbound enforcement ───────────────────────────────────────────
 
-    /**
-     * @dev Solo permite mint (from=0) y burn (to=0). Bloquea transferencias.
-     *      OZ v5: _update reemplaza a _beforeTokenTransfer (firma sin operator ni data).
-     */
     function _update(
         address from,
         address to,
@@ -469,9 +541,6 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
         super._update(from, to, ids, values);
     }
 
-    /**
-     * @dev Override: bloquea todas las transferencias.
-     */
     function safeTransferFrom(
         address,
         address,
@@ -482,9 +551,6 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
         revert SoulboundTransferBlocked();
     }
 
-    /**
-     * @dev Override: bloquea todas las transferencias batch.
-     */
     function safeBatchTransferFrom(
         address,
         address,
@@ -495,16 +561,10 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
         revert SoulboundTransferBlocked();
     }
 
-    /**
-     * @dev Override: bloquea approval (no tiene sentido sin transferencias).
-     */
     function setApprovalForAll(address, bool) public pure override {
         revert SoulboundTransferBlocked();
     }
 
-    /**
-     * @dev Override: isApprovedForAll siempre false.
-     */
     function isApprovedForAll(address, address) public pure override returns (bool) {
         return false;
     }

@@ -1,10 +1,9 @@
 "use client";
 
 /**
- * Crear recompensa.
+ * Crear recompensa (profesor).
  *
- * Carga los badge types del profesor y muestra el formulario
- * de creación de recompensa.
+ * Carga las asignaturas del profesor y muestra el formulario.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -15,33 +14,40 @@ import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import { RewardForm, type RewardFormData } from "@/components/forms/RewardForm";
 
-interface BadgeType {
+interface SubjectOffering {
   id: string;
-  name: string;
+  group: string;
+  academicYear: string;
+  subject: { name: string; code: string };
 }
 
 export default function ProfessorNewRewardPage() {
   const router = useRouter();
   const { addToast } = useToast();
 
-  const [badgeTypes, setBadgeTypes] = useState<{ value: string; label: string }[]>([]);
+  const [offerings, setOfferings] = useState<{ value: string; label: string }[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadBadgeTypes = useCallback(async () => {
+  const loadOfferings = useCallback(async () => {
     try {
-      const res = await fetch("/api/badges/types");
+      const res = await fetch("/api/badges/subject-offerings");
       if (res.ok) {
-        const data: BadgeType[] = await res.json();
-        setBadgeTypes(data.map((bt) => ({ value: bt.id, label: bt.name })));
+        const data: SubjectOffering[] = await res.json();
+        setOfferings(
+          data.map((o) => ({
+            value: o.id,
+            label: `${o.subject.code} · ${o.subject.name} (${o.group} · ${o.academicYear})`,
+          })),
+        );
       }
     } catch {
-      addToast("Error al cargar tipos de insignia", "danger");
+      addToast("Error al cargar asignaturas", "danger");
     } finally {
       setLoading(false);
     }
   }, [addToast]);
 
-  useEffect(() => { loadBadgeTypes(); }, [loadBadgeTypes]);
+  useEffect(() => { loadOfferings(); }, [loadOfferings]);
 
   async function handleSubmit(data: RewardFormData) {
     const res = await fetch("/api/badges/rewards", {
@@ -49,10 +55,10 @@ export default function ProfessorNewRewardPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: data.name,
-        description: data.description,
+        description: data.description || undefined,
         badgeCost: parseInt(data.badgeCost),
         supply: parseInt(data.supply),
-        badgeTypeId: data.badgeTypeId,
+        subjectOfferingId: data.subjectOfferingId,
       }),
     });
 
@@ -80,7 +86,7 @@ export default function ProfessorNewRewardPage() {
       <Card className="max-w-2xl mx-auto p-6">
         <RewardForm
           onSubmit={handleSubmit}
-          badgeTypes={badgeTypes}
+          subjectOfferings={offerings}
         />
       </Card>
     </div>
