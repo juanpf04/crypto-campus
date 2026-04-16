@@ -18,6 +18,7 @@ import { SectionTitle } from "@/components/shared/SectionTitle";
 import { CreditsBanner } from "@/components/shared/CreditsBanner";
 import { PrintingOverlay } from "@/components/shared/PrintingOverlay";
 import { PrintJobForm, type PrintJobResult } from "@/components/forms/PrintJobForm";
+import { formatCredits } from "@/lib/formatters";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 
@@ -134,7 +135,7 @@ export default function StudentPrintingPage() {
         {/* Créditos */}
         <CreditsBanner
           icon={icons.print}
-          value={credits ?? "—"}
+          value={formatCredits(credits ?? 0)}
           label="Créditos de impresión disponibles"
           hint="1 crédito = 1 cara impresa"
         />

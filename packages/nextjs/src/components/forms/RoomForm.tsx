@@ -8,7 +8,6 @@ export interface RoomFormData {
   description: string;
   location: string;
   capacity: string;
-  imageUrl: string;
   amenityProjector: boolean;
   amenityWhiteboard: boolean;
   amenityPowerOutlets: boolean;
@@ -26,7 +25,6 @@ const defaultValues: RoomFormData = {
   description: "",
   location: "",
   capacity: "4",
-  imageUrl: "",
   amenityProjector: false,
   amenityWhiteboard: false,
   amenityPowerOutlets: false,
@@ -77,12 +75,6 @@ export function RoomForm({ onSubmit, initialValues, isEdit }: RoomFormProps) {
           error={errors.capacity}
         />
       </div>
-      <Input
-        label="URL de imagen"
-        placeholder="https://..."
-        value={fields.imageUrl}
-        onChange={setField("imageUrl")}
-      />
 
       {/* Amenidades */}
       <fieldset className="space-y-2">

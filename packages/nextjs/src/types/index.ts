@@ -46,7 +46,7 @@ export const ROUTE_ACCESS_BY_SECTION: Record<ServiceSection, UserRole[]> = {
 
 export const ROUTE_ACCESS_BY_SERVICE: Record<ServiceRoute, UserRole[]> = {
   ...ROUTE_ACCESS_BY_SECTION,
-  "shop/cart": ["STUDENT"],
+  "shop/cart": ["STUDENT", "ADMIN"],
 };
 
 export const TARGET_PATH_BY_SERVICE_AND_ROLE: Record<ServiceRoute, Partial<Record<UserRole, string>>> = {
@@ -62,7 +62,7 @@ export const TARGET_PATH_BY_SERVICE_AND_ROLE: Record<ServiceRoute, Partial<Recor
   },
   shop: {
     STUDENT: "/student/shop",
-    ADMIN: "/admin/shop",
+    ADMIN: "/admin/shop/products",
   },
   printing: {
     STUDENT: "/student/library/printing",
@@ -81,6 +81,7 @@ export const TARGET_PATH_BY_SERVICE_AND_ROLE: Record<ServiceRoute, Partial<Recor
   },
   "shop/cart": {
     STUDENT: "/student/shop/cart",
+    ADMIN: "/admin/shop/products",
   },
 };
 

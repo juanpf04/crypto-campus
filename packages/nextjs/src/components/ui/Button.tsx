@@ -4,7 +4,7 @@ import { forwardRef, type ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 import { Spinner } from "./Spinner";
 
-type ButtonVariant = "primary" | "secondary" | "danger" | "ghost" | "outline";
+type ButtonVariant = "primary" | "secondary" | "danger" | "success" | "ghost" | "outline";
 type ButtonSize = "sm" | "md" | "lg";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -17,6 +17,7 @@ const variantStyles: Record<ButtonVariant, string> = {
   primary: "bg-primary text-text-on-primary hover:bg-primary-hover focus-visible:ring-primary",
   secondary: "bg-secondary text-text-on-primary hover:bg-secondary-hover focus-visible:ring-secondary",
   danger: "bg-danger text-text-on-danger hover:bg-danger-hover focus-visible:ring-danger",
+  success: "bg-success text-white hover:bg-success-hover focus-visible:ring-success",
   ghost: "bg-transparent text-text hover:bg-border-default focus-visible:ring-border-default",
   outline: "border border-border-default bg-transparent text-text hover:bg-card focus-visible:ring-border-default",
 };

@@ -118,11 +118,11 @@ export default function LibrarianItemsPage() {
                       <TableCell><StatusBadge status={item.active ? "ACTIVE" : "INACTIVE"} /></TableCell>
                       <TableCell>
                         <div className="flex gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => router.push(`/librarian/items/${item.id}/edit`)}>
+                          <Button variant="secondary" size="sm" onClick={() => router.push(`/librarian/items/${item.id}/edit`)}>
                             Editar
                           </Button>
                           <Button
-                            variant={item.active ? "ghost" : "outline"}
+                            variant={item.active ? "danger" : "success"}
                             size="sm"
                             onClick={() => handleToggleActive(item.id, item.active)}
                           >

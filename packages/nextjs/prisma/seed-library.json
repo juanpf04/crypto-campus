@@ -232,33 +232,83 @@
     "metadata": { "players": "2-4", "duration": "45-60 min", "ageRating": "8+" }
   },
   {
-    "type": "VIDEO_GAME",
-    "title": "Human Resource Machine",
-    "creator": "Tomorrow Corporation",
-    "description": "Puzles de programación que enseñan conceptos de ensamblador y pensamiento algorítmico.",
-    "category": "Videojuego Educativo",
+    "type": "BOARD_GAME",
+    "title": "Carcassonne",
+    "creator": "Klaus-Jürgen Wrede",
+    "description": "Juego de colocación de losetas donde construyes ciudades, caminos y campos en la Francia medieval.",
+    "category": "Estrategia",
     "copies": 2,
-    "physicalLocation": "Planta 1, Zona multimedia",
-    "metadata": { "platform": "PC / Switch", "genre": "Puzzle / Programación" }
+    "physicalLocation": "Planta 1, Zona de juegos",
+    "metadata": { "players": "2-5", "duration": "30-45 min", "ageRating": "7+" }
+  },
+  {
+    "type": "BOARD_GAME",
+    "title": "Ticket to Ride: Europa",
+    "creator": "Alan R. Moon",
+    "description": "Conecta ciudades europeas construyendo rutas de tren. Estrategia, planificación y un poco de suerte.",
+    "category": "Estrategia",
+    "copies": 2,
+    "physicalLocation": "Planta 1, Zona de juegos",
+    "metadata": { "players": "2-5", "duration": "30-60 min", "ageRating": "8+" }
   },
   {
     "type": "VIDEO_GAME",
-    "title": "Turing Complete",
-    "creator": "Zachtronics",
-    "description": "Construye un computador desde puertas lógicas. Enseña arquitectura de computadores de forma interactiva.",
-    "category": "Videojuego Educativo",
+    "title": "Marvel's Spider-Man 2",
+    "creator": "Insomniac Games",
+    "description": "Balancéate por Nueva York como Peter Parker y Miles Morales en esta aventura de acción y mundo abierto.",
+    "category": "Videojuego",
     "copies": 2,
     "physicalLocation": "Planta 1, Zona multimedia",
-    "metadata": { "platform": "PC (Steam)", "genre": "Simulación / Lógica" }
+    "metadata": { "platform": "PS5", "genre": "Acción / Aventura" }
   },
   {
     "type": "VIDEO_GAME",
-    "title": "while True: learn()",
-    "creator": "Luden.io",
-    "description": "Resuelve puzles de machine learning y redes neuronales. Introducción lúdica a la IA.",
-    "category": "Videojuego Educativo",
+    "title": "Super Mario Bros. Wonder",
+    "creator": "Nintendo EPD",
+    "description": "El fontanero más famoso vuelve con niveles llenos de sorpresas, transformaciones y diversión cooperativa.",
+    "category": "Videojuego",
     "copies": 2,
     "physicalLocation": "Planta 1, Zona multimedia",
-    "metadata": { "platform": "PC (Steam)", "genre": "Puzzle / IA" }
+    "metadata": { "platform": "Nintendo Switch", "genre": "Plataformas" }
+  },
+  {
+    "type": "VIDEO_GAME",
+    "title": "Call of Duty: Modern Warfare III",
+    "creator": "Sledgehammer Games",
+    "description": "Shooter en primera persona con campaña intensa y modos multijugador competitivos.",
+    "category": "Videojuego",
+    "copies": 2,
+    "physicalLocation": "Planta 1, Zona multimedia",
+    "metadata": { "platform": "PC / PS5 / Xbox", "genre": "Shooter / FPS" }
+  },
+  {
+    "type": "VIDEO_GAME",
+    "title": "Halo Infinite",
+    "creator": "343 Industries",
+    "description": "El Jefe Maestro regresa en esta épica aventura de ciencia ficción con combates frenéticos.",
+    "category": "Videojuego",
+    "copies": 2,
+    "physicalLocation": "Planta 1, Zona multimedia",
+    "metadata": { "platform": "PC / Xbox Series X", "genre": "Shooter / FPS" }
+  },
+  {
+    "type": "VIDEO_GAME",
+    "title": "The Legend of Zelda: Tears of the Kingdom",
+    "creator": "Nintendo EPD",
+    "description": "Explora el vasto mundo de Hyrule con nuevas habilidades de construcción y combate en esta obra maestra.",
+    "category": "Videojuego",
+    "copies": 2,
+    "physicalLocation": "Planta 1, Zona multimedia",
+    "metadata": { "platform": "Nintendo Switch", "genre": "Acción / Aventura" }
+  },
+  {
+    "type": "VIDEO_GAME",
+    "title": "God of War Ragnarök",
+    "creator": "Santa Monica Studio",
+    "description": "Kratos y Atreus se enfrentan al Ragnarök nórdico en esta brutal aventura de acción y narrativa épica.",
+    "category": "Videojuego",
+    "copies": 2,
+    "physicalLocation": "Planta 1, Zona multimedia",
+    "metadata": { "platform": "PS5 / PC", "genre": "Acción / Aventura" }
   }
 ]

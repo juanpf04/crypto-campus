@@ -49,12 +49,22 @@ export default function LibrarianRoomsPage() {
 
   useEffect(() => { loadRooms(); }, [loadRooms]);
 
-  async function handleDelete(roomId: string) {
-    if (!confirm("¿Desactivar esta sala?")) return;
+  async function handleToggleActive(roomId: string, currentlyActive: boolean) {
+    const action = currentlyActive ? "desactivar" : "reactivar";
+    if (!confirm(`¿${currentlyActive ? "Desactivar" : "Reactivar"} esta sala?`)) return;
     try {
-      const res = await fetch(`/api/rooms/${roomId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Error al desactivar sala");
-      addToast("Sala desactivada", "success");
+      if (currentlyActive) {
+        const res = await fetch(`/api/rooms/${roomId}`, { method: "DELETE" });
+        if (!res.ok) throw new Error(`Error al ${action} sala`);
+      } else {
+        const res = await fetch(`/api/rooms/${roomId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ active: true }),
+        });
+        if (!res.ok) throw new Error(`Error al ${action} sala`);
+      }
+      addToast(`Sala ${currentlyActive ? "desactivada" : "reactivada"}`, "success");
       loadRooms();
     } catch (err) {
       addToast(err instanceof Error ? err.message : "Error", "danger");
@@ -101,14 +111,16 @@ export default function LibrarianRoomsPage() {
                       <TableCell><StatusBadge status={room.active ? "ACTIVE" : "INACTIVE"} /></TableCell>
                       <TableCell>
                         <div className="flex gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => router.push(`/librarian/rooms/${room.id}/edit`)}>
+                          <Button variant="secondary" size="sm" onClick={() => router.push(`/librarian/rooms/${room.id}/edit`)}>
                             Editar
                           </Button>
-                          {room.active && (
-                            <Button variant="ghost" size="sm" onClick={() => handleDelete(room.id)}>
-                              Desactivar
-                            </Button>
-                          )}
+                          <Button
+                            variant={room.active ? "danger" : "success"}
+                            size="sm"
+                            onClick={() => handleToggleActive(room.id, room.active)}
+                          >
+                            {room.active ? "Desactivar" : "Reactivar"}
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>

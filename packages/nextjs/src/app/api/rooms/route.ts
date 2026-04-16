@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
 	try {
 		const body = await req.json();
-		const { name, description, location, capacity, amenities, imageUrl } = body;
+		const { name, description, location, capacity, amenities } = body;
 
 		if (!name || !capacity) {
 			return NextResponse.json(
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
 			);
 		}
 
-		const result = await addRoom({ name, description, location, capacity, amenities, imageUrl });
+		const result = await addRoom({ name, description, location, capacity, amenities });
 		return NextResponse.json(result, { status: 201 });
 	} catch (error) {
 		console.error("[POST /api/rooms]", error);

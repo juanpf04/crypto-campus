@@ -237,7 +237,7 @@ export default function StudentCartPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-text">Mi carrito</h1>
         {!isEmpty && (
-          <Button variant="ghost" size="sm" onClick={clearCart}>
+          <Button variant="danger" size="sm" onClick={clearCart}>
             Vaciar carrito
           </Button>
         )}
@@ -255,84 +255,88 @@ export default function StudentCartPage() {
           </Button>
         </Card>
       ) : (
-        <div className="space-y-4">
-          {/* ── Lista de items ── */}
-          {cart.items.map((item) => (
-            <Card key={item.id} className="flex items-center gap-4">
-              {/* Imagen */}
-              <div className="h-20 w-20 shrink-0 rounded-lg bg-primary/5 p-2">
-                <ProductImage
-                  imageUrl={item.imageUrl}
-                  name={item.name}
-                  category={item.category}
-                  className="h-full w-full object-contain"
-                  emojiSize="md"
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
+          {/* ── Lista de items (75%) ── */}
+          <div className="space-y-4">
+            {cart.items.map((item) => (
+              <Card key={item.id} className="flex items-center gap-4">
+                {/* Imagen */}
+                <div className="h-20 w-20 shrink-0 rounded-lg bg-primary/5 p-2">
+                  <ProductImage
+                    imageUrl={item.imageUrl}
+                    name={item.name}
+                    category={item.category}
+                    className="h-full w-full object-contain"
+                    emojiSize="md"
+                  />
+                </div>
+
+                {/* Info */}
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-text line-clamp-2">{item.name}</p>
+                  <p className="text-sm text-text-muted">
+                    {item.variantLabel ?? item.color ?? ""} · {item.price} ShopTokens/ud.
+                  </p>
+                </div>
+
+                {/* Selector de cantidad */}
+                <QuantitySelector
+                  value={item.quantity}
+                  onChange={(q) => updateQuantity(item.id, q)}
+                  min={1}
+                  max={item.stock}
+                  size="sm"
                 />
-              </div>
 
-              {/* Info */}
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-text line-clamp-2">{item.name}</p>
-                <p className="text-sm text-text-muted">
-                  {item.variantLabel ?? item.color ?? ""} · {item.price} ShopTokens/ud.
+                {/* Subtotal */}
+                <div className="w-24 text-right">
+                  <p className="font-semibold text-text">{item.subtotal} ShopTokens</p>
+                </div>
+
+                {/* Eliminar */}
+                <button
+                  type="button"
+                  onClick={() => removeItem(item.id)}
+                  className="shrink-0 rounded-md p-1.5 text-text-muted hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer"
+                  aria-label="Eliminar producto"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                    <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                  </svg>
+                </button>
+              </Card>
+            ))}
+          </div>
+
+          {/* ── Resumen (25%) ── */}
+          <div className="lg:sticky lg:top-6 self-start">
+            <Card className="space-y-4">
+              <div className="space-y-1">
+                <p className="text-lg font-semibold text-text">
+                  Total ({cart.items.reduce((a, i) => a + i.quantity, 0)} {cart.items.reduce((a, i) => a + i.quantity, 0) === 1 ? "unidad" : "unidades"})
                 </p>
+                <p className="text-xl font-bold text-primary">{cart.total} ShopTokens</p>
               </div>
 
-              {/* Selector de cantidad */}
-              <QuantitySelector
-                value={item.quantity}
-                onChange={(q) => updateQuantity(item.id, q)}
-                min={1}
-                max={item.stock}
-                size="sm"
-              />
-
-              {/* Subtotal */}
-              <div className="w-24 text-right">
-                <p className="font-semibold text-text">{item.subtotal} ShopTokens</p>
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => router.push("/student/shop")}
+                  className="w-full"
+                >
+                  &larr; Seguir comprando
+                </Button>
+                <Button
+                  onClick={() => setConfirmOpen(true)}
+                  disabled={checkingOut}
+                  loading={checkingOut}
+                  className="w-full"
+                >
+                  Finalizar compra
+                </Button>
               </div>
-
-              {/* Eliminar */}
-              <button
-                type="button"
-                onClick={() => removeItem(item.id)}
-                className="shrink-0 rounded-md p-1.5 text-text-muted hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer"
-                aria-label="Desactivar producto"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-                  <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                </svg>
-              </button>
             </Card>
-          ))}
-
-          {/* ── Resumen ── */}
-          <Card className="space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-lg font-semibold text-text">
-                Total ({cart.items.reduce((a, i) => a + i.quantity, 0)} {cart.items.reduce((a, i) => a + i.quantity, 0) === 1 ? "unidad" : "unidades"})
-              </p>
-              <p className="text-xl font-bold text-primary">{cart.total} ShopTokens</p>
-            </div>
-
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={() => router.push("/student/shop")}
-                className="flex-1"
-              >
-                &larr; Seguir comprando
-              </Button>
-              <Button
-                onClick={() => setConfirmOpen(true)}
-                disabled={checkingOut}
-                loading={checkingOut}
-                className="flex-1"
-              >
-                Finalizar compra
-              </Button>
-            </div>
-          </Card>
+          </div>
         </div>
       )}
 

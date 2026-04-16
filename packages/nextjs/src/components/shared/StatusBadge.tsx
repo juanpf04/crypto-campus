@@ -21,7 +21,7 @@ const statusConfig: Record<DomainStatus, { label: string; variant: "success" | "
   RESERVED: { label: "Reservado", variant: "info" },
   PICKED_UP: { label: "Prestado", variant: "success" },
   RETURNED: { label: "Devuelto", variant: "neutral" },
-  CANCELLED: { label: "Cancelado", variant: "neutral" },
+  CANCELLED: { label: "Cancelado", variant: "danger" },
   // Pedidos
   PAID: { label: "Pagado", variant: "success" },
   DELIVERED: { label: "Entregado", variant: "neutral" },

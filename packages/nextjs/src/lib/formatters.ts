@@ -59,6 +59,13 @@ export function buildVariantName(groupName: string, color: string): string {
   return `${groupName} ${displayColor}`;
 }
 
+/** Formatea créditos de impresión. Valores muy grandes (librarian/admin) se muestran como "Infinito". */
+export function formatCredits(value: number | string): string {
+  if (typeof value === "string") return value;
+  if (value > 10000) return "Infinito";
+  return String(value);
+}
+
 /** Formatea bytes a cadena legible: "1.5 MB", "320 KB", "128 B" */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

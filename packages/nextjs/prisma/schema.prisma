@@ -281,7 +281,6 @@ model Room {
   location    String?                  // "Planta 2, ala norte"
   capacity    Int
   amenities   Json?                    // { "projector": true, "whiteboard": true }
-  imageUrl    String?
   active      Boolean   @default(true)
   txHash      String
   createdAt   DateTime  @default(now())

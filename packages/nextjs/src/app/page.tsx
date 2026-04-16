@@ -6,27 +6,19 @@ import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { NavGroup } from "@/components/shared/NavGroup";
 import { ThemeSwitcher } from "@/components/shared/ThemeSwitcher";
+import { ProductCard } from "@/components/shared/ProductCard";
+import { CategoryFilter } from "@/components/ui/CategoryFilter";
 import { NavBrand } from "@/components/ui/NavBrand";
 import { NavItem } from "@/components/ui/NavItem";
 import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import { icons } from "@/components/ui/icons";
+import type { ProductGroupSummary } from "@/lib/shop-utils";
 import type { UserRole } from "@/types";
 
 interface AuthUser {
   name: string;
   role: UserRole;
-}
-
-interface ShopPreviewProduct {
-  id: string;
-  name: string;
-  category: string | null;
-  imageUrl: string | null;
-  price: number;
-  stock: number;
-  color: string | null;
-  variantLabel: string | null;
 }
 
 interface PublicPreviewPayload {
@@ -35,7 +27,7 @@ interface PublicPreviewPayload {
   availableBooks: number;
   shop: {
     categories: string[];
-    products: ShopPreviewProduct[];
+    products: ProductGroupSummary[];
   };
 }
 
@@ -79,6 +71,8 @@ export default function HomePage() {
       .then((data) => setPreview(data as PublicPreviewPayload))
       .catch(() => setPreview(EMPTY_PREVIEW));
   }, []);
+
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const role = user?.role ?? null;
   const panelHref = role ? `/${role.toLowerCase()}` : null;
@@ -165,86 +159,83 @@ export default function HomePage() {
 
           <section className="mx-auto max-w-5xl pb-10">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <Card className="space-y-3 p-5">
-                <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">{icons.print}</div>
-                <h3 className="font-semibold text-text">Impresión</h3>
-                <p className="text-sm text-text-muted">
-                  {preview.printingTokensPreview} Tokens para imprimir disponibles.
-                </p>
-                <Link href={buildLoginHref("/printing")} className="text-sm font-medium text-primary hover:underline">
-                  Ir a impresiones
-                </Link>
-              </Card>
+              <Link href={buildLoginHref("/printing")} className="group block">
+                <Card className="space-y-3 p-5 h-full transition-colors hover:border-primary/50">
+                  <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">{icons.print}</div>
+                  <h3 className="font-semibold text-text">Impresión</h3>
+                  <p className="text-sm text-text-muted">
+                    {preview.printingTokensPreview} Tokens para imprimir disponibles.
+                  </p>
+                </Card>
+              </Link>
 
-              <Card className="space-y-3 p-5">
-                <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">{icons.rooms}</div>
-                <h3 className="font-semibold text-text">Salas de estudio</h3>
-                <p className="text-sm text-text-muted">{preview.availableRooms} salas disponibles ahora.</p>
-                <Link href={buildLoginHref("/rooms")} className="text-sm font-medium text-primary hover:underline">
-                  Reservar sala
-                </Link>
-              </Card>
+              <Link href={buildLoginHref("/rooms")} className="group block">
+                <Card className="space-y-3 p-5 h-full transition-colors hover:border-primary/50">
+                  <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">{icons.rooms}</div>
+                  <h3 className="font-semibold text-text">Salas de estudio</h3>
+                  <p className="text-sm text-text-muted">{preview.availableRooms} salas disponibles ahora.</p>
+                </Card>
+              </Link>
 
-              <Card className="space-y-3 p-5">
-                <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">{icons.library}</div>
-                <h3 className="font-semibold text-text">Préstamos</h3>
-                <p className="text-sm text-text-muted">{preview.availableBooks} libros disponibles para préstamo.</p>
-                <Link href={buildLoginHref("/loans")} className="text-sm font-medium text-primary hover:underline">
-                  Ir a préstamos
-                </Link>
-              </Card>
+              <Link href={buildLoginHref("/loans")} className="group block">
+                <Card className="space-y-3 p-5 h-full transition-colors hover:border-primary/50">
+                  <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">{icons.library}</div>
+                  <h3 className="font-semibold text-text">Préstamos</h3>
+                  <p className="text-sm text-text-muted">{preview.availableBooks} libros disponibles para préstamo.</p>
+                </Card>
+              </Link>
 
-              <Card className="space-y-3 p-5">
-                <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">{icons.badge}</div>
-                <h3 className="font-semibold text-text">Insignias</h3>
-                <p className="text-sm text-text-muted">Consigue insignias mientras aprendes.</p>
-                <Link href={buildLoginHref("/badges")} className="text-sm font-medium text-primary hover:underline">
-                  Ver insignias
-                </Link>
-              </Card>
+              <Link href={buildLoginHref("/badges")} className="group block">
+                <Card className="space-y-3 p-5 h-full transition-colors hover:border-primary/50">
+                  <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">{icons.badge}</div>
+                  <h3 className="font-semibold text-text">Insignias</h3>
+                  <p className="text-sm text-text-muted">Consigue insignias mientras aprendes.</p>
+                </Card>
+              </Link>
             </div>
 
             <div className="mt-8 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-text">Tienda</h2>
-                <Link href={buildLoginHref("/shop")} className="text-sm font-medium text-primary hover:underline">
-                  Ver catálogo completo
-                </Link>
-              </div>
+              <h2 className="text-xl font-semibold text-text">Tienda</h2>
 
-              <div className="flex flex-wrap gap-2">
-                {preview.shop.categories.map((category) => (
-                  <span
-                    key={category}
-                    className="rounded-full border border-border-default bg-card px-3 py-1 text-xs font-medium text-text-muted"
-                  >
-                    {category}
-                  </span>
-                ))}
-                {preview.shop.categories.length === 0 && (
-                  <span className="text-xs text-text-muted">Sin filtros disponibles</span>
-                )}
-              </div>
+              {preview.shop.categories.length > 0 && (
+                <CategoryFilter
+                  categories={preview.shop.categories}
+                  selected={selectedCategory}
+                  onSelect={setSelectedCategory}
+                />
+              )}
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {preview.shop.products.map((product) => (
-                  <Card key={product.id} className="space-y-3 p-5">
-                    <div className="line-clamp-2 min-h-[48px] text-base font-semibold text-text">{product.name}</div>
-                    <p className="text-sm text-text-muted line-clamp-2">
-                      {product.variantLabel ?? product.color ?? product.category ?? "Producto del catálogo"}
-                    </p>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-semibold text-primary">{product.price} ShopTokens</span>
-                      <span className="text-text-muted">Stock: {product.stock}</span>
-                    </div>
-                    <Link
-                      href={buildLoginHref("/shop/cart", product.id)}
-                      className="inline-flex w-full items-center justify-center rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-text-on-primary transition-colors hover:bg-primary-hover"
-                    >
-                      Añadir al carrito
-                    </Link>
-                  </Card>
+                {(selectedCategory
+                  ? preview.shop.products.filter((p) => p.category === selectedCategory)
+                  : preview.shop.products
+                ).slice(0, 6).map((product) => (
+                  <ProductCard
+                    key={product.groupKey}
+                    groupKey={product.groupKey}
+                    name={product.name}
+                    minPrice={product.minPrice}
+                    maxPrice={product.maxPrice}
+                    totalStock={product.totalStock}
+                    category={product.category}
+                    variants={product.variants}
+                    linkBase="/login?returnUrl=/shop/"
+                    addToCartHref={(variantId) => buildLoginHref("/shop/cart", variantId)}
+                  />
                 ))}
+              </div>
+
+              <div className="flex justify-center pt-2">
+                <Link
+                  href={buildLoginHref("/shop")}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border-default bg-card px-5 py-2 text-sm font-medium text-text-muted transition-colors hover:border-primary/50 hover:text-text"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  Ver catálogo completo
+                </Link>
               </div>
             </div>
           </section>

@@ -26,7 +26,6 @@ export default function LibrarianNewRoomPage() {
         location: data.location || undefined,
         capacity: parseInt(data.capacity),
         amenities: Object.keys(amenities).length > 0 ? amenities : undefined,
-        imageUrl: data.imageUrl || undefined,
       }),
     });
 

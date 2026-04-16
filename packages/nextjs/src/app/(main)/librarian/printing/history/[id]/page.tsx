@@ -19,7 +19,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { Badge } from "@/components/ui/Badge";
 import { DocumentPreview } from "@/components/shared/DocumentPreview";
 import { DetailField } from "@/components/shared/DetailField";
-import { formatDateTime, formatBytes } from "@/lib/formatters";
+import { formatDateTime, formatBytes, formatCredits } from "@/lib/formatters";
 
 interface PrintLogDetail {
   id: string;
@@ -212,7 +212,7 @@ export default function StudentPrintDetailPage() {
                 <Badge variant="warning">{log.creditsUsed}</Badge>
               }
             />
-            <DetailField label="Créditos restantes" value={log.creditsAfter} />
+            <DetailField label="Créditos restantes" value={formatCredits(log.creditsAfter)} />
           </div>
         </Card>
       </div>

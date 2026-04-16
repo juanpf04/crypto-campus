@@ -24,7 +24,7 @@ export default function AdminEditRoomPage() {
         const amenities = room.amenities as Record<string, boolean> || {};
         setInitialValues({
           name: room.name, description: room.description || "", location: room.location || "",
-          capacity: String(room.capacity), imageUrl: room.imageUrl || "",
+          capacity: String(room.capacity),
           amenityProjector: !!amenities.projector, amenityWhiteboard: !!amenities.whiteboard,
           amenityAirConditioning: !!amenities.airConditioning, amenityPowerOutlets: !!amenities.powerOutlets,
         });
@@ -48,7 +48,6 @@ export default function AdminEditRoomPage() {
         name: data.name, description: data.description || undefined,
         location: data.location || undefined, capacity: parseInt(data.capacity),
         amenities: Object.keys(amenities).length > 0 ? amenities : undefined,
-        imageUrl: data.imageUrl || undefined,
       }),
     });
     if (!res.ok) { const err = await res.json(); throw new Error(err.error || "Error"); }

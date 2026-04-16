@@ -79,7 +79,6 @@ export async function addRoom(input: {
 	location?: string;
 	capacity: number;
 	amenities?: Record<string, boolean>;
-	imageUrl?: string;
 }) {
 	const session = await getSession();
 	ensureRole(session, ["LIBRARIAN", "ADMIN"]);
@@ -118,7 +117,6 @@ export async function addRoom(input: {
 				location: input.location?.trim() || null,
 				capacity,
 				amenities: input.amenities || undefined,
-				imageUrl: input.imageUrl?.trim() || null,
 				txHash: hash,
 			},
 		});
@@ -141,7 +139,6 @@ export async function updateRoom(
 		location?: string;
 		capacity?: number;
 		amenities?: Record<string, boolean>;
-		imageUrl?: string;
 		active?: boolean;
 	},
 ) {
@@ -178,7 +175,6 @@ export async function updateRoom(
 		if (input.location !== undefined) data.location = input.location.trim() || null;
 		if (input.capacity !== undefined) data.capacity = newCapacity;
 		if (input.amenities !== undefined) data.amenities = input.amenities;
-		if (input.imageUrl !== undefined) data.imageUrl = input.imageUrl.trim() || null;
 		if (input.active !== undefined) data.active = newActive;
 
 		const room = await prisma.room.update({

@@ -212,8 +212,8 @@ export async function getPrintLogDetail(logId: string) {
 
 		if (!log) throw new Error("Log no encontrado");
 
-		// Los no-admin solo pueden ver sus propios logs
-		if (session.role !== "ADMIN" && log.userId !== session.userId) {
+		// Los no-admin/librarian solo pueden ver sus propios logs
+		if (session.role !== "ADMIN" && session.role !== "LIBRARIAN" && log.userId !== session.userId) {
 			throw new Error("No autorizado");
 		}
 
@@ -510,7 +510,7 @@ async function executePrinterJob(
 
 		// Leer créditos actualizados post-transacción
 		const creditsAfter = await readCredits(userAddress);
-		const normalizedCreditsAfter = Number(creditsAfter);
+		const normalizedCreditsAfter = Math.min(Number(creditsAfter), 2147483647);
 
 		const fullPrintLogData = {
 			userId,

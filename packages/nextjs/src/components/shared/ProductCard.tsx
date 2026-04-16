@@ -17,6 +17,7 @@
  */
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
@@ -49,6 +50,8 @@ interface ProductCardProps {
   onAddToCart?: (variantId: string) => void;
   /** Mostrar botón + de carrito (default true) */
   showAddToCart?: boolean;
+  /** Si se pasa, el botón de carrito es un Link a esta URL en vez de hacer POST */
+  addToCartHref?: (variantId: string) => string;
   /** Modo admin: muestra botones de editar/eliminar en vez de carrito */
   adminMode?: boolean;
   /** Si el producto está activo (solo relevante en adminMode) */
@@ -68,10 +71,12 @@ export function ProductCard({
   linkBase = "/student/shop/",
   onAddToCart,
   showAddToCart = true,
+  addToCartHref,
   adminMode = false,
   active = true,
   onToggleActive,
 }: ProductCardProps) {
+  const router = useRouter();
   const [selectedVariantId, setSelectedVariantId] = useState<string>(variants[0]?.id ?? "");
   const [adding, setAdding] = useState(false);
 
@@ -161,25 +166,44 @@ export function ProductCard({
 
           {/* Botones de acción */}
           {!adminMode && showAddToCart && !isOutOfStock && (
-            <button
-              type="button"
-              onClick={handleAddToCart}
-              disabled={adding}
-              className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 py-2 text-sm font-medium text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:opacity-50"
-            >
-              {adding ? (
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              ) : (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                    <circle cx="9" cy="21" r="1" />
-                    <circle cx="20" cy="21" r="1" />
-                    <path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6" />
-                  </svg>
-                  Añadir al carrito
-                </>
-              )}
-            </button>
+            addToCartHref ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  router.push(addToCartHref(selectedVariant.id));
+                }}
+                className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 py-2 text-sm font-medium text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                  <circle cx="9" cy="21" r="1" />
+                  <circle cx="20" cy="21" r="1" />
+                  <path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6" />
+                </svg>
+                Añadir al carrito
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleAddToCart}
+                disabled={adding}
+                className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 py-2 text-sm font-medium text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {adding ? (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                ) : (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                      <circle cx="9" cy="21" r="1" />
+                      <circle cx="20" cy="21" r="1" />
+                      <path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6" />
+                    </svg>
+                    Añadir al carrito
+                  </>
+                )}
+              </button>
+            )
           )}
 
           {/* Botones admin */}

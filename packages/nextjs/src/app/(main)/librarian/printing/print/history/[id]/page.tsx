@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Detalle de un trabajo de impresión del estudiante.
+ * Detalle de un trabajo de impresión (vista bibliotecario).
  *
  * Layout a 2 columnas:
  * - Izquierda (60%): Preview del documento (si aún está disponible, 24h máx.)
@@ -51,7 +51,7 @@ function extractFilename(filePath: string | null): string | null {
   return parts[parts.length - 1] ?? null;
 }
 
-export default function StudentPrintDetailPage() {
+export default function LibrarianPrintDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { addToast } = useToast();
 
@@ -108,7 +108,7 @@ export default function StudentPrintDetailPage() {
   if (!log) {
     return (
       <div className="space-y-6">
-        <BackLink href="/student/library/printing/history" label="Volver al historial" />
+        <BackLink href="/librarian/printing/print/history" label="Volver al historial" />
         <p className="text-text-muted">Impresión no encontrada.</p>
       </div>
     );
@@ -126,7 +126,7 @@ export default function StudentPrintDetailPage() {
 
   return (
     <div className="space-y-6">
-      <BackLink href="/student/library/printing/history" label="Volver al historial" />
+      <BackLink href="/librarian/printing/print/history" label="Volver al historial" />
 
       <div>
         <h1 className="text-2xl font-bold text-text">Detalle de impresión</h1>

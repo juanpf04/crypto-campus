@@ -29,7 +29,6 @@ export default function LibrarianEditRoomPage() {
           description: room.description || "",
           location: room.location || "",
           capacity: String(room.capacity),
-          imageUrl: room.imageUrl || "",
           amenityProjector: !!amenities.projector,
           amenityWhiteboard: !!amenities.whiteboard,
           amenityAirConditioning: !!amenities.airConditioning,
@@ -61,7 +60,6 @@ export default function LibrarianEditRoomPage() {
         location: data.location || undefined,
         capacity: parseInt(data.capacity),
         amenities: Object.keys(amenities).length > 0 ? amenities : undefined,
-        imageUrl: data.imageUrl || undefined,
       }),
     });
 

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { groupProducts } from "@/lib/shop-utils";
 
-const SHOP_PREVIEW_LIMIT = 6;
+/** El límite de 6 grupos se aplica en el cliente tras filtrar por categoría. */
 
 export async function GET() {
   try {
@@ -22,21 +23,17 @@ export async function GET() {
           active: true,
           stock: { gt: 0 },
         },
-        select: {
-          id: true,
-          name: true,
-          category: true,
-          imageUrl: true,
-          price: true,
-          stock: true,
-          color: true,
-          variantLabel: true,
+        include: {
+          base: {
+            select: { slug: true, name: true, description: true, category: true },
+          },
         },
         orderBy: [
+          { category: "asc" },
+          { baseId: "asc" },
           { sortOrder: "asc" },
-          { createdAt: "desc" },
+          { name: "asc" },
         ],
-        take: SHOP_PREVIEW_LIMIT,
       }),
     ]);
 
@@ -44,13 +41,15 @@ export async function GET() {
       .map((entry) => entry.category)
       .filter((category): category is string => !!category);
 
+    const grouped = groupProducts(productsRaw);
+
     return NextResponse.json({
       printingTokensPreview: 200,
       availableRooms,
       availableBooks,
       shop: {
         categories,
-        products: productsRaw,
+        products: grouped,
       },
     });
   } catch (error) {

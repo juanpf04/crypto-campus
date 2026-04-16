@@ -58,7 +58,7 @@ export default function LibrarianPrintingPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <StatCard title="Impresoras activas" value={stats.activePrinters} subtitle={`${stats.totalPrinters} registradas`} icon={icons.print} />
           <StatCard title="Impresiones totales" value={stats.totalLogs} subtitle="Registradas en el sistema" icon={icons.orders} />
-          <StatCard title="Créditos ilimitados" value="∞" subtitle="Como bibliotecario" icon={icons.token} />
+          <StatCard title="Créditos ilimitados" value="Infinito" subtitle="Como bibliotecario" icon={icons.token} />
         </div>
       </section>
 

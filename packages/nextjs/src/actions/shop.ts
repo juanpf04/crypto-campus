@@ -30,33 +30,17 @@ import {
 	CAMPUS_SHOP_ABI,
 	SHOP_TOKEN_ABI,
 } from "@/lib/contracts";
+import {
+	type ProductGroupSummary,
+	type ProductVariantSummary,
+	normalizeColor,
+	deriveColorFromImageUrl,
+	deriveBaseKeyFromImageUrl,
+	slugify,
+	deriveBaseName,
+} from "@/lib/shop-utils";
 
 // ── Tipos ────────────────────────────────────────────────────────────────
-
-type ProductVariantSummary = {
-	id: string;
-	productId: number;
-	name: string;
-	price: number;
-	stock: number;
-	category: string | null;
-	imageUrl: string | null;
-	color: string;
-	variantLabel: string | null;
-};
-
-type ProductGroupSummary = {
-	groupKey: string;
-	name: string;
-	description: string | null;
-	category: string | null;
-	price: number;
-	minPrice: number;
-	maxPrice: number;
-	totalStock: number;
-	defaultVariantId: string;
-	variants: ProductVariantSummary[];
-};
 
 type SimulatedCardInput = {
 	cardNumber: string;
@@ -67,58 +51,6 @@ type SimulatedCardInput = {
 };
 
 // ── Helpers internos ─────────────────────────────────────────────────────
-
-function slugify(value: string): string {
-	return value
-		.toLowerCase()
-		.normalize("NFD")
-		.replace(/[\u0300-\u036f]/g, "")
-		.replace(/[^a-z0-9]+/g, "-")
-		.replace(/^-+|-+$/g, "");
-}
-
-function normalizeColor(color: string | null | undefined): string {
-	return (color ?? "default").trim().toLowerCase() || "default";
-}
-
-function toDisplayColor(raw: string): string {
-	const normalized = normalizeColor(raw);
-	return normalized
-		.split("-")
-		.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-		.join(" ");
-}
-
-function deriveBaseKeyFromImageUrl(imageUrl: string | null): string | null {
-	if (!imageUrl) return null;
-	const parts = imageUrl.split("/").filter(Boolean);
-	if (parts.length < 4) return null;
-	const baseParts = parts.slice(1, -2);
-	if (baseParts.length === 0) return null;
-	return slugify(baseParts.join("-"));
-}
-
-function deriveBaseName(name: string, color: string): string {
-	const displayColor = toDisplayColor(color);
-	const variants = [displayColor, displayColor.toLowerCase(), displayColor.toUpperCase()];
-
-	for (const candidate of variants) {
-		const suffix = ` ${candidate}`;
-		if (name.endsWith(suffix)) {
-			return name.slice(0, -suffix.length).trim();
-		}
-	}
-
-	return name;
-}
-
-function deriveColorFromImageUrl(imageUrl: string | null): string {
-	if (!imageUrl) return "default";
-	const parts = imageUrl.split("/").filter(Boolean);
-	if (parts.length < 2) return "default";
-	const candidate = parts[parts.length - 2];
-	return normalizeColor(candidate);
-}
 
 function luhnCheck(cardNumber: string): boolean {
 	const digits = cardNumber.replace(/\s+/g, "");
