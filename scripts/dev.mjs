@@ -63,7 +63,9 @@ function run(command, args, { cwd, prefix = "[cmd]", allowFailure = false } = {}
         resolve({ code, stdout, stderr });
         return;
       }
-      reject(new Error(`${command} ${args.join(" ")} falló con código ${code}`));
+      const details = (stderr || stdout).trim();
+      const detailSuffix = details ? `\n${details}` : "";
+      reject(new Error(`${command} ${args.join(" ")} falló con código ${code}${detailSuffix}`));
     });
   });
 }
@@ -76,7 +78,32 @@ async function ensureDatabase() {
       prefix: "[db]",
     });
     log(green("Base de datos lista en localhost:5435"));
-  } catch {
+  } catch (error) {
+    const message = String(error?.message || "");
+    const hasNameConflict =
+      message.includes("postgres_cryptocampus") &&
+      (message.includes("already in use") || message.includes("Conflict"));
+
+    if (hasNameConflict) {
+      log(yellow("Detectado conflicto de nombre de contenedor. Reintentando automaticamente..."));
+      try {
+        await run("docker", ["rm", "-f", "postgres_cryptocampus"], {
+          cwd: ROOT,
+          prefix: "[db-fix]",
+        });
+
+        await run("docker", ["compose", "up", "-d", "db"], {
+          cwd: ROOT,
+          prefix: "[db]",
+        });
+
+        log(green("Base de datos lista en localhost:5435"));
+        return;
+      } catch {
+        // Si falla la recuperacion automatica, cae al mensaje de error general.
+      }
+    }
+
     console.error(
       red(
         "No se pudo iniciar la base de datos. Asegura que Docker Desktop este iniciado y vuelve a ejecutar 'pnpm dev'."
@@ -88,7 +115,7 @@ async function ensureDatabase() {
 
 function runNodeScript(scriptName, { prefix, allowFailure = false, nonCriticalMessage } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn("node", [scriptName], {
+    const child = spawn(process.execPath, [scriptName], {
       cwd: NEXTJS_DIR,
       stdio: ["ignore", "pipe", "pipe"],
       shell: true,
@@ -115,11 +142,49 @@ function runNodeScript(scriptName, { prefix, allowFailure = false, nonCriticalMe
   });
 }
 
+async function ensurePrismaClient() {
+  log("Generando Prisma Client...");
+  try {
+    await run("pnpm", ["run", "db:generate"], {
+      cwd: NEXTJS_DIR,
+      prefix: "[prisma]",
+    });
+    log(green("Prisma Client generado"));
+  } catch {
+    console.error(
+      red(
+        "No se pudo generar Prisma Client. Ejecuta 'pnpm db:generate' y vuelve a intentar 'pnpm dev'."
+      )
+    );
+    process.exit(1);
+  }
+}
+
+async function ensureDatabaseSchema() {
+  log("Aplicando esquema Prisma en la base de datos...");
+  try {
+    await run("pnpm", ["run", "db:push"], {
+      cwd: NEXTJS_DIR,
+      prefix: "[prisma]",
+    });
+    log(green("Esquema Prisma sincronizado"));
+  } catch {
+    console.error(
+      red(
+        "No se pudo aplicar el esquema Prisma. Ejecuta 'pnpm db:push' y vuelve a intentar 'pnpm dev'."
+      )
+    );
+    process.exit(1);
+  }
+}
+
 await ensureDatabase();
+await ensurePrismaClient();
+await ensureDatabaseSchema();
 
 // 1. Arrancar el nodo de Hardhat
 log("Arrancando nodo de Hardhat...");
-const hardhatNode = spawn("npx", ["hardhat", "node"], {
+const hardhatNode = spawn("pnpm", ["exec", "hardhat", "node"], {
   cwd: HARDHAT_DIR,
   stdio: ["ignore", "pipe", "pipe"],
   shell: true,
@@ -164,8 +229,8 @@ log("Desplegando contratos CampusModule...");
 const deployOutput = await new Promise((resolve, reject) => {
   let output = "";
   const deploy = spawn(
-    "npx",
-    ["hardhat", "ignition", "deploy", "ignition/modules/CampusModule.ts", "--network", "localhost"],
+    "pnpm",
+    ["exec", "hardhat", "ignition", "deploy", "ignition/modules/CampusModule.ts", "--network", "localhost"],
     {
       cwd: HARDHAT_DIR,
       stdio: ["ignore", "pipe", "pipe"],
@@ -290,7 +355,7 @@ await runNodeScript("scripts/cleanup-uploads.mjs", {
 
 // 11. Arrancar Next.js
 log("Arrancando Next.js...");
-const nextDev = spawn("npx", ["next", "dev"], {
+const nextDev = spawn("pnpm", ["exec", "next", "dev"], {
   cwd: NEXTJS_DIR,
   stdio: ["ignore", "pipe", "pipe"],
   shell: true,

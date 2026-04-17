@@ -7,11 +7,13 @@
  * Uso: node scripts/seed-printers.mjs
  */
 
-import { PrismaClient } from "@prisma/client";
+import prismaClientPkg from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+
+const { PrismaClient } = prismaClientPkg;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

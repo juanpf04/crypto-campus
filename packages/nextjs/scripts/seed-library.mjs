@@ -14,11 +14,13 @@
 import { createPublicClient, createWalletClient, http } from "viem";
 import { hardhat } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
-import { PrismaClient } from "@prisma/client";
+import prismaClientPkg from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+
+const { PrismaClient } = prismaClientPkg;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

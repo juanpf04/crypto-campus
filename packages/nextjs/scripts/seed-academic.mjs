@@ -10,13 +10,15 @@
 import { createPublicClient, createWalletClient, http, parseEther, keccak256, toBytes } from "viem";
 import { hardhat } from "viem/chains";
 import { privateKeyToAccount, generatePrivateKey } from "viem/accounts";
-import { PrismaClient } from "@prisma/client";
+import prismaClientPkg from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { createCipheriv, randomBytes } from "crypto";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import bcrypt from "bcryptjs";
+
+const { PrismaClient } = prismaClientPkg;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
