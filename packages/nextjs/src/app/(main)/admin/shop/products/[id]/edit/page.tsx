@@ -17,7 +17,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/Card";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/Badge";
 import { ProductForm, type ProductFormData } from "@/components/forms/ProductForm";
 
@@ -107,13 +107,7 @@ export default function AdminEditProductPage() {
     router.push(backUrl);
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
+  if (loading) return <SkeletonPage />;
 
   if (!group) {
     return (

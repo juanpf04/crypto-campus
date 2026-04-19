@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
@@ -55,7 +55,7 @@ export default function AdminAssignmentsPage() {
     return () => { cancelled = true; };
   }, [addToast]);
 
-  if (loading) return <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>;
+  if (loading) return <SkeletonTable columns={7} rows={6} />;
 
   return (
     <div className="space-y-6">

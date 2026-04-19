@@ -19,7 +19,7 @@ import { CreditsBanner } from "@/components/shared/CreditsBanner";
 import { PrintingOverlay } from "@/components/shared/PrintingOverlay";
 import { PrintJobForm, type PrintJobResult } from "@/components/forms/PrintJobForm";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/Card";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 
 interface Printer {
   id: string;
@@ -108,13 +108,7 @@ export default function StudentPrintingPage() {
     }
   }, [router, addToast]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
+  if (loading) return <SkeletonPage />;
 
   // Si está imprimiendo, mostrar overlay en vez del formulario
   if (printingState.active && printingState.promise) {

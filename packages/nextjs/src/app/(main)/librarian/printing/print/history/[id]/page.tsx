@@ -15,7 +15,7 @@ import { useParams } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/Badge";
 import { DocumentPreview } from "@/components/shared/DocumentPreview";
 import { DetailField } from "@/components/shared/DetailField";
@@ -97,13 +97,7 @@ export default function LibrarianPrintDetailPage() {
     };
   }, [id, addToast]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
+  if (loading) return <SkeletonPage />;
 
   if (!log) {
     return (

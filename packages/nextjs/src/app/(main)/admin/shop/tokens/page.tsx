@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { SearchInput } from "@/components/ui/SearchInput";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
@@ -116,13 +116,7 @@ export default function AdminShopTokensPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
+  if (loading) return <SkeletonTable columns={5} rows={6} />;
 
   return (
     <div className="space-y-6">

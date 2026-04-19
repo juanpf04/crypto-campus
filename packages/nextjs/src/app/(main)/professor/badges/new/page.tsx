@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { Toggle } from "@/components/ui/Toggle";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { icons } from "@/components/ui/icons";
 
@@ -114,13 +114,7 @@ export default function NewAssignmentPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
+  if (loading) return <SkeletonPage />;
 
   if (offerings.length === 0) {
     return (

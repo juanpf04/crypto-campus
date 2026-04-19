@@ -11,7 +11,7 @@ import { CategoryFilter } from "@/components/ui/CategoryFilter";
 import { NavBrand } from "@/components/ui/NavBrand";
 import { NavItem } from "@/components/ui/NavItem";
 import { Card } from "@/components/ui/Card";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 import { icons } from "@/components/ui/icons";
 import type { ProductGroupSummary } from "@/lib/shop-utils";
 import type { UserRole } from "@/types";
@@ -85,17 +85,13 @@ export default function HomePage() {
 
   if (!checked) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-bg">
-        <Spinner size="lg" />
-      </div>
+      <div className="min-h-screen bg-bg p-8"><SkeletonPage /></div>
     );
   }
 
   if (panelHref) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-bg">
-        <Spinner size="lg" />
-      </div>
+      <div className="min-h-screen bg-bg p-8"><SkeletonPage /></div>
     );
   }
 

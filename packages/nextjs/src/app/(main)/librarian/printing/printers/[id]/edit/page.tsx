@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/useToast";
 import { PrinterForm, type PrinterFormData } from "@/components/forms/PrinterForm";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/Card";
 import { BackLink } from "@/components/ui/BackLink";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 
 interface PrinterData {
   id: string;
@@ -66,13 +66,7 @@ export default function EditPrinterPage() {
     router.push("/librarian/printing/printers");
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
+  if (loading) return <SkeletonPage />;
 
   if (!printer) return null;
 

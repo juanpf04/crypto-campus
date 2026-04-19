@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import {
@@ -51,13 +51,7 @@ export default function AdminRewardsPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  if (loading && rewards.length === 0) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
+  if (loading && rewards.length === 0) return <SkeletonTable columns={7} rows={6} />;
 
   return (
     <div className="space-y-6">

@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 import { SubjectForm, type SubjectFormData } from "@/components/forms";
 
 export default function AdminEditSubjectPage() {
@@ -48,13 +48,7 @@ export default function AdminEditSubjectPage() {
     router.push(`/admin/subjects/${id}`);
   }
 
-  if (loading || !initialValues) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
+  if (loading || !initialValues) return <SkeletonPage />;
 
   return (
     <div className="space-y-6">

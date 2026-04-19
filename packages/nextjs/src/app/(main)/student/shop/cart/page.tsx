@@ -20,7 +20,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 import { QuantitySelector } from "@/components/ui/QuantitySelector";
 import { ProductImage } from "@/components/shared/ProductImage";
 import { PurchaseConfirmModal, type PurchaseItem } from "@/components/shared/PurchaseConfirmModal";
@@ -220,13 +220,7 @@ export default function StudentCartPage() {
   })) ?? [];
 
   // ── Loading ──
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
+  if (loading) return <SkeletonPage />;
 
   const isEmpty = !cart || cart.items.length === 0;
 

@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { FilterPills } from "@/components/ui/FilterPills";
@@ -69,7 +69,7 @@ export default function AdminLoansPage() {
     return loan.dueDate ? new Date() > new Date(loan.dueDate) : false;
   }
 
-  if (loading && items.length === 0) return <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>;
+  if (loading && items.length === 0) return <SkeletonTable columns={6} rows={6} />;
 
   return (
     <div className="space-y-6">

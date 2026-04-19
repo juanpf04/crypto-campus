@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Card } from "@/components/ui/Card";
 import { SectionTitle } from "@/components/shared/SectionTitle";
@@ -98,13 +98,7 @@ export default function ProfessorStudentsPage() {
     return s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q);
   });
 
-  if (loadingSubjects) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
+  if (loadingSubjects) return <SkeletonTable columns={5} rows={3} />;
 
   return (
     <div className="space-y-8">
@@ -151,9 +145,7 @@ export default function ProfessorStudentsPage() {
           />
 
           {loadingStudents ? (
-            <div className="flex items-center justify-center py-10">
-              <Spinner size="lg" />
-            </div>
+            <SkeletonTable columns={5} rows={6} />
           ) : filteredStudents.length === 0 ? (
             <EmptyState
               title="Sin alumnos"

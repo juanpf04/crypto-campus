@@ -16,7 +16,7 @@ import { SectionTitle } from "@/components/shared/SectionTitle";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
@@ -78,13 +78,7 @@ export default function ProfessorBadgesPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  if (authLoading || loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
+  if (authLoading || loading) return <SkeletonPage />;
 
   return (
     <div className="space-y-8">

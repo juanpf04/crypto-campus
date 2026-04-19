@@ -14,7 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Button } from "@/components/ui/Button";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonPage, Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { RoomAvailabilityGrid } from "@/components/shared/RoomAvailabilityGrid";
@@ -142,7 +142,7 @@ export default function StudentRoomsPage() {
     }
   }
 
-  if (loading) return <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>;
+  if (loading) return <SkeletonPage />;
 
   return (
     <div className="space-y-8">
@@ -206,7 +206,7 @@ export default function StudentRoomsPage() {
           </SectionTitle>
 
           {loadingAvailability ? (
-            <div className="flex justify-center py-8"><Spinner /></div>
+            <Skeleton className="h-10 w-full" />
           ) : (
             <RoomAvailabilityGrid
               availability={availability}

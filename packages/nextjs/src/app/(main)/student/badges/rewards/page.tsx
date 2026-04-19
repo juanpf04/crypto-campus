@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { RewardCard } from "@/components/shared/RewardCard";
@@ -86,7 +86,7 @@ export default function StudentRewardsPage() {
     }
   }
 
-  if (loading) return <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>;
+  if (loading) return <SkeletonPage />;
 
   return (
     <div className="space-y-8">

@@ -10,7 +10,7 @@ import Link from "next/link";
 import { BackLink } from "@/components/ui/BackLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { icons } from "@/components/ui/icons";
@@ -47,7 +47,7 @@ export default function StudentBadgesPage() {
 
   const totalBadges = groups.reduce((sum, g) => sum + g.totalBadges, 0);
 
-  if (loading) return <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>;
+  if (loading) return <SkeletonPage />;
 
   return (
     <div className="space-y-8">

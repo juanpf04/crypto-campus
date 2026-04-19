@@ -15,7 +15,7 @@ import { SectionTitle } from "@/components/shared/SectionTitle";
 import { StatCard } from "@/components/shared/StatCard";
 import { ActionRow } from "@/components/shared/ActionRow";
 import { Card } from "@/components/ui/Card";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 
 export default function AdminPrintingPage() {
   const { user, loading: authLoading } = useAuthUser();
@@ -46,13 +46,7 @@ export default function AdminPrintingPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (authLoading || loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
+  if (authLoading || loading) return <SkeletonPage />;
 
   return (
     <div className="space-y-10">

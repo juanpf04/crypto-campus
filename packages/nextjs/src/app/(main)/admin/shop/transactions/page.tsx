@@ -14,7 +14,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge, type BadgeVariant } from "@/components/ui/Badge";
 import { Select } from "@/components/ui/Select";
 import { Pagination } from "@/components/ui/Pagination";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { icons } from "@/components/ui/icons";
@@ -119,13 +119,7 @@ export default function AdminTransactionsPage() {
     setOffset(0);
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
+  if (loading) return <SkeletonTable columns={5} rows={8} />;
 
   return (
     <div className="space-y-6">

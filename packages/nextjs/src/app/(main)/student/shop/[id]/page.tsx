@@ -21,7 +21,7 @@ import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 import { QuantitySelector } from "@/components/ui/QuantitySelector";
 import { DetailField } from "@/components/shared/DetailField";
 import { PurchaseOverlay } from "@/components/shared/PurchaseOverlay";
@@ -205,13 +205,7 @@ export default function StudentProductDetailPage() {
   }, [router, addToast]);
 
   // ── Loading ──
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
+  if (loading) return <SkeletonPage />;
 
   // ── Producto no encontrado ──
   if (!group || !selectedVariant) {

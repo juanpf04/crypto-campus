@@ -9,7 +9,7 @@
  * - Acciones: entregar + devolver (sin límite de tiempo)
  * - Barra flotante con ambas acciones
  *
- * Compone: BackLink, Card, Button, Spinner, Tabs (atómicos) +
+ * Compone: BackLink, Card, Button, Tabs (atómicos) +
  *          BatchHeader, GroupedOrderItem, ReturnSelectionBar,
  *          ConfirmModal, DetailField, SectionTitle (intermedios)
  */
@@ -19,7 +19,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 import { Tabs } from "@/components/ui/Tabs";
 import { SelectAllCheckbox } from "@/components/ui/SelectAllCheckbox";
 import { BatchHeader } from "@/components/shared/BatchHeader";
@@ -199,9 +199,7 @@ export default function AdminBatchDetailPage() {
     }
   }
 
-  if (loading) {
-    return <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>;
-  }
+  if (loading) return <SkeletonPage />;
 
   if (!batch) {
     return (

@@ -11,7 +11,7 @@ import Link from "next/link";
 import { useAuthUser } from "@/hooks/useAuthUser";
 import { icons } from "@/components/ui/icons";
 import { Card } from "@/components/ui/Card";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 import { StatCard } from "@/components/shared/StatCard";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { CompoundCard } from "@/components/shared/CompoundCard";
@@ -117,9 +117,7 @@ export default function StudentDashboard() {
 
   useEffect(() => { loadStats(); }, [loadStats]);
 
-  if (authLoading || !user) {
-    return <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>;
-  }
+  if (authLoading || !user) return <SkeletonPage />;
 
   const val = (v: number | null | undefined) => loading ? "—" : String(v ?? 0);
 

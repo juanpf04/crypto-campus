@@ -78,7 +78,7 @@ export function SkeletonTable({
       aria-live="polite"
     >
       <div className="border-b border-border-default p-4">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+        <div className="grid grid-cols-1 gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
           {Array.from({ length: columns }).map((_, idx) => (
             <Skeleton key={`head-${idx}`} className="h-3.5 w-3/4" />
           ))}
@@ -87,7 +87,7 @@ export function SkeletonTable({
 
       <div className="divide-y divide-border-default">
         {Array.from({ length: rows }).map((_, rowIdx) => (
-          <div key={`row-${rowIdx}`} className="grid grid-cols-1 gap-3 p-4 md:grid-cols-5">
+          <div key={`row-${rowIdx}`} className="grid grid-cols-1 gap-3 p-4" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
             {Array.from({ length: columns }).map((_, colIdx) => (
               <Skeleton key={`cell-${rowIdx}-${colIdx}`} className="h-4 w-full" />
             ))}

@@ -7,7 +7,7 @@
  * Filtro por usuario en ambas. Paginación.
  * Acciones: marcar entregado (individual/batch), procesar devolución.
  *
- * Compone: BackLink, Card, Select, Spinner, Tabs, Pagination, Badge (atómicos) +
+ * Compone: BackLink, Card, Select, Tabs, Pagination, Badge (atómicos) +
  *          BatchStatusBadge, LinkArrow (intermedios) + Table (atómico).
  */
 

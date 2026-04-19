@@ -8,7 +8,7 @@
  * Filtro por estado. Sin datos blockchain.
  * Click en fila → detalle del artículo pedido.
  *
- * Compone: BackLink, Card, Spinner, Tabs (atómicos) +
+ * Compone: BackLink, Card, Tabs (atómicos) +
  *          BatchHeader, GroupedOrderItem, ReturnSelectionBar, ConfirmModal (intermedios)
  */
 
@@ -17,7 +17,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 import { Tabs } from "@/components/ui/Tabs";
 import { SelectAllCheckbox } from "@/components/ui/SelectAllCheckbox";
 import { BatchHeader } from "@/components/shared/BatchHeader";
@@ -178,13 +178,7 @@ export default function StudentBatchDetailPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
+  if (loading) return <SkeletonPage />;
 
   if (!batch) {
     return (

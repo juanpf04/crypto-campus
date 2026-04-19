@@ -13,7 +13,7 @@ import { useAuthUser } from "@/hooks/useAuthUser";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 import { StatCard } from "@/components/shared/StatCard";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { ActionRow } from "@/components/shared/ActionRow";
@@ -51,13 +51,7 @@ export default function AdminBadgesPage() {
 
   useEffect(() => { loadStats(); }, [loadStats]);
 
-  if (authLoading || !user) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
+  if (authLoading || !user) return <SkeletonPage />;
 
   const val = (v: number | undefined) => loading ? "—" : String(v ?? 0);
 

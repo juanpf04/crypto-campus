@@ -15,7 +15,7 @@ import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonPage } from "@/components/ui/Skeleton";
 import { DetailField } from "@/components/shared/DetailField";
 import { ProductImage } from "@/components/shared/ProductImage";
 import { ConfirmModal } from "@/components/shared/ConfirmModal";
@@ -106,13 +106,7 @@ export default function StudentOrderDetailPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
+  if (loading) return <SkeletonPage />;
 
   if (!order) {
     return (
