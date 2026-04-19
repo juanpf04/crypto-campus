@@ -1,6 +1,7 @@
 {
   "name": "crypto-campus",
   "version": "1.0.0",
+  "private": true,
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -23,5 +24,24 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "engines": {
+    "node": ">=24.15.0 <25",
+    "pnpm": "10.33.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "undici": "^6.24.0",
+      "hono": "^4.12.4",
+      "@hono/node-server": "^1.19.10",
+      "flat-cache>flatted": "^3.4.2",
+      "micromatch>picomatch": "^2.3.2",
+      "anymatch>picomatch": "^2.3.2",
+      "tinyglobby>picomatch": "^4.0.4",
+      "socket.io-parser": "^4.2.6",
+      "h3": "^1.15.6",
+      "defu": "^6.1.5",
+      "effect": "^3.20.0"
+    }
+  },
   "packageManager": "pnpm@10.33.0"
 }

@@ -4,16 +4,24 @@ TFG — Sistema de tokens en la FDI UCM
 
 ## Requisitos previos
 
-- [Node.js](https://nodejs.org/) v18 o superior
+- [Node.js](https://nodejs.org/) v24.15.0 (recomendado con `nvm`)
 - [pnpm](https://pnpm.io/) v10+
 - [Git](https://git-scm.com/)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (para PostgreSQL local en `localhost:5435`)
 - [MetaMask](https://metamask.io/) (extensión de navegador, para interactuar con la DApp)
 
+Si usas nvm:
+
+```bash
+nvm install
+nvm use
+```
+
 Si no tienes pnpm instalado:
 
 ```bash
-npm install -g pnpm@latest-10
+corepack enable
+corepack prepare pnpm@10.33.0 --activate
 ```
 
 ## Instalación
