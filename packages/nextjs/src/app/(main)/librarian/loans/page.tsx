@@ -5,10 +5,10 @@ import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { FilterPills } from "@/components/ui/FilterPills";
+import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
@@ -77,22 +77,25 @@ export default function LibrarianLoansPage() {
     return loan.dueDate ? new Date() > new Date(loan.dueDate) : false;
   }
 
-  if (loading && items.length === 0) {
-    return <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>;
-  }
-
   return (
     <div className="space-y-6">
       <BackLink href="/librarian" label="Volver al panel" />
-      <h1 className="text-2xl font-bold text-text">Préstamos</h1>
+      <div>
+        <h1 className="text-2xl font-bold text-text">Préstamos</h1>
+        {loading ? <Skeleton className="mt-2 h-4 w-56" /> : null}
+      </div>
 
-      <FilterPills
-        options={LOAN_STATUS_OPTIONS}
-        selected={statusFilter}
-        onChange={(v) => { setStatusFilter(v); setOffset(0); }}
-      />
+      {!loading && (
+        <FilterPills
+          options={LOAN_STATUS_OPTIONS}
+          selected={statusFilter}
+          onChange={(v) => { setStatusFilter(v); setOffset(0); }}
+        />
+      )}
 
-      {items.length === 0 ? (
+      {loading && items.length === 0 ? (
+        <SkeletonTable columns={6} rows={8} />
+      ) : items.length === 0 ? (
         <EmptyState title="Sin préstamos" description="No hay préstamos con estos filtros." />
       ) : (
         <>

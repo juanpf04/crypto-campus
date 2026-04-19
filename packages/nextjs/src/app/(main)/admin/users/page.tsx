@@ -11,7 +11,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Spinner } from "@/components/ui/Spinner";
+import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
 import {
   Table,
   TableHeader,
@@ -49,65 +49,65 @@ export default function UsersListPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-text">Usuarios</h1>
-          <p className="text-text-muted mt-1">
-            {users.length} usuario{users.length !== 1 && "s"} registrado{users.length !== 1 && "s"}
-          </p>
+          {loading ? (
+            <Skeleton className="mt-2 h-4 w-56" />
+          ) : (
+            <p className="text-text-muted mt-1">
+              {users.length} usuario{users.length !== 1 && "s"} registrado{users.length !== 1 && "s"}
+            </p>
+          )}
         </div>
         <Link href="/admin/users/new">
-          <Button>Crear usuario</Button>
+          <Button disabled={loading}>Crear usuario</Button>
         </Link>
       </div>
 
       {/* Tabla */}
-      <Card className="overflow-hidden p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nombre</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Rol</TableHead>
-              <TableHead>Estado</TableHead>
-              <TableHead>Registro</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {users.map((user) => {
-              const badge = roleBadge[user.role] ?? { label: user.role, variant: "info" as const };
-              return (
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium">{user.name}</TableCell>
-                  <TableCell className="text-text-muted">{user.email}</TableCell>
-                  <TableCell>
-                    <Badge variant={badge.variant}>{badge.label}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={user.active ? "success" : "neutral"}>
-                      {user.active ? "Activo" : "Inactivo"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-text-muted text-sm">
-                    {new Date(user.createdAt).toLocaleDateString("es-ES")}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </Card>
+      {loading ? (
+        <SkeletonTable columns={5} rows={8} />
+      ) : (
+        <Card className="overflow-hidden p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nombre</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Rol</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead>Registro</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {users.map((user) => {
+                const badge = roleBadge[user.role] ?? { label: user.role, variant: "info" as const };
+                return (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">{user.name}</TableCell>
+                    <TableCell className="text-text-muted">{user.email}</TableCell>
+                    <TableCell>
+                      <Badge variant={badge.variant}>{badge.label}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={user.active ? "success" : "neutral"}>
+                        {user.active ? "Activo" : "Inactivo"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-text-muted text-sm">
+                      {new Date(user.createdAt).toLocaleDateString("es-ES")}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
     </div>
   );
 }

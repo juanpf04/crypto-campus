@@ -17,11 +17,11 @@ import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Select";
-import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { Badge } from "@/components/ui/Badge";
 import { Tabs } from "@/components/ui/Tabs";
+import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "@/components/ui/Table";
@@ -192,8 +192,9 @@ export default function StudentOrdersPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-10">
-          <Spinner size="lg" />
+        <div className="space-y-4" aria-busy="true" aria-live="polite">
+          <Skeleton className="h-10 w-56" />
+          <SkeletonTable columns={5} rows={8} />
         </div>
       ) : tab === "batches" ? (
         /* ── Pestaña Tickets ── */

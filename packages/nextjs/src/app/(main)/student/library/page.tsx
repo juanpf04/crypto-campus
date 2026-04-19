@@ -9,9 +9,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Button } from "@/components/ui/Button";
-import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterPills } from "@/components/ui/FilterPills";
+import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { LibraryItemCard } from "@/components/shared/LibraryItemCard";
 import { LoanCard } from "@/components/shared/LoanCard";
@@ -96,8 +96,6 @@ export default function StudentLibraryPage() {
   const filteredItems = items.filter((i) => typeFilter === "ALL" || i.type === typeFilter);
   const activeLoans = myLoans.filter((l) => l.status === "QUEUED" || l.status === "RESERVED" || l.status === "PICKED_UP");
 
-  if (loading) return <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>;
-
   return (
     <div className="space-y-8">
       <BackLink href="/student" label="Volver al panel" />
@@ -105,18 +103,19 @@ export default function StudentLibraryPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-text">Biblioteca</h1>
-          {balance !== null && (
+          {!loading && balance !== null && (
             <p className="text-text-muted mt-1">{balance} LibraryTokens disponibles</p>
           )}
+          {loading && <Skeleton className="mt-2 h-4 w-56" />}
         </div>
         <div className="flex gap-2">
           <Link href="/student/library/printing">
-            <Button variant="secondary">
+            <Button variant="secondary" disabled={loading}>
               <span className="flex items-center gap-2">{icons.print} Imprimir</span>
             </Button>
           </Link>
           <Link href="/student/library/rooms">
-            <Button>
+            <Button disabled={loading}>
               <span className="flex items-center gap-2">{icons.rooms} Reservar sala</span>
             </Button>
           </Link>
@@ -124,7 +123,16 @@ export default function StudentLibraryPage() {
       </div>
 
       {/* ── Mis préstamos activos ── */}
-      {activeLoans.length > 0 && (
+      {loading ? (
+        <section className="space-y-4" aria-busy="true" aria-live="polite">
+          <SectionTitle icon={icons.loans}>Mis préstamos activos</SectionTitle>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, idx) => (
+              <SkeletonCard key={idx} />
+            ))}
+          </div>
+        </section>
+      ) : activeLoans.length > 0 && (
         <section className="space-y-4">
           <SectionTitle icon={icons.loans}>Mis préstamos activos</SectionTitle>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -147,9 +155,15 @@ export default function StudentLibraryPage() {
       {/* ── Catálogo ── */}
       <section className="space-y-4">
         <SectionTitle icon={icons.library}>Catálogo</SectionTitle>
-        <FilterPills options={LIBRARY_TYPE_OPTIONS} selected={typeFilter} onChange={setTypeFilter} />
+        {!loading && <FilterPills options={LIBRARY_TYPE_OPTIONS} selected={typeFilter} onChange={setTypeFilter} />}
 
-        {filteredItems.length === 0 ? (
+        {loading ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true" aria-live="polite">
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <SkeletonCard key={idx} />
+            ))}
+          </div>
+        ) : filteredItems.length === 0 ? (
           <EmptyState title="Sin ítems" description="No hay ítems disponibles con estos filtros." />
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -23,6 +23,7 @@ export { Pagination } from "./Pagination";
 export { SearchInput } from "./SearchInput";
 export { FileDropZone } from "./FileDropZone";
 export { FilePreview } from "./FilePreview";
+export { Skeleton, SkeletonText, SkeletonCard, SkeletonTable, SkeletonPage } from "./Skeleton";
 export { ProgressSteps, type ProgressStep } from "./ProgressSteps";
 export { ColorDot, colorToHex } from "./ColorDot";
 export { QuantitySelector } from "./QuantitySelector";

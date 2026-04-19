@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
-import { getSession, ensureAuthenticated } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   const session = await getSession();
-  ensureAuthenticated(session);
+  if (!session.userId) {
+    return NextResponse.json({ user: null }, { status: 401 });
+  }
 
   // ─── 3. Obtener los datos actualizados del usuario ───
   // Aunque la sesión tiene datos, consultamos la DB para tener

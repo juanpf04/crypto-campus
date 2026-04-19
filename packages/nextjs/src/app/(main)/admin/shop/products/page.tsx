@@ -16,8 +16,8 @@ import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Button } from "@/components/ui/Button";
 import { CategoryFilter } from "@/components/ui/CategoryFilter";
-import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
 import { ProductCard } from "@/components/shared/ProductCard";
 
 interface ProductVariant {
@@ -130,14 +130,6 @@ export default function AdminProductsPage() {
       return true;
     });
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <BackLink href="/admin/shop" label="Volver a tienda" />
@@ -145,11 +137,15 @@ export default function AdminProductsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-text">Productos</h1>
-          <p className="text-text-muted mt-1">
-            {products.length} producto(s) registrados
-          </p>
+          {loading ? (
+            <Skeleton className="mt-2 h-4 w-52" />
+          ) : (
+            <p className="text-text-muted mt-1">
+              {products.length} producto(s) registrados
+            </p>
+          )}
         </div>
-        <Button onClick={() => router.push("/admin/shop/products/new")}>
+        <Button disabled={loading} onClick={() => router.push("/admin/shop/products/new")}>
           Añadir producto
         </Button>
       </div>
@@ -168,6 +164,7 @@ export default function AdminProductsPage() {
               <button
                 key={status}
                 type="button"
+                disabled={loading}
                 onClick={() => setStatusFilter(status)}
                 className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors cursor-pointer ${
                   statusFilter === status
@@ -182,7 +179,7 @@ export default function AdminProductsPage() {
         </div>
 
         {/* Filtro por categoría */}
-        {categories.length > 0 && (
+        {!loading && categories.length > 0 && (
           <CategoryFilter
             categories={categories}
             selected={selectedCategory}
@@ -192,7 +189,13 @@ export default function AdminProductsPage() {
       </div>
 
       {/* Grid de productos */}
-      {filteredProducts.length === 0 ? (
+      {loading ? (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4" aria-busy="true" aria-live="polite">
+          {Array.from({ length: 8 }).map((_, idx) => (
+            <SkeletonCard key={idx} />
+          ))}
+        </div>
+      ) : filteredProducts.length === 0 ? (
         <EmptyState
           title="Sin productos"
           description={

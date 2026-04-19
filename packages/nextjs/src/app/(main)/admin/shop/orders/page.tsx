@@ -19,10 +19,10 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
-import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { Tabs } from "@/components/ui/Tabs";
+import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
 import { LinkArrow } from "@/components/shared/LinkArrow";
 import { BatchStatusBadge } from "@/components/shared/BatchStatusBadge";
 import { ConfirmModal } from "@/components/shared/ConfirmModal";
@@ -282,8 +282,9 @@ export default function AdminOrdersPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-10">
-          <Spinner size="lg" />
+        <div className="space-y-4" aria-busy="true" aria-live="polite">
+          <Skeleton className="h-10 w-full max-w-sm" />
+          <SkeletonTable columns={tab === "batches" ? 6 : 8} rows={8} />
         </div>
       ) : tab === "batches" ? (
         /* ── Pestaña Pedidos (batches) ── */
