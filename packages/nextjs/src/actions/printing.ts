@@ -23,6 +23,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession, ensureRole } from "@/lib/auth";
 import { adminWalletClient, publicClient } from "@/lib/viem";
 import { CONTRACT_ADDRESSES, PRINTER_ABI } from "@/lib/contracts";
+import { issueReward, hasRewardOfType, ShopTokenRewardReason } from "@/lib/shopRewards";
 
 interface ExecutePrintInput {
 	printerId: string;
@@ -606,6 +607,33 @@ export async function executeMyPrintJob(input: ExecutePrintInput) {
 		// Ejecutar trabajo y luego revalidar caché de ruta de estudiante
 		const result = await executePrinterJob(user.id, user.address, input);
 		revalidatePath("/student/library/printing");
+
+		// ── Recompensa por impresión (solo estudiantes) ──────────────────────
+		if (session.role === "STUDENT") {
+			const pages = Math.max(1, input.pages);
+			const copies = Math.max(1, input.copies ?? 1);
+			const rewardAmount = Math.floor((pages * copies) / 10);
+			if (rewardAmount > 0) {
+				await issueReward({
+					userId: user.id,
+					userAddress: user.address,
+					mainReason: ShopTokenRewardReason.PRINT_JOB,
+					mainAmount: rewardAmount,
+					firstUseReason: ShopTokenRewardReason.MODULE_FIRST_USE_PRINTING,
+				});
+			} else {
+				const hasPrinting = await hasRewardOfType(user.id, ShopTokenRewardReason.MODULE_FIRST_USE_PRINTING);
+				if (!hasPrinting) {
+					await issueReward({
+						userId: user.id,
+						userAddress: user.address,
+						mainReason: ShopTokenRewardReason.MODULE_FIRST_USE_PRINTING,
+						mainAmount: 2,
+					});
+				}
+			}
+		}
+
 		return result;
 	} catch (error) {
 		throw new Error(`Error al ejecutar trabajo personal: ${error instanceof Error ? error.message : "desconocido"}`);
@@ -636,6 +664,32 @@ export async function executePrintJobAsAdmin(input: ExecutePrintAsAdminInput) {
 		// Ejecutar trabajo en nombre del usuario y revalidar caché de admin
 		const result = await executePrinterJob(user.id, user.address, input);
 		revalidatePath("/admin/printing");
+
+		// ── Recompensa por impresión ─────────────────────────────────────────
+		const pages = Math.max(1, input.pages);
+		const copies = Math.max(1, input.copies ?? 1);
+		const rewardAmount = Math.floor((pages * copies) / 10);
+		if (rewardAmount > 0) {
+			await issueReward({
+				userId: user.id,
+				userAddress: user.address,
+				mainReason: ShopTokenRewardReason.PRINT_JOB,
+				mainAmount: rewardAmount,
+				firstUseReason: ShopTokenRewardReason.MODULE_FIRST_USE_PRINTING,
+			});
+		} else {
+			// El trabajo no da SHPT pero puede ser el primer uso
+			const hasPrinting = await hasRewardOfType(user.id, ShopTokenRewardReason.MODULE_FIRST_USE_PRINTING);
+			if (!hasPrinting) {
+				await issueReward({
+					userId: user.id,
+					userAddress: user.address,
+					mainReason: ShopTokenRewardReason.MODULE_FIRST_USE_PRINTING,
+					mainAmount: 2,
+				});
+			}
+		}
+
 		return result;
 	} catch (error) {
 		throw new Error(`Error al ejecutar trabajo de impresión admin: ${error instanceof Error ? error.message : "desconocido"}`);

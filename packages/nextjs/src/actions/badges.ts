@@ -20,6 +20,7 @@ import { decrypt } from "@/lib/crypto";
 import { getSession, ensureRole, logPrismaRecovery } from "@/lib/auth";
 import { adminWalletClient, publicClient } from "@/lib/viem";
 import { CONTRACT_ADDRESSES, BADGE_SYSTEM_ABI } from "@/lib/contracts";
+import { issueReward, ShopTokenRewardReason } from "@/lib/shopRewards";
 
 // ── Helpers internos ─────────────────────────────────────────────────────
 
@@ -447,6 +448,16 @@ export async function awardPrize(prizeCategoryPrismaId: string, studentUserIds: 
 		throw new Error("Premio otorgado on-chain pero falló el log en BD");
 	}
 
+	// ── Recompensa por insignia recibida ────────────────────────────────────
+	await Promise.all(students.map(student =>
+		issueReward({
+			userId: student.id,
+			userAddress: student.address,
+			mainReason: ShopTokenRewardReason.BADGE_AWARDED,
+			firstUseReason: ShopTokenRewardReason.MODULE_FIRST_USE_BADGES,
+		}),
+	));
+
 	return { success: true, awarded: students.length };
 }
 
@@ -548,7 +559,12 @@ export async function listRewards(subjectOfferingId?: string) {
  * Lista recompensas disponibles para canjear (alumno): solo activas, agrupadas
  * por asignatura matriculada.
  */
-export async function listAvailableRewards() {
+/**
+ * Recompensas activas disponibles para el alumno.
+ * Si se pasa `subjectOfferingId`, filtra a esa asignatura (el alumno debe estar matriculado).
+ * Si no se pasa, devuelve las de TODAS sus asignaturas matriculadas.
+ */
+export async function listAvailableRewards(subjectOfferingId?: string) {
 	const session = await getSession();
 	ensureRole(session, ["STUDENT"]);
 
@@ -559,10 +575,18 @@ export async function listAvailableRewards() {
 	const offeringIds = enrollments.map(e => e.subjectOfferingId);
 	if (offeringIds.length === 0) return [];
 
+	if (subjectOfferingId) {
+		if (!offeringIds.includes(subjectOfferingId)) {
+			throw new Error("No estás matriculado en esta asignatura");
+		}
+	}
+
+	const filterOfferingIds = subjectOfferingId ? [subjectOfferingId] : offeringIds;
+
 	return prisma.reward.findMany({
 		where: {
 			active: true,
-			subjectBadge: { subjectOfferingId: { in: offeringIds } },
+			subjectBadge: { subjectOfferingId: { in: filterOfferingIds } },
 		},
 		include: {
 			subjectBadge: { include: { subjectOffering: { include: { subject: true } } } },
@@ -584,6 +608,57 @@ export async function redeemReward(rewardPrismaId: string) {
 	});
 	if (!reward) throw new Error("Recompensa no encontrada");
 	if (!reward.active) throw new Error("Recompensa desactivada");
+
+	const user = await prisma.user.findUnique({
+		where: { id: session.userId! },
+		select: { address: true },
+	});
+	if (!user) throw new Error("Usuario no encontrado");
+
+	// Pre-flight: leer estado on-chain para dar un error específico antes de
+	// gastar gas. Esto cubre los casos comunes: reward inexistente/desactivado
+	// on-chain, stock agotado, e insignias insuficientes (drift Prisma <-> chain).
+	const [onChainReward, onChainBalance] = await Promise.all([
+		publicClient.readContract({
+			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+			abi: BADGE_SYSTEM_ABI,
+			functionName: "getReward",
+			args: [BigInt(reward.rewardId)],
+		}) as Promise<{
+			subjectBadgeId: bigint;
+			badgeCost: bigint;
+			supply: bigint;
+			totalSupply: bigint;
+			professor: `0x${string}`;
+			active: boolean;
+		}>,
+		publicClient.readContract({
+			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+			abi: BADGE_SYSTEM_ABI,
+			functionName: "balanceOf",
+			args: [user.address as `0x${string}`, BigInt(reward.subjectBadge.tokenId)],
+		}) as Promise<bigint>,
+	]);
+
+	if (onChainReward.professor === "0x0000000000000000000000000000000000000000") {
+		throw new Error(
+			`La recompensa no existe on-chain (rewardId=${reward.rewardId}). Puede haber drift entre la base de datos y la blockchain — prueba a reiniciar con pnpm dev para regenerar todo.`,
+		);
+	}
+	if (!onChainReward.active) {
+		throw new Error("La recompensa está desactivada on-chain");
+	}
+	if (onChainReward.totalSupply > BigInt(0) && onChainReward.supply === BigInt(0)) {
+		throw new Error("Esta recompensa se ha agotado");
+	}
+
+	const balance = Number(onChainBalance);
+	if (balance < reward.badgeCost) {
+		throw new Error(
+			`Necesitas ${reward.badgeCost} insignias y solo tienes ${balance} en esta asignatura (balance on-chain). ` +
+			`Si ves un número distinto en la web, puede haber drift entre la base de datos y la blockchain — reinicia con pnpm dev.`,
+		);
+	}
 
 	const { walletClient } = await getUserWalletClient(session.userId!);
 
@@ -617,6 +692,120 @@ export async function getMyRedemptions() {
 			reward: { include: { subjectBadge: { include: { subjectOffering: { include: { subject: true } } } } } },
 		},
 		orderBy: { redeemedAt: "desc" },
+	});
+}
+
+/**
+ * Devuelve las recompensas canjeadas por el alumno, AGREGADAS por recompensa.
+ * Cada entrada incluye:
+ *   - metadata de la recompensa (nombre, descripción, categoría, etc.)
+ *   - redemptions: número total de veces canjeada
+ *   - pending:  solicitudes de uso PENDING
+ *   - approved: solicitudes de uso APPROVED (= tokens quemados)
+ *   - available: tokens aún utilizables = redemptions − approved − pending
+ *
+ * Si se pasa `subjectOfferingId`, filtra a esa asignatura.
+ */
+export async function getMyRewardsWithState(subjectOfferingId?: string) {
+	const session = await getSession();
+	ensureRole(session, ["STUDENT"]);
+
+	if (subjectOfferingId) {
+		const enrolled = await prisma.enrollment.findUnique({
+			where: { userId_subjectOfferingId: { userId: session.userId!, subjectOfferingId } },
+		});
+		if (!enrolled) throw new Error("No estás matriculado en esta asignatura");
+	}
+
+	const offeringFilter = subjectOfferingId
+		? { reward: { subjectBadge: { subjectOfferingId } } }
+		: {};
+
+	// Todos los canjes del alumno (opcionalmente filtrados por asignatura)
+	const redemptions = await prisma.rewardRedemption.findMany({
+		where: {
+			userId: session.userId!,
+			...offeringFilter,
+		},
+		include: {
+			reward: {
+				include: {
+					subjectBadge: { include: { subjectOffering: { include: { subject: true } } } },
+				},
+			},
+		},
+		orderBy: { redeemedAt: "desc" },
+	});
+
+	// Todas las solicitudes de uso del alumno (misma filtración)
+	const requests = await prisma.useRequest.findMany({
+		where: {
+			studentId: session.userId!,
+			...offeringFilter,
+		},
+		select: { rewardId: true, status: true },
+	});
+
+	type Agg = {
+		rewardId: string;
+		rewardName: string;
+		description: string | null;
+		category: string;
+		badgeCost: number;
+		subjectName: string;
+		subjectCode: string;
+		group: string;
+		redemptions: number;
+		pending: number;
+		approved: number;
+		available: number;
+		lastRedeemedAt: Date;
+	};
+	const map = new Map<string, Agg>();
+
+	for (const r of redemptions) {
+		const key = r.rewardId;
+		const existing = map.get(key);
+		if (existing) {
+			existing.redemptions += 1;
+			if (r.redeemedAt > existing.lastRedeemedAt) existing.lastRedeemedAt = r.redeemedAt;
+		} else {
+			map.set(key, {
+				rewardId: r.rewardId,
+				rewardName: r.reward.name,
+				description: r.reward.description,
+				category: r.reward.category,
+				badgeCost: r.reward.badgeCost,
+				subjectName: r.reward.subjectBadge.subjectOffering.subject.name,
+				subjectCode: r.reward.subjectBadge.subjectOffering.subject.code,
+				group: r.reward.subjectBadge.subjectOffering.group,
+				redemptions: 1,
+				pending: 0,
+				approved: 0,
+				available: 0,
+				lastRedeemedAt: r.redeemedAt,
+			});
+		}
+	}
+
+	for (const req of requests) {
+		const entry = map.get(req.rewardId);
+		if (!entry) continue;
+		if (req.status === "PENDING") entry.pending += 1;
+		else if (req.status === "APPROVED") entry.approved += 1;
+	}
+
+	for (const entry of map.values()) {
+		entry.available = entry.redemptions - entry.approved - entry.pending;
+		if (entry.available < 0) entry.available = 0;
+	}
+
+	// Orden: con disponibles > con pendientes > solo usadas; dentro, más reciente primero
+	return [...map.values()].sort((a, b) => {
+		const aTier = a.available > 0 ? 0 : a.pending > 0 ? 1 : 2;
+		const bTier = b.available > 0 ? 0 : b.pending > 0 ? 1 : 2;
+		if (aTier !== bTier) return aTier - bTier;
+		return b.lastRedeemedAt.getTime() - a.lastRedeemedAt.getTime();
 	});
 }
 
@@ -710,12 +899,33 @@ export async function rejectUseRequest(requestId: number) {
 	return { success: true };
 }
 
-export async function getMyUseRequests() {
+export async function getMyUseRequests(filters?: {
+	subjectOfferingId?: string;
+	status?: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+}) {
 	const session = await getSession();
 	ensureRole(session, ["STUDENT"]);
 
+	if (filters?.subjectOfferingId) {
+		const enrolled = await prisma.enrollment.findUnique({
+			where: {
+				userId_subjectOfferingId: {
+					userId: session.userId!,
+					subjectOfferingId: filters.subjectOfferingId,
+				},
+			},
+		});
+		if (!enrolled) throw new Error("No estás matriculado en esta asignatura");
+	}
+
 	return prisma.useRequest.findMany({
-		where: { studentId: session.userId! },
+		where: {
+			studentId: session.userId!,
+			...(filters?.status ? { status: filters.status } : {}),
+			...(filters?.subjectOfferingId
+				? { reward: { subjectBadge: { subjectOfferingId: filters.subjectOfferingId } } }
+				: {}),
+		},
 		include: {
 			reward: { include: { subjectBadge: { include: { subjectOffering: { include: { subject: true } } } } } },
 		},
@@ -789,6 +999,195 @@ export async function getStudentBadgesBySubject() {
 		}
 	}
 	return [...grouped.values()];
+}
+
+/**
+ * Devuelve TODAS las asignaturas en las que el alumno está matriculado,
+ * con el balance ACTUAL de insignias (ganadas - canjeadas). Este es el valor
+ * que el contrato BadgeSystem tiene on-chain vía balanceOf.
+ * Usado en la vista principal /student/badges.
+ */
+export async function getMyEnrolledSubjects() {
+	const session = await getSession();
+	ensureRole(session, ["STUDENT"]);
+
+	const enrollments = await prisma.enrollment.findMany({
+		where: { userId: session.userId! },
+		include: {
+			subjectOffering: {
+				include: {
+					subject: true,
+					subjectBadge: true,
+				},
+			},
+		},
+	});
+
+	const subjectBadgeIds = enrollments
+		.map(e => e.subjectOffering.subjectBadge?.id)
+		.filter((v): v is string => Boolean(v));
+
+	// Insignias ganadas por subjectBadge
+	const awards = await prisma.badgeAward.findMany({
+		where: {
+			userId: session.userId!,
+			subjectBadgeId: { in: subjectBadgeIds },
+		},
+		include: { prizeCategory: { select: { badgeReward: true } } },
+	});
+	const earnedBySubject = new Map<string, number>();
+	for (const a of awards) {
+		earnedBySubject.set(
+			a.subjectBadgeId,
+			(earnedBySubject.get(a.subjectBadgeId) ?? 0) + a.prizeCategory.badgeReward,
+		);
+	}
+
+	// Insignias quemadas al canjear recompensas
+	const redemptions = await prisma.rewardRedemption.findMany({
+		where: {
+			userId: session.userId!,
+			reward: { subjectBadgeId: { in: subjectBadgeIds } },
+		},
+		include: { reward: { select: { subjectBadgeId: true, badgeCost: true } } },
+	});
+	const burnedBySubject = new Map<string, number>();
+	for (const r of redemptions) {
+		burnedBySubject.set(
+			r.reward.subjectBadgeId,
+			(burnedBySubject.get(r.reward.subjectBadgeId) ?? 0) + r.reward.badgeCost,
+		);
+	}
+
+	return enrollments.map(e => {
+		const sbId = e.subjectOffering.subjectBadge?.id;
+		const earned = sbId ? earnedBySubject.get(sbId) ?? 0 : 0;
+		const burned = sbId ? burnedBySubject.get(sbId) ?? 0 : 0;
+		return {
+			subjectOfferingId: e.subjectOffering.id,
+			subjectBadgeId: sbId ?? null,
+			subjectName: e.subjectOffering.subject.name,
+			subjectCode: e.subjectOffering.subject.code,
+			group: e.subjectOffering.group,
+			academicYear: e.subjectOffering.academicYear,
+			totalBadges: Math.max(0, earned - burned),
+		};
+	});
+}
+
+/**
+ * Devuelve el desglose de insignias del alumno EN UNA asignatura concreta,
+ * agrupadas por premio (PrizeCategory) — para la card superior de la vista de
+ * recompensas filtradas por asignatura.
+ */
+export async function getSubjectBadgesBreakdown(subjectOfferingId: string) {
+	const session = await getSession();
+	ensureRole(session, ["STUDENT"]);
+
+	const enrolled = await prisma.enrollment.findUnique({
+		where: { userId_subjectOfferingId: { userId: session.userId!, subjectOfferingId } },
+	});
+	if (!enrolled) throw new Error("No estás matriculado en esta asignatura");
+
+	const offering = await prisma.subjectOffering.findUnique({
+		where: { id: subjectOfferingId },
+		include: { subject: true, subjectBadge: true },
+	});
+	if (!offering) throw new Error("Asignatura no encontrada");
+
+	const awards = offering.subjectBadge
+		? await prisma.badgeAward.findMany({
+			where: {
+				userId: session.userId!,
+				subjectBadgeId: offering.subjectBadge.id,
+			},
+			include: {
+				prizeCategory: { include: { assignment: { select: { id: true, name: true } } } },
+			},
+			orderBy: { awardedAt: "desc" },
+		})
+		: [];
+
+	// Agrupa por tarea (assignment). Dentro de cada tarea, por premio (prizeCategory).
+	type PrizeEntry = {
+		prizeCategoryId: string;
+		prizeName: string;
+		badgeReward: number;
+		timesWon: number;
+		totalBadges: number;
+	};
+	type AssignmentGroup = {
+		assignmentId: string;
+		assignmentName: string;
+		totalBadges: number;
+		latestAwardedAt: Date;
+		prizes: PrizeEntry[];
+	};
+
+	const groups = new Map<string, AssignmentGroup>();
+	for (const a of awards) {
+		const assignmentId = a.prizeCategory.assignment.id;
+		let ag = groups.get(assignmentId);
+		if (!ag) {
+			ag = {
+				assignmentId,
+				assignmentName: a.prizeCategory.assignment.name,
+				totalBadges: 0,
+				latestAwardedAt: a.awardedAt,
+				prizes: [],
+			};
+			groups.set(assignmentId, ag);
+		}
+
+		let prize = ag.prizes.find(p => p.prizeCategoryId === a.prizeCategoryId);
+		if (!prize) {
+			prize = {
+				prizeCategoryId: a.prizeCategoryId,
+				prizeName: a.prizeCategory.name,
+				badgeReward: a.prizeCategory.badgeReward,
+				timesWon: 0,
+				totalBadges: 0,
+			};
+			ag.prizes.push(prize);
+		}
+		prize.timesWon += 1;
+		prize.totalBadges += a.prizeCategory.badgeReward;
+		ag.totalBadges += a.prizeCategory.badgeReward;
+		if (a.awardedAt > ag.latestAwardedAt) ag.latestAwardedAt = a.awardedAt;
+	}
+
+	const breakdown = [...groups.values()].sort((a, b) => b.totalBadges - a.totalBadges);
+	const earnedBadges = breakdown.reduce((acc, g) => acc + g.totalBadges, 0);
+
+	// Insignias quemadas al canjear recompensas en esta asignatura
+	const burnedBadges = offering.subjectBadge
+		? (
+			await prisma.rewardRedemption.findMany({
+				where: {
+					userId: session.userId!,
+					reward: { subjectBadgeId: offering.subjectBadge.id },
+				},
+				include: { reward: { select: { badgeCost: true } } },
+			})
+		).reduce((acc, r) => acc + r.reward.badgeCost, 0)
+		: 0;
+
+	const currentBalance = Math.max(0, earnedBadges - burnedBadges);
+
+	return {
+		subjectOfferingId,
+		subjectName: offering.subject.name,
+		subjectCode: offering.subject.code,
+		group: offering.group,
+		academicYear: offering.academicYear,
+		/** Balance actual (ganadas - canjeadas) — coincide con balanceOf on-chain */
+		totalBadges: currentBalance,
+		/** Total histórico de insignias ganadas en esta asignatura */
+		earnedBadges,
+		/** Total de insignias canjeadas por recompensas en esta asignatura */
+		burnedBadges,
+		breakdown,
+	};
 }
 
 // ── Stats ────────────────────────────────────────────────────────────────

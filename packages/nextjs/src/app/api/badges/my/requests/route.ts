@@ -1,9 +1,19 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getMyUseRequests } from "@/actions/badges";
 
-export async function GET() {
+const VALID_STATUSES = ["PENDING", "APPROVED", "REJECTED", "CANCELLED"] as const;
+type ValidStatus = (typeof VALID_STATUSES)[number];
+
+export async function GET(req: NextRequest) {
 	try {
-		const result = await getMyUseRequests();
+		const { searchParams } = new URL(req.url);
+		const subjectOfferingId = searchParams.get("subject") ?? undefined;
+		const statusParam = searchParams.get("status");
+		const status = VALID_STATUSES.includes(statusParam as ValidStatus)
+			? (statusParam as ValidStatus)
+			: undefined;
+
+		const result = await getMyUseRequests({ subjectOfferingId, status });
 		return NextResponse.json(result);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Error al obtener solicitudes de uso";

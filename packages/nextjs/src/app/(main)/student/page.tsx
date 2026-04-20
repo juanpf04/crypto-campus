@@ -66,47 +66,17 @@ export default function StudentDashboard() {
 
   const loadStats = useCallback(async () => {
     try {
-      const [creditsRes, printLogsRes, printsMonthRes, libBalRes, loansRes, shopBalRes, ordersRes, badgesRes] = await Promise.all([
-        fetch("/api/printer/credits"),
-        fetch("/api/printer/logs?limit=100&offset=0"),
-        fetch("/api/printer/logs/monthly"),
-        fetch("/api/library/balance"),
-        fetch("/api/library/loans/my"),
-        fetch("/api/shop/balance"),
-        fetch("/api/shop/orders?limit=5&offset=0"),
-        fetch("/api/badges/my"),
-      ]);
-
-      if (creditsRes.ok) {
-        const data = await creditsRes.json();
-        setPrintCredits(data.availableCredits ?? 0);
-      }
-      if (printLogsRes.ok) {
-        const data = await printLogsRes.json();
-        setPrintCount(Array.isArray(data) ? data.length : 0);
-      }
-      if (printsMonthRes.ok) {
-        const data = await printsMonthRes.json();
-        setPrintsByMonth(Array.isArray(data) ? data : []);
-      }
-      if (libBalRes.ok) {
-        const data = await libBalRes.json();
-        setLibBalance(data.balance ?? 0);
-      }
-      if (loansRes.ok) {
-        const data = await loansRes.json();
-        setLoans(Array.isArray(data) ? data : []);
-      }
-      if (shopBalRes.ok) {
-        const data = await shopBalRes.json();
-        setShopBalance(data.balance ?? 0);
-      }
-      if (ordersRes.ok) {
-        const data = await ordersRes.json();
-        setOrders(Array.isArray(data.items) ? data.items : []);
-      }
-      if (badgesRes.ok) {
-        setBadgeSummary(await badgesRes.json());
+      const res = await fetch("/api/student/stats");
+      if (res.ok) {
+        const data = await res.json();
+        setPrintCredits(data.credits?.availableCredits ?? 0);
+        setPrintCount(data.printCount ?? 0);
+        setPrintsByMonth(Array.isArray(data.printsByMonth) ? data.printsByMonth : []);
+        setLibBalance(data.libBalance ?? 0);
+        setLoans(Array.isArray(data.loans) ? data.loans : []);
+        setShopBalance(data.shopBalance?.balance ?? 0);
+        setOrders(Array.isArray(data.orders?.items) ? data.orders.items : []);
+        setBadgeSummary(data.badgeSummary ?? null);
       }
     } catch {
       // Stats no críticas

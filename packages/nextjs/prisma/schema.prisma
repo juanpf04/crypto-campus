@@ -25,9 +25,10 @@ model User {
   role         Role     @default(STUDENT)
   address      String   @unique   // wallet generada invisiblemente
   encryptedKey String             // clave privada cifrada con AES-256-GCM
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  active                Boolean  @default(true)
+  onboardingCompleted   Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   // Relaciones
   enrollments       Enrollment[]
@@ -38,6 +39,7 @@ model User {
   cart              Cart?
   topupSimulations  CardTopupSimulation[]
   paymentLogs       PaymentSimulationLog[]
+  shopTokenRewards  ShopTokenReward[]
   roomBookings      RoomBooking[]
   badgeAwards         BadgeAward[]
   awardedBadgesTo     BadgeAward[]      @relation("AwardedBy")
@@ -183,19 +185,28 @@ model BadgeAward {
   @@unique([userId, prizeCategoryId])
 }
 
+enum RewardCategory {
+  TIEMPO
+  EXAMEN
+  PRACTICA
+  CONSULTA
+  OTROS
+}
+
 // Recompensa canjeable con insignias de una asignatura. rewardId = ID on-chain.
 model Reward {
-  id             String   @id @default(cuid())
-  rewardId       Int      @unique
+  id             String         @id @default(cuid())
+  rewardId       Int            @unique
   name           String
   description    String?
   subjectBadgeId String
   badgeCost      Int
-  supply         Int      // 0 = ilimitado
-  active         Boolean  @default(true)
+  supply         Int            // 0 = ilimitado
+  active         Boolean        @default(true)
+  category       RewardCategory @default(OTROS)
   creatorId      String
   txHash         String
-  createdAt      DateTime @default(now())
+  createdAt      DateTime       @default(now())
 
   subjectBadge SubjectBadge       @relation(fields: [subjectBadgeId], references: [id])
   creator      User               @relation("RewardCreator", fields: [creatorId], references: [id])
@@ -525,4 +536,34 @@ model PaymentSimulationLog {
   user User @relation(fields: [userId], references: [id])
 
   @@index([userId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// RECOMPENSAS EN SHOPTOKENS
+// ─────────────────────────────────────────────────────────────
+
+enum ShopTokenRewardReason {
+  LOAN_RETURNED_ON_TIME
+  LOAN_RETURNED_EARLY
+  ROOM_BOOKED
+  PRINT_JOB
+  BADGE_AWARDED
+  MODULE_FIRST_USE_LIBRARY
+  MODULE_FIRST_USE_ROOMS
+  MODULE_FIRST_USE_PRINTING
+  MODULE_FIRST_USE_BADGES
+}
+
+model ShopTokenReward {
+  id        String                 @id @default(cuid())
+  userId    String
+  amount    Int
+  reason    ShopTokenRewardReason
+  txHash    String
+  createdAt DateTime               @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([userId, reason])
 }

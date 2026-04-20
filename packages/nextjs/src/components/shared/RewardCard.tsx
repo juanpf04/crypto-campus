@@ -2,12 +2,14 @@
 
 /**
  * RewardCard — Tarjeta de recompensa para el catálogo del estudiante.
- * Muestra nombre, coste en badges, stock disponible y botón de canjear.
+ * Muestra icono de categoría, nombre, coste, stock y botón de canjear.
  */
 
+import type { RewardCategory } from "@prisma/client";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { RewardCategoryIcon, getCategoryLabel } from "@/components/shared/RewardCategoryIcon";
 
 interface RewardCardProps {
   name: string;
@@ -15,8 +17,11 @@ interface RewardCardProps {
   badgeCost: number;
   supply: number;
   redemptionCount: number;
-  subjectName: string;
+  category: RewardCategory;
+  /** Si se pasa, muestra los tokens que posee el alumno; si no, se omite. */
   studentBadgeCount?: number;
+  /** Si se pasa, muestra la asignatura (útil fuera de la vista ya filtrada). */
+  subjectName?: string;
   onRedeem?: () => void;
   redeeming?: boolean;
 }
@@ -27,8 +32,9 @@ export function RewardCard({
   badgeCost,
   supply,
   redemptionCount,
-  subjectName,
+  category,
   studentBadgeCount,
+  subjectName,
   onRedeem,
   redeeming,
 }: RewardCardProps) {
@@ -36,28 +42,30 @@ export function RewardCard({
   const canRedeem = studentBadgeCount !== undefined && studentBadgeCount >= badgeCost && remaining > 0;
 
   return (
-    <Card className="flex flex-col h-full p-4 space-y-3">
-      <div>
-        <h3 className="font-semibold text-text">{name}</h3>
-        {description && <p className="text-sm text-text-muted mt-1 line-clamp-2">{description}</p>}
+    <Card className="flex flex-col h-full p-4 gap-3">
+      <div className="flex items-start gap-3">
+        <RewardCategoryIcon category={category} size="md" />
+        <div className="min-w-0 flex-1">
+          <h3 className="font-semibold text-text truncate">{name}</h3>
+          <p className="text-xs text-text-muted mt-0.5">{getCategoryLabel(category)}</p>
+        </div>
       </div>
 
+      {description && (
+        <p className="text-sm text-text-muted line-clamp-2">{description}</p>
+      )}
+
       <div className="flex items-center gap-2 flex-wrap">
-        <Badge variant="info">{badgeCost} insignias · {subjectName}</Badge>
+        <Badge variant="info">{badgeCost} insignia{badgeCost !== 1 ? "s" : ""}</Badge>
         {supply === 0 ? (
           <Badge variant="neutral">Ilimitado</Badge>
         ) : remaining > 0 ? (
-          <Badge variant="success">{remaining} disponibles</Badge>
+          <Badge variant="success">{remaining} disponible{remaining !== 1 ? "s" : ""}</Badge>
         ) : (
           <Badge variant="danger">Agotado</Badge>
         )}
+        {subjectName && <Badge variant="neutral">{subjectName}</Badge>}
       </div>
-
-      {studentBadgeCount !== undefined && (
-        <p className="text-xs text-text-muted">
-          Tienes {studentBadgeCount} insignia{studentBadgeCount !== 1 ? "s" : ""} de {subjectName}
-        </p>
-      )}
 
       {onRedeem && (
         <Button
@@ -67,7 +75,7 @@ export function RewardCard({
           loading={redeeming}
           disabled={!canRedeem}
         >
-          {canRedeem ? "Canjear" : remaining <= 0 ? "Agotado" : "Insuficientes badges"}
+          {canRedeem ? "Canjear" : remaining <= 0 ? "Agotado" : "Insignias insuficientes"}
         </Button>
       )}
     </Card>

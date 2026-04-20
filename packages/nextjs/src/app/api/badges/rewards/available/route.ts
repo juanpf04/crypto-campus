@@ -1,9 +1,12 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { listAvailableRewards } from "@/actions/badges";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
 	try {
-		const result = await listAvailableRewards();
+		const { searchParams } = new URL(req.url);
+		const subjectOfferingId = searchParams.get("subject") ?? undefined;
+
+		const result = await listAvailableRewards(subjectOfferingId);
 		return NextResponse.json(result);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Error al listar recompensas disponibles";

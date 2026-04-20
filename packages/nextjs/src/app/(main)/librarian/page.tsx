@@ -58,12 +58,12 @@ export default function LibrarianDashboard() {
 
   const loadStats = useCallback(async () => {
     try {
-      const [libRes, roomRes] = await Promise.all([
-        fetch("/api/library/stats"),
-        fetch("/api/rooms/stats"),
-      ]);
-      if (libRes.ok) setLibraryStats(await libRes.json());
-      if (roomRes.ok) setRoomStats(await roomRes.json());
+      const res = await fetch("/api/librarian/stats");
+      if (res.ok) {
+        const data = await res.json();
+        setLibraryStats(data.libraryStats);
+        setRoomStats(data.roomStats);
+      }
     } catch {
       // Stats no críticas
     } finally {

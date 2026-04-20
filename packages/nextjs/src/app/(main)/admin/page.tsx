@@ -90,40 +90,16 @@ export default function AdminDashboard() {
 
   const loadStats = useCallback(async () => {
     try {
-      const [libRes, roomRes, badgeRes, shopRes, usersRes, printersRes, printLogsRes] = await Promise.all([
-        fetch("/api/library/stats"),
-        fetch("/api/rooms/stats"),
-        fetch("/api/badges/stats"),
-        fetch("/api/shop/stats"),
-        fetch("/api/admin/users"),
-        fetch("/api/printer"),
-        fetch("/api/printer/logs/admin?limit=500&offset=0"),
-      ]);
-
-      if (libRes.ok) setLibraryStats(await libRes.json());
-      if (roomRes.ok) setRoomStats(await roomRes.json());
-      if (badgeRes.ok) setBadgeStats(await badgeRes.json());
-      if (shopRes.ok) setShopStats(await shopRes.json());
-
-      if (usersRes.ok) {
-        const data = await usersRes.json();
-        const users = data.users ?? [];
-        setUserCounts({
-          total: users.length,
-          students: users.filter((u: { role: string }) => u.role === "STUDENT").length,
-          professors: users.filter((u: { role: string }) => u.role === "PROFESSOR").length,
-          librarians: users.filter((u: { role: string }) => u.role === "LIBRARIAN").length,
-          admins: users.filter((u: { role: string }) => u.role === "ADMIN").length,
-        });
-      }
-
-      if (printersRes.ok) {
-        const data = await printersRes.json();
-        setActivePrinters(Array.isArray(data) ? data.length : 0);
-      }
-      if (printLogsRes.ok) {
-        const data = await printLogsRes.json();
-        setTotalPrintLogs(Array.isArray(data) ? data.length : 0);
+      const res = await fetch("/api/admin/stats");
+      if (res.ok) {
+        const data = await res.json();
+        setLibraryStats(data.libraryStats);
+        setRoomStats(data.roomStats);
+        setBadgeStats(data.badgeStats);
+        setShopStats(data.shopStats);
+        setUserCounts(data.userCounts);
+        setActivePrinters(data.activePrinters);
+        setTotalPrintLogs(data.totalPrintLogs);
       }
     } catch {
       // Stats no críticas
@@ -195,15 +171,10 @@ export default function AdminDashboard() {
       <section className="space-y-4">
         <SectionTitle icon={icons.items}>Resumen</SectionTitle>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title="Usuarios totales"
-            value={val(uc?.total)}
-            subtitle={`${uc?.students ?? 0} estudiantes`}
-            icon={icons.users}
-          />
           <CompoundCard
             icon={icons.student}
-            title="Por rol"
+            title="Usuarios por rol"
+            className="sm:col-span-2 lg:col-span-2"
             slots={[
               { value: uc?.students ?? 0, label: "Estudiantes", color: "text-primary" },
               { value: uc?.professors ?? 0, label: "Profesores", color: "text-success" },

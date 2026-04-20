@@ -123,10 +123,11 @@ export function resolveRoleRoute(returnUrl: string | null | undefined, role: Use
 }
 
 export interface AuthUser {
-  id: string;      // UUID en PostgreSQL
-  email: string;   // Email institucional (@ucm.es)
-  name: string;    // Nombre completo
-  role: UserRole;  // Rol autenticado para autorización/UI
+  id: string;                   // UUID en PostgreSQL
+  email: string;                // Email institucional (@ucm.es)
+  name: string;                 // Nombre completo
+  role: UserRole;               // Rol autenticado para autorización/UI
+  onboardingCompleted: boolean; // Si ya ha visto la pantalla de bienvenida
 }
 
 export interface SessionUser {

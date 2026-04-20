@@ -1,14 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
+import { StudentOnboardingModal } from "@/components/layout/StudentOnboardingModal";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { OnboardingProvider, useOnboarding } from "@/contexts/OnboardingContext";
 import { useAuthUser } from "@/hooks/useAuthUser";
 
-export default function MainLayout({ children }: { children: React.ReactNode }) {
+// Componente interno que necesita acceso al contexto y al usuario
+function MainContent({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuthUser();
+  const { open } = useOnboarding();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [onboardingTriggered, setOnboardingTriggered] = useState(false);
+
+  // Abre el modal automáticamente si el estudiante no ha completado el onboarding
+  useEffect(() => {
+    if (!loading && user && user.role === "STUDENT" && !user.onboardingCompleted && !onboardingTriggered) {
+      setOnboardingTriggered(true);
+      open();
+    }
+  }, [loading, user, open, onboardingTriggered]);
 
   if (loading || !user) {
     return (
@@ -48,6 +61,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     );
   }
 
+  const isFirstTime = user.role === "STUDENT" && !user.onboardingCompleted;
+
   return (
     <div className="flex h-screen overflow-hidden bg-bg">
       {/* Overlay móvil */}
@@ -74,6 +89,19 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           {children}
         </main>
       </div>
+
+      {/* Onboarding modal — solo estudiantes */}
+      {user.role === "STUDENT" && (
+        <StudentOnboardingModal isFirstTime={isFirstTime} />
+      )}
     </div>
+  );
+}
+
+export default function MainLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <OnboardingProvider>
+      <MainContent>{children}</MainContent>
+    </OnboardingProvider>
   );
 }

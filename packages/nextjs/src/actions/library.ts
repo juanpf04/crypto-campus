@@ -26,6 +26,7 @@ import {
 	LIBRARY_MANAGER_ABI,
 	LIBRARY_TOKEN_ABI,
 } from "@/lib/contracts";
+import { issueReward, ShopTokenRewardReason } from "@/lib/shopRewards";
 
 // ── Helpers internos ─────────────────────────────────────────────────────
 
@@ -585,17 +586,41 @@ export async function confirmReturn(loanPrismaId: string) {
 
 		const isOverdue = loan.dueDate ? new Date() > loan.dueDate : false;
 
+		const returnDate = new Date();
+
 		await prisma.loan.update({
 			where: { id: loanPrismaId },
 			data: {
 				status: "RETURNED" as LoanStatus,
 				returnTxHash: hash,
-				returnDate: new Date(),
+				returnDate,
 				overdue: isOverdue,
 			},
 		});
 
 		await processQueueEvents(receipt);
+
+		// ── Recompensa por devolución ────────────────────────────────────────
+		if (!isOverdue && loan.dueDate) {
+			const student = await prisma.user.findUnique({
+				where: { id: loan.userId },
+				select: { address: true },
+			});
+			if (student) {
+				const msAntes = loan.dueDate.getTime() - returnDate.getTime();
+				const diasAntes = msAntes / (1000 * 60 * 60 * 24);
+				const mainReason = diasAntes >= 3
+					? ShopTokenRewardReason.LOAN_RETURNED_EARLY
+					: ShopTokenRewardReason.LOAN_RETURNED_ON_TIME;
+
+				await issueReward({
+					userId: loan.userId,
+					userAddress: student.address,
+					mainReason,
+					firstUseReason: ShopTokenRewardReason.MODULE_FIRST_USE_LIBRARY,
+				});
+			}
+		}
 
 		return { success: true };
 	} catch (error) {

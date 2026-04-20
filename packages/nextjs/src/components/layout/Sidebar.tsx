@@ -8,6 +8,7 @@ import { ThemeSwitcher } from "@/components/shared/ThemeSwitcher";
 
 import { cn } from "@/lib/utils";
 import { icons } from "@/components/ui/icons";
+import { useOnboarding } from "@/contexts/OnboardingContext";
 import type { UserRole } from "@/types";
 
 interface SidebarProps {
@@ -34,7 +35,6 @@ function getNavGroups(role: UserRole) {
           title: "Servicios",
           items: [
             { href: `${base}/library`, icon: icons.library, label: "Biblioteca" },
-            { href: `${base}/badges/assignments`, icon: icons.task, label: "Tareas" },
             { href: `${base}/badges`, icon: icons.badge, label: "Insignias" },
             { href: `${base}/shop`, icon: icons.shop, label: "Tienda" },
           ],
@@ -116,6 +116,27 @@ function getNavGroups(role: UserRole) {
   }
 }
 
+function HelpButton({ collapsed }: { collapsed: boolean }) {
+  const { open } = useOnboarding();
+
+  return (
+    <button
+      type="button"
+      onClick={open}
+      title={collapsed ? "¿Cómo funciona?" : undefined}
+      className={cn(
+        "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+        "text-text-muted hover:bg-border-default/50 hover:text-text",
+      )}
+    >
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+        {icons.help}
+      </span>
+      {!collapsed && <span className="truncate">¿Cómo funciona?</span>}
+    </button>
+  );
+}
+
 export function Sidebar({ name, role, collapsed = false, className }: SidebarProps) {
   const groups = getNavGroups(role);
 
@@ -151,6 +172,7 @@ export function Sidebar({ name, role, collapsed = false, className }: SidebarPro
 
       {/* Info + Tema + User */}
       <div className="border-t border-border-default p-3 space-y-1">
+        {role === "STUDENT" && <HelpButton collapsed={collapsed} />}
         <ThemeSwitcher collapsed={collapsed} />
         <UserMenu name={name} role={role} collapsed={collapsed} />
       </div>

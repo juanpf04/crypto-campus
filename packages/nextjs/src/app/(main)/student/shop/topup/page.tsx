@@ -21,13 +21,13 @@ import { cn } from "@/lib/utils";
 
 /** Paquetes predefinidos de recarga */
 const PACKAGES = [
-  { euros: 2, tokens: 10, bonus: 0, label: "Básico" },
-  { euros: 5, tokens: 27, bonus: 2, label: "Estándar" },
-  { euros: 10, tokens: 55, bonus: 5, label: "Premium" },
+  { euros: 2, tokens: 20, bonus: 0, label: "Básico" },
+  { euros: 5, tokens: 54, bonus: 4, label: "Estándar" },
+  { euros: 10, tokens: 112, bonus: 12, label: "Premium" },
 ] as const;
 
-/** Tasa base: 1€ = 5 ShopTokens */
-const RATE = 5;
+/** Tasa base: 1€ = 10 ShopTokens */
+const RATE = 10;
 
 export default function StudentShopTopupPage() {
   const { addToast } = useToast();

@@ -18,6 +18,7 @@ export async function GET() {
       email: true,
       name: true,
       role: true,
+      onboardingCompleted: true,
       // NO devolvemos: password, address, encryptedKey
     },
   });

@@ -1211,7 +1211,7 @@ export async function topupWithSimulatedCard(input: SimulatedCardInput) {
 		throw new Error("Has alcanzado el limite diario de recargas simuladas");
 	}
 
-	if ((monthlyAmount._sum.amount ?? 0) + validated.amount > 5000) {
+	if ((monthlyAmount._sum.amount ?? 0) + validated.amount > 10000) {
 		throw new Error("Has alcanzado el limite mensual de recargas simuladas");
 	}
 

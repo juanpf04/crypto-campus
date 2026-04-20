@@ -22,6 +22,7 @@ import {
 	CONTRACT_ADDRESSES,
 	ROOM_BOOKING_ABI,
 } from "@/lib/contracts";
+import { issueReward, ShopTokenRewardReason } from "@/lib/shopRewards";
 
 // ── Helpers internos ─────────────────────────────────────────────────────
 
@@ -348,6 +349,20 @@ export async function bookRoom(
 				txHash: hash,
 			},
 		});
+
+		// ── Recompensa por reserva ───────────────────────────────────────────
+		const student = await prisma.user.findUnique({
+			where: { id: session.userId! },
+			select: { address: true },
+		});
+		if (student) {
+			await issueReward({
+				userId: session.userId!,
+				userAddress: student.address,
+				mainReason: ShopTokenRewardReason.ROOM_BOOKED,
+				firstUseReason: ShopTokenRewardReason.MODULE_FIRST_USE_ROOMS,
+			});
+		}
 
 		return { success: true, booking };
 	} catch (error) {
