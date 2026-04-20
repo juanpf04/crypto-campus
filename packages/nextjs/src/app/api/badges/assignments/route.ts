@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listAssignmentsForProfessor, createAssignment } from "@/actions/badges";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
 	try {
-		const result = await listAssignmentsForProfessor();
+		const { searchParams } = new URL(req.url);
+		const subject = searchParams.get("subject") ?? undefined;
+		const result = await listAssignmentsForProfessor(subject);
 		return NextResponse.json(result);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Error al listar tareas";

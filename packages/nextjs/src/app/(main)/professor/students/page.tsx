@@ -1,196 +1,117 @@
 "use client";
 
 /**
- * Vista de alumnos del profesor.
- *
- * Permite seleccionar una asignatura y ver la lista de alumnos
- * matriculados con sus insignias ganadas, tareas completadas
- * y recompensas canjeadas.
+ * Vista global de alumnos del profesor: todos los matriculados en
+ * cualquiera de sus asignaturas. Cada fila es expandible para ver qué
+ * asignaturas comparte con él.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
-import { SkeletonTable } from "@/components/ui/Skeleton";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { Card } from "@/components/ui/Card";
-import { SectionTitle } from "@/components/shared/SectionTitle";
+import { SkeletonPage } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { SearchInput } from "@/components/ui/SearchInput";
-import { Badge } from "@/components/ui/Badge";
 import {
-  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+  Table, TableBody, TableHead, TableHeader, TableRow,
 } from "@/components/ui/Table";
-import { icons } from "@/components/ui/icons";
-import { TaskCompletionIndicator } from "@/components/shared/TaskCompletionIndicator";
+import { StudentGlobalRow, type StudentGlobalData } from "@/components/shared/StudentGlobalRow";
 
-interface SubjectOffering {
-  id: string;
-  subject: { name: string };
-  academicYear: string;
-}
-
-interface StudentTask {
-  taskId: string;
-  taskName: string;
-  completed: boolean;
-}
-
-interface StudentRedemption {
-  rewardName: string;
-}
-
-interface StudentData {
-  id: string;
-  name: string;
-  email: string;
-  badgeCount: number;
-  tasks: StudentTask[];
-  redemptions: StudentRedemption[];
-}
-
-export default function ProfessorStudentsPage() {
+export default function ProfessorStudentsGlobalPage() {
   const { addToast } = useToast();
 
-  const [subjectOfferings, setSubjectOfferings] = useState<SubjectOffering[]>([]);
-  const [selectedSubjectId, setSelectedSubjectId] = useState("");
-  const [students, setStudents] = useState<StudentData[]>([]);
-  const [loadingSubjects, setLoadingSubjects] = useState(true);
-  const [loadingStudents, setLoadingStudents] = useState(false);
+  const [students, setStudents] = useState<StudentGlobalData[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [openRows, setOpenRows] = useState<Set<string>>(new Set());
 
-  const loadSubjectOfferings = useCallback(async () => {
+  const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/badges/subject-offerings");
-      if (res.ok) {
-        const data: SubjectOffering[] = await res.json();
-        setSubjectOfferings(data);
-        if (data.length > 0) {
-          setSelectedSubjectId(data[0].id);
-        }
-      }
-    } catch {
-      addToast("Error al cargar asignaturas", "danger");
-    } finally {
-      setLoadingSubjects(false);
-    }
-  }, [addToast]);
-
-  useEffect(() => { loadSubjectOfferings(); }, [loadSubjectOfferings]);
-
-  const loadStudents = useCallback(async () => {
-    if (!selectedSubjectId) return;
-    setLoadingStudents(true);
-    try {
-      const res = await fetch(`/api/badges/students/${selectedSubjectId}`);
+      const res = await fetch("/api/badges/my-students");
       if (res.ok) setStudents(await res.json());
+      else addToast("Error al cargar alumnos", "danger");
     } catch {
       addToast("Error al cargar alumnos", "danger");
     } finally {
-      setLoadingStudents(false);
+      setLoading(false);
     }
-  }, [selectedSubjectId, addToast]);
+  }, [addToast]);
 
-  useEffect(() => { loadStudents(); }, [loadStudents]);
+  useEffect(() => { load(); }, [load]);
 
-  const filteredStudents = students.filter((s) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q);
-  });
+  function toggleRow(userId: string) {
+    setOpenRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  }
 
-  if (loadingSubjects) return <SkeletonTable columns={5} rows={3} />;
+  const filtered = useMemo(() => {
+    if (!search.trim()) return students;
+    const q = search.trim().toLowerCase();
+    return students.filter(
+      (s) => s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q),
+    );
+  }, [students, search]);
+
+  if (loading) return <SkeletonPage />;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <BackLink href="/professor" label="Volver al panel" />
-      <h1 className="text-2xl font-bold text-text">Mis alumnos</h1>
 
-      {/* ── Selector de asignatura ── */}
-      <section className="space-y-4">
-        <SectionTitle icon={icons.items}>Asignatura</SectionTitle>
-        {subjectOfferings.length === 0 ? (
-          <EmptyState
-            title="Sin asignaturas"
-            description="No tienes asignaturas asignadas."
-          />
-        ) : (
-          <div className="max-w-md">
-            <select
-              value={selectedSubjectId}
-              onChange={(e) => setSelectedSubjectId(e.target.value)}
-              className="w-full rounded-lg border border-border-default bg-card px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
-            >
-              {subjectOfferings.map((so) => (
-                <option key={so.id} value={so.id}>
-                  {so.subject.name} ({so.academicYear})
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-      </section>
+      <div>
+        <h1 className="text-2xl font-bold text-text">Mis alumnos</h1>
+        <p className="text-text-muted mt-1">
+          Todos los alumnos matriculados en cualquiera de tus asignaturas. Haz click en una fila para ver qué asignaturas comparte contigo.
+        </p>
+      </div>
 
-      {/* ── Tabla de alumnos ── */}
-      {selectedSubjectId && (
-        <section className="space-y-4">
-          <div className="flex items-center justify-between gap-4">
-            <SectionTitle icon={icons.student}>
-              Alumnos ({students.length})
-            </SectionTitle>
-          </div>
-
+      {students.length === 0 ? (
+        <EmptyState
+          title="Sin alumnos"
+          description="Aún no hay alumnos matriculados en tus asignaturas."
+        />
+      ) : (
+        <>
           <SearchInput
-            placeholder="Buscar alumno por nombre o email..."
+            placeholder="Buscar por nombre o email..."
             onSearch={setSearch}
           />
 
-          {loadingStudents ? (
-            <SkeletonTable columns={5} rows={6} />
-          ) : filteredStudents.length === 0 ? (
+          {filtered.length === 0 ? (
             <EmptyState
-              title="Sin alumnos"
-              description={search ? "No hay alumnos que coincidan con la búsqueda." : "No hay alumnos matriculados en esta asignatura."}
+              title="Sin resultados"
+              description="Ningún alumno coincide con la búsqueda."
             />
           ) : (
             <Card className="overflow-hidden p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10"></TableHead>
                     <TableHead>Nombre</TableHead>
                     <TableHead>Email</TableHead>
-                    <TableHead>Insignias</TableHead>
-                    <TableHead>Tareas</TableHead>
-                    <TableHead>Recompensas canjeadas</TableHead>
+                    <TableHead>Asignaturas</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredStudents.map((student) => {
-                    return (
-                      <TableRow key={student.id}>
-                        <TableCell className="font-medium">{student.name}</TableCell>
-                        <TableCell className="text-text-muted">{student.email}</TableCell>
-                        <TableCell>
-                          <Badge variant={student.badgeCount > 0 ? "success" : "neutral"}>
-                            {student.badgeCount}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <TaskCompletionIndicator tasks={student.tasks || []} />
-                        </TableCell>
-                        <TableCell className="text-text-muted">
-                          {student.redemptions && student.redemptions.length > 0
-                            ? student.redemptions.map((r) => r.rewardName).join(", ")
-                            : "—"
-                          }
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {filtered.map((s) => (
+                    <StudentGlobalRow
+                      key={s.userId}
+                      student={s}
+                      isOpen={openRows.has(s.userId)}
+                      onToggle={() => toggleRow(s.userId)}
+                    />
+                  ))}
                 </TableBody>
               </Table>
             </Card>
           )}
-        </section>
+        </>
       )}
     </div>
   );

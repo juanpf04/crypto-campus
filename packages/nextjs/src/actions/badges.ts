@@ -210,12 +210,15 @@ export async function createAssignment(input: {
 /**
  * Lista assignments del profesor logueado (o todas si admin).
  */
-export async function listAssignmentsForProfessor() {
+export async function listAssignmentsForProfessor(subjectOfferingId?: string) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 	await autoCloseExpiredAssignments();
 
-	const where = session.role === "ADMIN" ? {} : { creatorId: session.userId! };
+	const where: Record<string, unknown> = {};
+	if (session.role !== "ADMIN") where.creatorId = session.userId!;
+	if (subjectOfferingId) where.subjectBadge = { subjectOfferingId };
+
 	return prisma.assignment.findMany({
 		where,
 		include: {
@@ -469,6 +472,7 @@ export async function createReward(input: {
 	description?: string;
 	badgeCost: number;
 	supply: number;
+	category?: "TIEMPO" | "EXAMEN" | "PRACTICA" | "CONSULTA" | "OTROS";
 }) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
@@ -479,6 +483,11 @@ export async function createReward(input: {
 		throw new Error("El coste en insignias debe ser >= 1");
 	if (!Number.isInteger(input.supply) || input.supply < 0)
 		throw new Error("El stock debe ser >= 0 (0 = ilimitado)");
+
+	const validCategories = ["TIEMPO", "EXAMEN", "PRACTICA", "CONSULTA", "OTROS"] as const;
+	const category = input.category && validCategories.includes(input.category)
+		? input.category
+		: "OTROS";
 
 	const badge = await getOrCreateSubjectBadge(input.subjectOfferingId);
 
@@ -506,6 +515,7 @@ export async function createReward(input: {
 			subjectBadgeId: badge.id,
 			badgeCost: input.badgeCost,
 			supply: input.supply,
+			category,
 			creatorId: session.userId!,
 			txHash: hash,
 		},
@@ -933,19 +943,35 @@ export async function getMyUseRequests(filters?: {
 	});
 }
 
-export async function listUseRequests() {
+export async function listUseRequests(filters?: {
+	subjectOfferingId?: string;
+	status?: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+}) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 
-	const where = session.role === "ADMIN"
-		? {}
-		: { reward: { creatorId: session.userId! } };
+	const where: Record<string, unknown> = {};
+
+	if (session.role !== "ADMIN") {
+		where.reward = { creatorId: session.userId! };
+	}
+
+	if (filters?.subjectOfferingId) {
+		// Merge reward filter with offering filter
+		const existingReward = (where.reward as Record<string, unknown> | undefined) ?? {};
+		where.reward = {
+			...existingReward,
+			subjectBadge: { subjectOfferingId: filters.subjectOfferingId },
+		};
+	}
+
+	if (filters?.status) where.status = filters.status;
 
 	return prisma.useRequest.findMany({
 		where,
 		include: {
 			student: { select: { id: true, name: true, email: true } },
-			reward: { select: { id: true, name: true, subjectBadge: { include: { subjectOffering: { include: { subject: true } } } } } },
+			reward: { select: { id: true, name: true, category: true, subjectBadge: { include: { subjectOffering: { include: { subject: true } } } } } },
 		},
 		orderBy: { createdAt: "desc" },
 	});
@@ -1321,6 +1347,256 @@ export async function getMySubjectOfferings() {
 		include: { subject: true, _count: { select: { enrollments: true } } },
 		orderBy: [{ academicYear: "desc" }, { group: "asc" }],
 	});
+}
+
+/**
+ * Stats específicas de UNA asignatura impartida (SubjectOffering).
+ * Usado en /professor/subjects/[offeringId] (vista Resumen).
+ */
+export async function getOfferingSummary(offeringId: string) {
+	const session = await getSession();
+	ensureRole(session, ["PROFESSOR", "ADMIN"]);
+	await autoCloseExpiredAssignments();
+
+	const offering = await prisma.subjectOffering.findUnique({
+		where: { id: offeringId },
+		include: {
+			subject: true,
+			professor: { select: { id: true, name: true, email: true } },
+			subjectBadge: true,
+			_count: { select: { enrollments: true } },
+		},
+	});
+	if (!offering) throw new Error("Asignatura no encontrada");
+
+	if (session.role !== "ADMIN" && offering.professorId !== session.userId) {
+		throw new Error("No autorizado");
+	}
+
+	const assignmentWhere = { subjectBadge: { subjectOfferingId: offeringId } };
+	const rewardWhere = { subjectBadge: { subjectOfferingId: offeringId } };
+	const awardWhere = { subjectBadge: { subjectOfferingId: offeringId } };
+	const useReqWhere = { reward: { subjectBadge: { subjectOfferingId: offeringId } } };
+
+	const [
+		totalAssignments, openAssignments, reviewingAssignments, closedAssignments,
+		totalAwards,
+		totalRewards, activeRewards, totalRedemptions,
+		pendingRequests, approvedRequests,
+	] = await Promise.all([
+		prisma.assignment.count({ where: assignmentWhere }),
+		prisma.assignment.count({ where: { ...assignmentWhere, status: "OPEN" } }),
+		prisma.assignment.count({ where: { ...assignmentWhere, status: "REVIEWING" } }),
+		prisma.assignment.count({ where: { ...assignmentWhere, status: "CLOSED" } }),
+		prisma.badgeAward.count({ where: awardWhere }),
+		prisma.reward.count({ where: rewardWhere }),
+		prisma.reward.count({ where: { ...rewardWhere, active: true } }),
+		prisma.rewardRedemption.count({ where: { reward: rewardWhere } }),
+		prisma.useRequest.count({ where: { ...useReqWhere, status: "PENDING" } }),
+		prisma.useRequest.count({ where: { ...useReqWhere, status: "APPROVED" } }),
+	]);
+
+	// Actividad reciente: últimas insignias otorgadas + últimas solicitudes
+	const [recentAwards, recentRequests] = await Promise.all([
+		prisma.badgeAward.findMany({
+			where: awardWhere,
+			include: {
+				user: { select: { id: true, name: true } },
+				prizeCategory: { select: { name: true, assignment: { select: { name: true } } } },
+			},
+			orderBy: { awardedAt: "desc" },
+			take: 5,
+		}),
+		prisma.useRequest.findMany({
+			where: useReqWhere,
+			include: {
+				student: { select: { id: true, name: true } },
+				reward: { select: { name: true } },
+			},
+			orderBy: { createdAt: "desc" },
+			take: 5,
+		}),
+	]);
+
+	return {
+		offering: {
+			id: offering.id,
+			group: offering.group,
+			academicYear: offering.academicYear,
+			subjectName: offering.subject.name,
+			subjectCode: offering.subject.code,
+			professor: offering.professor,
+			hasSubjectBadge: offering.subjectBadge !== null,
+			enrollmentCount: offering._count.enrollments,
+		},
+		stats: {
+			assignments: {
+				total: totalAssignments,
+				open: openAssignments,
+				reviewing: reviewingAssignments,
+				closed: closedAssignments,
+			},
+			awardsGiven: totalAwards,
+			rewards: { total: totalRewards, active: activeRewards },
+			redemptions: totalRedemptions,
+			requests: { pending: pendingRequests, approved: approvedRequests },
+		},
+		recentAwards,
+		recentRequests,
+	};
+}
+
+/**
+ * Devuelve todas las tareas del profesor en estado REVIEWING, cross-subject.
+ * Usado en /professor/pending-reviews.
+ */
+export async function getAssignmentsPendingReview() {
+	const session = await getSession();
+	ensureRole(session, ["PROFESSOR", "ADMIN"]);
+	await autoCloseExpiredAssignments();
+
+	const where: Record<string, unknown> = { status: "REVIEWING" };
+	if (session.role !== "ADMIN") where.creatorId = session.userId!;
+
+	return prisma.assignment.findMany({
+		where,
+		include: {
+			subjectBadge: { include: { subjectOffering: { include: { subject: true } } } },
+			prizes: { include: { _count: { select: { awards: true } } } },
+			_count: { select: { submissions: true } },
+		},
+		orderBy: { createdAt: "desc" },
+	});
+}
+
+/**
+ * Alumnos matriculados en UNA asignatura impartida, con stats básicos:
+ * entregas realizadas y total de insignias ganadas en esa asignatura.
+ */
+export async function getStudentsInOffering(offeringId: string) {
+	const session = await getSession();
+	ensureRole(session, ["PROFESSOR", "ADMIN"]);
+
+	const offering = await prisma.subjectOffering.findUnique({
+		where: { id: offeringId },
+		include: { subjectBadge: true },
+	});
+	if (!offering) throw new Error("Asignatura no encontrada");
+
+	if (session.role !== "ADMIN" && offering.professorId !== session.userId) {
+		throw new Error("No autorizado");
+	}
+
+	const enrollments = await prisma.enrollment.findMany({
+		where: { subjectOfferingId: offeringId },
+		include: {
+			user: { select: { id: true, name: true, email: true } },
+		},
+		orderBy: { user: { name: "asc" } },
+	});
+
+	// Contar entregas por alumno en esta asignatura
+	const submissions = await prisma.taskSubmission.findMany({
+		where: {
+			assignment: { subjectBadge: { subjectOfferingId: offeringId } },
+			studentId: { in: enrollments.map(e => e.userId) },
+		},
+		select: { studentId: true },
+	});
+	const submissionsByStudent = new Map<string, number>();
+	for (const s of submissions) {
+		submissionsByStudent.set(s.studentId, (submissionsByStudent.get(s.studentId) ?? 0) + 1);
+	}
+
+	// Contar insignias ganadas por alumno en esta asignatura (lifetime)
+	const awards = offering.subjectBadge
+		? await prisma.badgeAward.findMany({
+			where: {
+				subjectBadgeId: offering.subjectBadge.id,
+				userId: { in: enrollments.map(e => e.userId) },
+			},
+			include: { prizeCategory: { select: { badgeReward: true } } },
+		})
+		: [];
+	const badgesByStudent = new Map<string, number>();
+	for (const a of awards) {
+		badgesByStudent.set(
+			a.userId,
+			(badgesByStudent.get(a.userId) ?? 0) + a.prizeCategory.badgeReward,
+		);
+	}
+
+	return enrollments.map(e => ({
+		userId: e.user.id,
+		name: e.user.name,
+		email: e.user.email,
+		submissions: submissionsByStudent.get(e.userId) ?? 0,
+		badgesEarned: badgesByStudent.get(e.userId) ?? 0,
+	}));
+}
+
+/**
+ * Todos los alumnos matriculados en CUALQUIERA de las asignaturas del profesor.
+ * Cada alumno incluye la lista de asignaturas que comparte con él (para fila
+ * expandible en /professor/students).
+ */
+export async function getMyStudentsGlobal() {
+	const session = await getSession();
+	ensureRole(session, ["PROFESSOR", "ADMIN"]);
+
+	const offeringsWhere = session.role === "ADMIN" ? {} : { professorId: session.userId! };
+	const myOfferings = await prisma.subjectOffering.findMany({
+		where: offeringsWhere,
+		select: { id: true },
+	});
+	const offeringIds = myOfferings.map(o => o.id);
+	if (offeringIds.length === 0) return [];
+
+	const enrollments = await prisma.enrollment.findMany({
+		where: { subjectOfferingId: { in: offeringIds } },
+		include: {
+			user: { select: { id: true, name: true, email: true } },
+			subjectOffering: {
+				include: { subject: true },
+			},
+		},
+	});
+
+	type StudentEntry = {
+		userId: string;
+		name: string;
+		email: string;
+		offerings: Array<{
+			offeringId: string;
+			subjectName: string;
+			subjectCode: string;
+			group: string;
+			academicYear: string;
+		}>;
+	};
+
+	const byStudent = new Map<string, StudentEntry>();
+	for (const e of enrollments) {
+		let entry = byStudent.get(e.userId);
+		if (!entry) {
+			entry = {
+				userId: e.user.id,
+				name: e.user.name,
+				email: e.user.email,
+				offerings: [],
+			};
+			byStudent.set(e.userId, entry);
+		}
+		entry.offerings.push({
+			offeringId: e.subjectOffering.id,
+			subjectName: e.subjectOffering.subject.name,
+			subjectCode: e.subjectOffering.subject.code,
+			group: e.subjectOffering.group,
+			academicYear: e.subjectOffering.academicYear,
+		});
+	}
+
+	return [...byStudent.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // ── Estadísticas del profesor (dashboard personal) ──────────────────────

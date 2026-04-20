@@ -3,8 +3,8 @@ import { listRewards, createReward } from "@/actions/badges";
 
 export async function GET(req: NextRequest) {
 	try {
-		const badgeTypeId = req.nextUrl.searchParams.get("badgeTypeId") || undefined;
-		const result = await listRewards(badgeTypeId);
+		const subject = req.nextUrl.searchParams.get("subject") || undefined;
+		const result = await listRewards(subject);
 		return NextResponse.json(result);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Error al listar recompensas";

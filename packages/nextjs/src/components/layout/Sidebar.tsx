@@ -5,6 +5,7 @@ import { NavItem } from "@/components/ui/NavItem";
 import { NavGroup } from "@/components/shared/NavGroup";
 import { UserMenu } from "@/components/shared/UserMenu";
 import { ThemeSwitcher } from "@/components/shared/ThemeSwitcher";
+import { ProfessorSubjectsNav } from "@/components/layout/ProfessorSubjectsNav";
 
 import { cn } from "@/lib/utils";
 import { icons } from "@/components/ui/icons";
@@ -42,6 +43,8 @@ function getNavGroups(role: UserRole) {
       ];
 
     case "PROFESSOR":
+      // Las asignaturas se renderizan via <ProfessorSubjectsNav /> (fetch dinámico),
+      // no como grupo estático. Aquí solo devolvemos los grupos fijos.
       return [
         {
           title: "Principal",
@@ -50,11 +53,11 @@ function getNavGroups(role: UserRole) {
           ],
         },
         {
-          title: "Gestión académica",
+          title: "General",
           items: [
-            { href: `${base}/badges`, icon: icons.task, label: "Tareas" },
-            { href: `${base}/rewards`, icon: icons.reward, label: "Recompensas" },
-            { href: `${base}/students`, icon: icons.student, label: "Alumnos" },
+            { href: `${base}/students`, icon: icons.users, label: "Alumnos" },
+            { href: `${base}/use-requests`, icon: icons.pending, label: "Solicitudes" },
+            { href: `${base}/pending-reviews`, icon: icons.alert, label: "Tareas por revisar" },
           ],
         },
       ];
@@ -155,18 +158,26 @@ export function Sidebar({ name, role, collapsed = false, className }: SidebarPro
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
-        {groups.map((group) => (
-          <NavGroup key={group.title} title={group.title} collapsed={collapsed}>
-            {group.items.map((item) => (
-              <NavItem
-                key={item.href}
-                href={item.href}
-                icon={item.icon}
-                label={item.label}
-                collapsed={collapsed}
-              />
-            ))}
-          </NavGroup>
+        {groups.map((group, idx) => (
+          <div key={group.title}>
+            <NavGroup title={group.title} collapsed={collapsed}>
+              {group.items.map((item) => (
+                <NavItem
+                  key={item.href}
+                  href={item.href}
+                  icon={item.icon}
+                  label={item.label}
+                  collapsed={collapsed}
+                />
+              ))}
+            </NavGroup>
+            {/* Para el profesor: insertar las asignaturas tras el primer grupo */}
+            {role === "PROFESSOR" && idx === 0 && (
+              <div className="mt-6">
+                <ProfessorSubjectsNav collapsed={collapsed} />
+              </div>
+            )}
+          </div>
         ))}
       </nav>
 

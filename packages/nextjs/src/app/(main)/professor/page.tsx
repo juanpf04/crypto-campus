@@ -3,10 +3,15 @@
 /**
  * Dashboard del PROFESOR.
  * Panel docente con alertas, resumen de asignaturas/tareas/recompensas,
- * gráficos de actividad, top lists y accesos rápidos.
+ * gráficos de actividad, top lists y actividad reciente.
+ *
+ * Las acciones de crear tareas/recompensas y gestionar alumnos/solicitudes
+ * son CONTEXTUALES por asignatura; se acceden desde el sidebar (subsecciones
+ * de cada asignatura) o desde los accesos generales del sidebar.
  */
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useAuthUser } from "@/hooks/useAuthUser";
 import { icons } from "@/components/ui/icons";
 import { Card } from "@/components/ui/Card";
@@ -15,7 +20,6 @@ import { StatCard } from "@/components/shared/StatCard";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { CompoundCard } from "@/components/shared/CompoundCard";
 import { DashboardGreeting } from "@/components/shared/DashboardGreeting";
-import { ActionRow } from "@/components/shared/ActionRow";
 import { AlertCalloutCard } from "@/components/shared/AlertCalloutCard";
 import { DashboardBarChart } from "@/components/shared/DashboardBarChart";
 import { TopListCard } from "@/components/shared/TopListCard";
@@ -84,9 +88,9 @@ export default function ProfessorDashboard() {
               variant="warning"
               icon={icons.alert}
               title={`${s.overdueAssignments} tarea${s.overdueAssignments !== 1 ? "s" : ""} con plazo vencido`}
-              description="Revisa y ciérralas o marca como revisando"
-              actionText="Ver tareas"
-              href="/professor/badges"
+              description="Ciérralas para revisión y otorga los premios"
+              actionText="Ver tareas por revisar"
+              href="/professor/pending-reviews"
             />
           )}
           {s.pendingSubmissionsReview > 0 && (
@@ -95,8 +99,8 @@ export default function ProfessorDashboard() {
               icon={icons.pending}
               title={`${s.pendingSubmissionsReview} entrega${s.pendingSubmissionsReview !== 1 ? "s" : ""} pendiente${s.pendingSubmissionsReview !== 1 ? "s" : ""} de revisión`}
               description="Asigna premios o cierra las tareas en revisión"
-              actionText="Ver tareas"
-              href="/professor/badges"
+              actionText="Ver tareas por revisar"
+              href="/professor/pending-reviews"
             />
           )}
           {s.pendingRequests > 0 && (
@@ -106,7 +110,7 @@ export default function ProfessorDashboard() {
               title={`${s.pendingRequests} solicitud${s.pendingRequests !== 1 ? "es" : ""} de canje pendiente${s.pendingRequests !== 1 ? "s" : ""}`}
               description="Aprueba o rechaza las solicitudes de uso de tus recompensas"
               actionText="Ver solicitudes"
-              href="/professor/rewards/requests"
+              href="/professor/use-requests?status=PENDING"
             />
           )}
         </div>
@@ -125,6 +129,7 @@ export default function ProfessorDashboard() {
           <CompoundCard
             icon={icons.task}
             title="Tareas por estado"
+            className="sm:col-span-2"
             slots={[
               { value: s?.openAssignments ?? 0, label: "Abiertas", color: "text-primary" },
               { value: s?.reviewingAssignments ?? 0, label: "En revisión", color: "text-warning" },
@@ -140,11 +145,36 @@ export default function ProfessorDashboard() {
           <CompoundCard
             icon={icons.reward}
             title="Recompensas"
+            className="sm:col-span-2"
             slots={[
               { value: s?.totalRewards ?? 0, label: "Creadas", color: "text-primary" },
-              { value: s?.pendingRequests ?? 0, label: "Pendientes", color: "text-warning" },
+              { value: s?.pendingRequests ?? 0, label: "Solicitudes", color: "text-warning" },
             ]}
           />
+
+          {/* Card clickable destacada — acceso directo a la bandeja de tareas a revisar */}
+          <Link
+            href="/professor/pending-reviews"
+            className="sm:col-span-2 group"
+          >
+            <Card className="flex items-center gap-4 h-full transition-colors hover:border-primary/40">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-warning/15 text-warning">
+                {icons.alert}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-text-muted">Tareas por revisar</p>
+                <p className="text-2xl font-bold text-text">
+                  {val(s?.reviewingAssignments)}
+                </p>
+                <p className="text-xs text-text-muted mt-1">
+                  Entregas cerradas a la espera de que otorgues premios
+                </p>
+              </div>
+              <span className="text-xs font-medium text-primary opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                Ver →
+              </span>
+            </Card>
+          </Link>
         </div>
       </section>
 
@@ -224,24 +254,6 @@ export default function ProfessorDashboard() {
           </div>
         </section>
       )}
-
-      {/* ── Gestión ── */}
-      <section className="space-y-4">
-        <SectionTitle icon={icons.items}>Gestión</SectionTitle>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Card className="overflow-hidden p-0">
-            <ActionRow href="/professor/students" icon={icons.users} title="Estudiantes" description="Ver alumnos matriculados en tus asignaturas" stat={`${s?.totalEnrolledStudents ?? "—"} total`} />
-            <ActionRow href="/professor/badges" icon={icons.badge} title="Insignias y tareas" description="Gestionar asignaturas, tareas y premios" stat={`${s?.totalAssignments ?? "—"} tareas`} />
-            <ActionRow href="/professor/badges/new" icon={icons.task} title="Crear tarea" description="Nueva tarea con premios asociados" stat="" isLast />
-          </Card>
-
-          <Card className="overflow-hidden p-0">
-            <ActionRow href="/professor/rewards" icon={icons.reward} title="Recompensas" description="Catálogo de recompensas canjeables" stat={`${s?.totalRewards ?? "—"} total`} />
-            <ActionRow href="/professor/rewards/new" icon={icons.reward} title="Crear recompensa" description="Nueva recompensa para tus alumnos" stat="" />
-            <ActionRow href="/professor/rewards/requests" icon={icons.pending} title="Solicitudes" description="Aprobar o rechazar canjes de recompensas" stat={s?.pendingRequests ? `${s.pendingRequests} pendientes` : ""} isLast />
-          </Card>
-        </div>
-      </section>
     </div>
   );
 }

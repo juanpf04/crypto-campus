@@ -26,4 +26,7 @@ export { RewardCategoryIcon, getCategoryLabel } from "./RewardCategoryIcon";
 export { SubjectEnrollmentCard } from "./SubjectEnrollmentCard";
 export { SubjectBadgesBreakdownCard } from "./SubjectBadgesBreakdownCard";
 export { UseRequestCard } from "./UseRequestCard";
+export { UseRequestsTable } from "./UseRequestsTable";
+export { PrizeAwardSection } from "./PrizeAwardSection";
+export { StudentGlobalRow } from "./StudentGlobalRow";
 export { TaskCompletionIndicator } from "./TaskCompletionIndicator";
