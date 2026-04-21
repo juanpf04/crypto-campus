@@ -210,19 +210,29 @@ export async function createAssignment(input: {
 /**
  * Lista assignments del profesor logueado (o todas si admin).
  */
-export async function listAssignmentsForProfessor(subjectOfferingId?: string) {
+export async function listAssignmentsForProfessor(filters?: {
+	subjectOfferingId?: string;
+	professorId?: string;
+}) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 	await autoCloseExpiredAssignments();
 
 	const where: Record<string, unknown> = {};
-	if (session.role !== "ADMIN") where.creatorId = session.userId!;
-	if (subjectOfferingId) where.subjectBadge = { subjectOfferingId };
+
+	// Profesores solo ven las suyas. Admin puede filtrar por profesor concreto.
+	if (session.role === "ADMIN") {
+		if (filters?.professorId) where.creatorId = filters.professorId;
+	} else {
+		where.creatorId = session.userId!;
+	}
+
+	if (filters?.subjectOfferingId) where.subjectBadge = { subjectOfferingId: filters.subjectOfferingId };
 
 	return prisma.assignment.findMany({
 		where,
 		include: {
-			subjectBadge: { include: { subjectOffering: { include: { subject: true } } } },
+			subjectBadge: { include: { subjectOffering: { include: { subject: true, professor: { select: { id: true, name: true } } } } } },
 			prizes: { include: { _count: { select: { awards: true } } } },
 			_count: { select: { submissions: true } },
 		},
@@ -338,6 +348,25 @@ export async function closeAssignmentForReview(assignmentPrismaId: string) {
 		throw new Error("No autorizado");
 	if (assignment.status !== "OPEN") throw new Error("La tarea no está abierta");
 
+	// Pre-flight: Assignment existe y está OPEN on-chain.
+	// AssignmentStatus: None=0, Open=1, Reviewing=2, Closed=3
+	const onChain = await publicClient.readContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "getAssignment",
+		args: [BigInt(assignment.assignmentId)],
+	}) as { subjectBadgeId: bigint; professor: `0x${string}`; status: number };
+
+	if (onChain.professor === "0x0000000000000000000000000000000000000000") {
+		throw new Error(
+			`La tarea no existe on-chain (assignmentId=${assignment.assignmentId}). ` +
+			`Puede haber drift entre la base de datos y la blockchain; reinicia con pnpm run db:reset y pnpm dev.`,
+		);
+	}
+	if (onChain.status !== 1) {
+		throw new Error("La tarea ya no está abierta on-chain");
+	}
+
 	const hash = await adminWalletClient.writeContract({
 		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
 		abi: BADGE_SYSTEM_ABI,
@@ -362,6 +391,24 @@ export async function closeAssignment(assignmentPrismaId: string) {
 	if (session.role !== "ADMIN" && assignment.creatorId !== session.userId)
 		throw new Error("No autorizado");
 	if (assignment.status === "CLOSED") throw new Error("La tarea ya está cerrada");
+
+	// Pre-flight: Assignment existe y no está ya CLOSED on-chain.
+	const onChain = await publicClient.readContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "getAssignment",
+		args: [BigInt(assignment.assignmentId)],
+	}) as { subjectBadgeId: bigint; professor: `0x${string}`; status: number };
+
+	if (onChain.professor === "0x0000000000000000000000000000000000000000") {
+		throw new Error(
+			`La tarea no existe on-chain (assignmentId=${assignment.assignmentId}). ` +
+			`Puede haber drift entre la base de datos y la blockchain; reinicia con pnpm run db:reset y pnpm dev.`,
+		);
+	}
+	if (onChain.status === 3) {
+		throw new Error("La tarea ya está cerrada on-chain");
+	}
 
 	const hash = await adminWalletClient.writeContract({
 		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
@@ -424,6 +471,32 @@ export async function awardPrize(prizeCategoryPrismaId: string, studentUserIds: 
 	});
 	if (existing.length > 0)
 		throw new Error("Algún alumno ya ha sido premiado en esta categoría");
+
+	// Pre-flight: verifica que la PrizeCategory existe on-chain y tiene cupo.
+	// Protege de condiciones de carrera (otra tx la agotó) y del drift dev
+	// cuando Hardhat se reinicia en local.
+	const onChainPrize = await publicClient.readContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "getPrizeCategory",
+		args: [BigInt(prize.prizeCategoryId)],
+	}) as {
+		assignmentId: bigint;
+		badgeReward: bigint;
+		maxWinners: bigint;
+		currentWinners: bigint;
+	};
+
+	if (onChainPrize.assignmentId === BigInt(0)) {
+		throw new Error(
+			`El premio no existe on-chain (prizeCategoryId=${prize.prizeCategoryId}). ` +
+			`Puede haber drift entre la base de datos y la blockchain; reinicia con pnpm run db:reset y pnpm dev para resincronizar.`,
+		);
+	}
+	const available = Number(onChainPrize.maxWinners - onChainPrize.currentWinners);
+	if (students.length > available) {
+		throw new Error(`Solo quedan ${available} ganadores disponibles on-chain`);
+	}
 
 	// Llamar al contrato
 	const hash = await adminWalletClient.writeContract({
@@ -532,6 +605,31 @@ export async function deactivateReward(rewardPrismaId: string) {
 	if (session.role !== "ADMIN" && reward.creatorId !== session.userId)
 		throw new Error("No autorizado");
 
+	// Pre-flight: reward existe y está activa on-chain.
+	const onChain = await publicClient.readContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "getReward",
+		args: [BigInt(reward.rewardId)],
+	}) as {
+		subjectBadgeId: bigint;
+		badgeCost: bigint;
+		supply: bigint;
+		totalSupply: bigint;
+		professor: `0x${string}`;
+		active: boolean;
+	};
+
+	if (onChain.professor === "0x0000000000000000000000000000000000000000") {
+		throw new Error(
+			`La recompensa no existe on-chain (rewardId=${reward.rewardId}). ` +
+			`Puede haber drift entre la base de datos y la blockchain; reinicia con pnpm run db:reset y pnpm dev.`,
+		);
+	}
+	if (!onChain.active) {
+		throw new Error("La recompensa ya está desactivada on-chain");
+	}
+
 	const hash = await adminWalletClient.writeContract({
 		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
 		abi: BADGE_SYSTEM_ABI,
@@ -547,18 +645,27 @@ export async function deactivateReward(rewardPrismaId: string) {
 	});
 }
 
-export async function listRewards(subjectOfferingId?: string) {
+export async function listRewards(filters?: {
+	subjectOfferingId?: string;
+	professorId?: string;
+}) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 
 	const where: Record<string, unknown> = {};
-	if (session.role !== "ADMIN") where.creatorId = session.userId!;
-	if (subjectOfferingId) where.subjectBadge = { subjectOfferingId };
+
+	if (session.role === "ADMIN") {
+		if (filters?.professorId) where.creatorId = filters.professorId;
+	} else {
+		where.creatorId = session.userId!;
+	}
+
+	if (filters?.subjectOfferingId) where.subjectBadge = { subjectOfferingId: filters.subjectOfferingId };
 
 	return prisma.reward.findMany({
 		where,
 		include: {
-			subjectBadge: { include: { subjectOffering: { include: { subject: true } } } },
+			subjectBadge: { include: { subjectOffering: { include: { subject: true, professor: { select: { id: true, name: true } } } } } },
 			_count: { select: { redemptions: true } },
 		},
 		orderBy: { createdAt: "desc" },
@@ -828,6 +935,46 @@ export async function requestUseReward(rewardPrismaId: string) {
 	const reward = await prisma.reward.findUnique({ where: { id: rewardPrismaId } });
 	if (!reward) throw new Error("Recompensa no encontrada");
 
+	const user = await prisma.user.findUnique({
+		where: { id: session.userId! },
+		select: { address: true },
+	});
+	if (!user) throw new Error("Usuario no encontrado");
+
+	// Pre-flight: reward existe on-chain y el alumno posee al menos 1 token
+	// de esa recompensa (canjes sin solicitud de uso activa).
+	const rewardTokenId = await publicClient.readContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "getRewardTokenId",
+		args: [BigInt(reward.rewardId)],
+	}) as bigint;
+
+	const [onChainReward, tokenBalance] = await Promise.all([
+		publicClient.readContract({
+			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+			abi: BADGE_SYSTEM_ABI,
+			functionName: "getReward",
+			args: [BigInt(reward.rewardId)],
+		}) as Promise<{ professor: `0x${string}`; active: boolean }>,
+		publicClient.readContract({
+			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+			abi: BADGE_SYSTEM_ABI,
+			functionName: "balanceOf",
+			args: [user.address as `0x${string}`, rewardTokenId],
+		}) as Promise<bigint>,
+	]);
+
+	if (onChainReward.professor === "0x0000000000000000000000000000000000000000") {
+		throw new Error(
+			`La recompensa no existe on-chain (rewardId=${reward.rewardId}). ` +
+			`Puede haber drift entre la base de datos y la blockchain; reinicia con pnpm run db:reset y pnpm dev.`,
+		);
+	}
+	if (tokenBalance === BigInt(0)) {
+		throw new Error("No tienes ningún token de esta recompensa disponible para usar");
+	}
+
 	const nextId = await publicClient.readContract({
 		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
 		abi: BADGE_SYSTEM_ABI,
@@ -857,9 +1004,38 @@ export async function requestUseReward(rewardPrismaId: string) {
 	return { success: true };
 }
 
+/**
+ * Pre-flight común para cancel/approve/reject: verifica que la UseRequest
+ * existe on-chain y que su estado es PENDING (1).
+ * UseRequestStatus: None=0, Pending=1, Approved=2, Rejected=3, Cancelled=4
+ */
+async function assertUseRequestPendingOnChain(requestId: number): Promise<void> {
+	const onChain = await publicClient.readContract({
+		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+		abi: BADGE_SYSTEM_ABI,
+		functionName: "getUseRequest",
+		args: [BigInt(requestId)],
+	}) as { student: `0x${string}`; rewardId: bigint; status: number };
+
+	if (onChain.student === "0x0000000000000000000000000000000000000000") {
+		throw new Error(
+			`La solicitud no existe on-chain (requestId=${requestId}). ` +
+			`Puede haber drift entre la base de datos y la blockchain; reinicia con pnpm run db:reset y pnpm dev.`,
+		);
+	}
+	if (onChain.status !== 1) {
+		const labels: Record<number, string> = {
+			2: "aprobada", 3: "rechazada", 4: "cancelada",
+		};
+		throw new Error(`La solicitud ya está ${labels[onChain.status] ?? "resuelta"} on-chain`);
+	}
+}
+
 export async function cancelUseRequest(requestId: number) {
 	const session = await getSession();
 	ensureRole(session, ["STUDENT"]);
+
+	await assertUseRequestPendingOnChain(requestId);
 
 	const { walletClient } = await getUserWalletClient(session.userId!);
 	const hash = await walletClient.writeContract({
@@ -879,6 +1055,8 @@ export async function approveUseRequest(requestId: number) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 
+	await assertUseRequestPendingOnChain(requestId);
+
 	const hash = await adminWalletClient.writeContract({
 		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
 		abi: BADGE_SYSTEM_ABI,
@@ -895,6 +1073,8 @@ export async function approveUseRequest(requestId: number) {
 export async function rejectUseRequest(requestId: number) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
+
+	await assertUseRequestPendingOnChain(requestId);
 
 	const hash = await adminWalletClient.writeContract({
 		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
@@ -945,33 +1125,49 @@ export async function getMyUseRequests(filters?: {
 
 export async function listUseRequests(filters?: {
 	subjectOfferingId?: string;
+	professorId?: string;
 	status?: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
 }) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 
 	const where: Record<string, unknown> = {};
+	const rewardFilters: Record<string, unknown> = {};
 
-	if (session.role !== "ADMIN") {
-		where.reward = { creatorId: session.userId! };
+	if (session.role === "ADMIN") {
+		if (filters?.professorId) rewardFilters.creatorId = filters.professorId;
+	} else {
+		rewardFilters.creatorId = session.userId!;
 	}
 
 	if (filters?.subjectOfferingId) {
-		// Merge reward filter with offering filter
-		const existingReward = (where.reward as Record<string, unknown> | undefined) ?? {};
-		where.reward = {
-			...existingReward,
-			subjectBadge: { subjectOfferingId: filters.subjectOfferingId },
-		};
+		rewardFilters.subjectBadge = { subjectOfferingId: filters.subjectOfferingId };
 	}
 
+	if (Object.keys(rewardFilters).length > 0) where.reward = rewardFilters;
 	if (filters?.status) where.status = filters.status;
 
 	return prisma.useRequest.findMany({
 		where,
 		include: {
 			student: { select: { id: true, name: true, email: true } },
-			reward: { select: { id: true, name: true, category: true, subjectBadge: { include: { subjectOffering: { include: { subject: true } } } } } },
+			reward: {
+				select: {
+					id: true,
+					name: true,
+					category: true,
+					subjectBadge: {
+						include: {
+							subjectOffering: {
+								include: {
+									subject: true,
+									professor: { select: { id: true, name: true } },
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 		orderBy: { createdAt: "desc" },
 	});
@@ -1344,7 +1540,11 @@ export async function getMySubjectOfferings() {
 	const where = session.role === "ADMIN" ? {} : { professorId: session.userId! };
 	return prisma.subjectOffering.findMany({
 		where,
-		include: { subject: true, _count: { select: { enrollments: true } } },
+		include: {
+			subject: true,
+			professor: { select: { id: true, name: true, email: true } },
+			_count: { select: { enrollments: true } },
+		},
 		orderBy: [{ academicYear: "desc" }, { group: "asc" }],
 	});
 }
@@ -1447,21 +1647,35 @@ export async function getOfferingSummary(offeringId: string) {
 }
 
 /**
- * Devuelve todas las tareas del profesor en estado REVIEWING, cross-subject.
- * Usado en /professor/pending-reviews.
+ * Devuelve todas las tareas en estado REVIEWING, cross-subject.
+ * - Profesor: solo las suyas.
+ * - Admin: todas; puede filtrar por profesor y/o asignatura.
+ * Usado en /professor/pending-reviews y /admin/pending-reviews.
  */
-export async function getAssignmentsPendingReview() {
+export async function getAssignmentsPendingReview(filters?: {
+	subjectOfferingId?: string;
+	professorId?: string;
+}) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 	await autoCloseExpiredAssignments();
 
 	const where: Record<string, unknown> = { status: "REVIEWING" };
-	if (session.role !== "ADMIN") where.creatorId = session.userId!;
+
+	if (session.role === "ADMIN") {
+		if (filters?.professorId) where.creatorId = filters.professorId;
+	} else {
+		where.creatorId = session.userId!;
+	}
+
+	if (filters?.subjectOfferingId) {
+		where.subjectBadge = { subjectOfferingId: filters.subjectOfferingId };
+	}
 
 	return prisma.assignment.findMany({
 		where,
 		include: {
-			subjectBadge: { include: { subjectOffering: { include: { subject: true } } } },
+			subjectBadge: { include: { subjectOffering: { include: { subject: true, professor: { select: { id: true, name: true } } } } } },
 			prizes: { include: { _count: { select: { awards: true } } } },
 			_count: { select: { submissions: true } },
 		},
@@ -1597,6 +1811,64 @@ export async function getMyStudentsGlobal() {
 	}
 
 	return [...byStudent.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Para admin: TODOS los alumnos del sistema con TODAS sus matrículas
+ * (no filtrado por asignaturas del profesor). Los alumnos sin matrículas
+ * también aparecen.
+ */
+export async function getAllStudentsGlobal() {
+	const session = await getSession();
+	ensureRole(session, ["ADMIN"]);
+
+	const students = await prisma.user.findMany({
+		where: { role: "STUDENT" },
+		select: {
+			id: true,
+			name: true,
+			email: true,
+			enrollments: {
+				include: {
+					subjectOffering: {
+						include: {
+							subject: true,
+							professor: { select: { id: true, name: true } },
+						},
+					},
+				},
+			},
+		},
+		orderBy: { name: "asc" },
+	});
+
+	return students.map(s => ({
+		userId: s.id,
+		name: s.name,
+		email: s.email,
+		offerings: s.enrollments.map(e => ({
+			offeringId: e.subjectOffering.id,
+			subjectName: e.subjectOffering.subject.name,
+			subjectCode: e.subjectOffering.subject.code,
+			group: e.subjectOffering.group,
+			academicYear: e.subjectOffering.academicYear,
+			professorName: e.subjectOffering.professor.name,
+		})),
+	}));
+}
+
+/**
+ * Lista simple de profesores para rellenar dropdowns de filtro (admin).
+ */
+export async function listProfessors() {
+	const session = await getSession();
+	ensureRole(session, ["ADMIN"]);
+
+	return prisma.user.findMany({
+		where: { role: "PROFESSOR", active: true },
+		select: { id: true, name: true, email: true },
+		orderBy: { name: "asc" },
+	});
 }
 
 // ── Estadísticas del profesor (dashboard personal) ──────────────────────

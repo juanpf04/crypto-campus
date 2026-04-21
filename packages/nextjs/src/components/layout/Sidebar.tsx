@@ -93,7 +93,17 @@ function getNavGroups(role: UserRole) {
           title: "Administración",
           items: [
             { href: `${base}/users`, icon: icons.users, label: "Usuarios" },
-            { href: `${base}/subjects`, icon: icons.items, label: "Asignaturas" },
+            { href: `${base}/subjects`, icon: icons.items, label: "Asignaturas del campus" },
+            { href: `${base}/students`, icon: icons.student, label: "Alumnos" },
+          ],
+        },
+        {
+          title: "Insignias",
+          items: [
+            { href: `${base}/assignments`, icon: icons.task, label: "Tareas" },
+            { href: `${base}/rewards`, icon: icons.reward, label: "Recompensas" },
+            { href: `${base}/use-requests`, icon: icons.pending, label: "Solicitudes" },
+            { href: `${base}/pending-reviews`, icon: icons.alert, label: "Tareas por revisar" },
           ],
         },
         {
@@ -111,7 +121,6 @@ function getNavGroups(role: UserRole) {
         {
           title: "Otros",
           items: [
-            { href: `${base}/badges`, icon: icons.badge, label: "Insignias" },
             { href: `${base}/printing`, icon: icons.print, label: "Impresión" },
           ],
         },

@@ -8,12 +8,17 @@ export async function GET(req: NextRequest) {
 	try {
 		const { searchParams } = new URL(req.url);
 		const subject = searchParams.get("subject") ?? undefined;
+		const professor = searchParams.get("professor") ?? undefined;
 		const statusParam = searchParams.get("status");
 		const status = VALID_STATUSES.includes(statusParam as ValidStatus)
 			? (statusParam as ValidStatus)
 			: undefined;
 
-		const result = await listUseRequests({ subjectOfferingId: subject, status });
+		const result = await listUseRequests({
+			subjectOfferingId: subject,
+			professorId: professor,
+			status,
+		});
 		return NextResponse.json(result);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Error al obtener solicitudes de uso";

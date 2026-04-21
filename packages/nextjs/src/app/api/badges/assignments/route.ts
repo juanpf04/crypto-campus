@@ -5,7 +5,11 @@ export async function GET(req: NextRequest) {
 	try {
 		const { searchParams } = new URL(req.url);
 		const subject = searchParams.get("subject") ?? undefined;
-		const result = await listAssignmentsForProfessor(subject);
+		const professor = searchParams.get("professor") ?? undefined;
+		const result = await listAssignmentsForProfessor({
+			subjectOfferingId: subject,
+			professorId: professor,
+		});
 		return NextResponse.json(result);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Error al listar tareas";

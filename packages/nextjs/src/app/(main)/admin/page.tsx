@@ -151,7 +151,7 @@ export default function AdminDashboard() {
               title={`${bs.pendingRequests} solicitud${bs.pendingRequests !== 1 ? "es" : ""} de recompensa pendiente${bs.pendingRequests !== 1 ? "s" : ""}`}
               description="Revisar y aprobar o rechazar"
               actionText="Ver solicitudes"
-              href="/admin/badges/rewards/requests"
+              href="/admin/use-requests?status=PENDING"
             />
           )}
           {ss && ss.PAID > 5 && (
@@ -279,9 +279,9 @@ export default function AdminDashboard() {
 
           {/* Insignias */}
           <Card className="overflow-hidden p-0">
-            <ActionRow href="/admin/badges" icon={icons.badge} title="Insignias" description="Tipos de badge y tareas" stat={`${bs?.totalSubjectBadges ?? "—"} tipos`} />
-            <ActionRow href="/admin/badges/rewards" icon={icons.reward} title="Recompensas" description="Catálogo de recompensas" stat={`${bs?.totalRewards ?? "—"} total`} />
-            <ActionRow href="/admin/badges/rewards/requests" icon={icons.pending} title="Solicitudes" description="Aprobar/rechazar canjes" stat={`${bs?.pendingRequests ?? "—"} pendientes`} isLast />
+            <ActionRow href="/admin/subjects" icon={icons.items} title="Asignaturas del campus" description="Ofertas impartidas y catálogo" stat={`${bs?.totalSubjectBadges ?? "—"} con insignia`} />
+            <ActionRow href="/admin/rewards" icon={icons.reward} title="Recompensas" description="Todas las recompensas del sistema" stat={`${bs?.totalRewards ?? "—"} total`} />
+            <ActionRow href="/admin/use-requests" icon={icons.pending} title="Solicitudes" description="Aprobar/rechazar canjes" stat={`${bs?.pendingRequests ?? "—"} pendientes`} isLast />
           </Card>
 
           {/* Impresión */}

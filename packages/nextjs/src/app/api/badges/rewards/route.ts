@@ -4,7 +4,11 @@ import { listRewards, createReward } from "@/actions/badges";
 export async function GET(req: NextRequest) {
 	try {
 		const subject = req.nextUrl.searchParams.get("subject") || undefined;
-		const result = await listRewards(subject);
+		const professor = req.nextUrl.searchParams.get("professor") || undefined;
+		const result = await listRewards({
+			subjectOfferingId: subject,
+			professorId: professor,
+		});
 		return NextResponse.json(result);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Error al listar recompensas";
