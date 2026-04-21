@@ -137,3 +137,7 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Blockchain local (cada dev regenera su estado)
+.anvil-state.json
+packages/hardhat/ignition/deployments/

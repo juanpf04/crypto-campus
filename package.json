@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:next": "pnpm --filter nextjs run dev",
+    "dev:hardhat": "node scripts/dev.mjs --hardhat",
+    "dev:fresh": "pnpm reset:all && node scripts/dev.mjs --with-seed",
     "db:up": "docker compose up -d db",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f db",
@@ -14,6 +16,9 @@
     "db:reset": "pnpm --filter nextjs run db:reset",
     "db:generate": "pnpm --filter nextjs run db:generate",
     "db:studio": "pnpm --filter nextjs run db:studio",
+    "db:seed": "node scripts/seed.mjs",
+    "reset:chain": "node scripts/reset-chain.mjs",
+    "reset:all": "pnpm reset:chain && pnpm db:reset",
     "start": "pnpm --filter nextjs run start",
     "build": "pnpm --filter nextjs run build",
     "compile": "pnpm --filter hardhat run compile",
