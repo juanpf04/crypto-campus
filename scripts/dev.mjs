@@ -4,17 +4,19 @@
  *   1. Levanta PostgreSQL con Docker Compose
  *   2. Genera Prisma Client y sincroniza el schema
  *   3. Arranca el nodo blockchain local (Anvil por defecto; Hardhat si
- *      BLOCKCHAIN_NODE=hardhat)
+ *      BLOCKCHAIN_NODE=hardhat o flag --hardhat)
  *   4. Despliega los contratos si no lo están ya
- *   5. Asegura que existe al menos un admin en la BD
+ *   5. Ejecuta todos los seeds (idempotentes): admin + datos académicos +
+ *      productos + biblioteca + salas + impresoras + insignias
  *   6. Arranca Next.js
- *
- * NO puebla la BD con datos académicos, productos, etc. Para eso está
- * `pnpm db:seed`. Usa `pnpm dev:fresh` para resetear + arrancar + poblar
- * en un solo paso.
  *
  * Con Anvil el estado blockchain persiste entre reinicios (.anvil-state.json).
  * Con Hardhat el estado se pierde al parar (comportamiento histórico).
+ *
+ * Flags:
+ *   --hardhat | --anvil  Fuerza motor blockchain (default: anvil)
+ *   --fresh              Resetea BD + estado blockchain antes de arrancar
+ *                        (equivalente a 'reset:all' pero Postgres ya estará arriba)
  *
  * Uso: node scripts/dev.mjs (o pnpm dev)
  */
@@ -48,8 +50,10 @@ const BLOCKCHAIN_NODE = resolveBlockchainNode();
 const ANVIL_STATE_FILE = resolve(ROOT, ".anvil-state.json");
 const DEPLOYMENTS_DIR = resolve(HARDHAT_DIR, "ignition/deployments");
 
-// Flag opcional para correr el seed completo tras arrancar (usado por `pnpm dev:fresh`).
-const WITH_SEED = process.argv.includes("--with-seed");
+// Flag opcional para resetear BD + blockchain local antes de arrancar. Es
+// equivalente a `pnpm reset:all` pero se ejecuta DESPUÉS de levantar Postgres
+// (evita errores la primera vez que Postgres aún no está arriba).
+const FRESH = process.argv.includes("--fresh");
 
 // Colores para la consola
 const cyan = (s) => `\x1b[36m${s}\x1b[0m`;
@@ -358,6 +362,31 @@ async function deployContracts() {
 
 await ensureDatabase();
 await ensurePrismaClient();
+
+// Si se pidió --fresh, resetear blockchain local y BD. Postgres ya está
+// arriba (ensureDatabase), así que prisma db push --force-reset no falla.
+if (FRESH) {
+	log(yellow("Flag --fresh: reseteando blockchain local y BD..."));
+	if (existsSync(ANVIL_STATE_FILE)) {
+		rmSync(ANVIL_STATE_FILE, { force: true });
+		log("  - Eliminado .anvil-state.json");
+	}
+	if (existsSync(DEPLOYMENTS_DIR)) {
+		rmSync(DEPLOYMENTS_DIR, { recursive: true, force: true });
+		log("  - Eliminados deployments de Ignition");
+	}
+	try {
+		await run("pnpm", ["run", "db:reset"], {
+			cwd: NEXTJS_DIR,
+			prefix: "[db:reset]",
+		});
+		log(green("BD reseteada"));
+	} catch {
+		console.error(red("No se pudo resetear la BD. Revisa que Postgres esté accesible."));
+		process.exit(1);
+	}
+}
+
 await ensureDatabaseSchema();
 
 // 1. Arrancar el nodo blockchain
@@ -406,7 +435,8 @@ await runNodeScript("scripts/resync-users.mjs", {
 	nonCriticalMessage: "Resync terminó con errores (no crítico, continuando...)",
 });
 
-// 5. Bootstrap del admin (obligatorio — sin admin la app es inusable)
+// 5. Bootstrap del admin primero y explícito — garantiza que SIEMPRE existe
+//    un admin aunque el seed completo falle por cualquier motivo.
 log("Asegurando que existe un admin en la BD...");
 await runNodeScript("scripts/seed-admin.mjs", {
 	cwd: NEXTJS_DIR,
@@ -415,16 +445,17 @@ await runNodeScript("scripts/seed-admin.mjs", {
 	nonCriticalMessage: "Bootstrap del admin terminó con errores (no crítico, continuando...)",
 });
 
-// 6. Si se ha pedido, correr el seed completo (usado por dev:fresh)
-if (WITH_SEED) {
-	log("Ejecutando seed completo (--with-seed)...");
-	await runNodeScript("scripts/seed.mjs", {
-		cwd: ROOT,
-		prefix: "[seed]",
-		allowFailure: true,
-		nonCriticalMessage: "Seed terminó con errores (continuando al arranque de Next.js...)",
-	});
-}
+// 6. Seed completo (idempotente): académico + productos + biblioteca + salas +
+//    impresoras + insignias + cleanup. En arranques sucesivos con Anvil
+//    persistente, los seeds detectan que los datos ya existen y saltan rápido.
+//    seed-admin se re-ejecuta aquí como no-op (admin ya existe), coste mínimo.
+log("Ejecutando seeds (idempotentes)...");
+await runNodeScript("scripts/seed.mjs", {
+	cwd: ROOT,
+	prefix: "[seed]",
+	allowFailure: true,
+	nonCriticalMessage: "Seed terminó con errores (continuando al arranque de Next.js...)",
+});
 
 // 7. Arrancar Next.js
 log("Arrancando Next.js...");

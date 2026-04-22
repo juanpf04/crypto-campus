@@ -8,7 +8,7 @@
     "dev": "node scripts/dev.mjs",
     "dev:next": "pnpm --filter nextjs run dev",
     "dev:hardhat": "node scripts/dev.mjs --hardhat",
-    "dev:fresh": "pnpm reset:all && node scripts/dev.mjs --with-seed",
+    "dev:fresh": "node scripts/dev.mjs --fresh",
     "db:up": "docker compose up -d db",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f db",

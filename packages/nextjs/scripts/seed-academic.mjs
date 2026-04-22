@@ -229,18 +229,17 @@ async function createUser(prisma, { email, name, role }) {
   });
   await publicClient.waitForTransactionReceipt({ hash: regHash });
 
-  // Mintear tokens (profesores y estudiantes)
+  // Mintear LibraryTokens iniciales (depósito para préstamos)
   const libHash = await adminWalletClient.writeContract({
     address: ADDRESSES.libraryToken, abi: LIBRARY_TOKEN_ABI, functionName: "mint",
     args: [account.address, 10n],
   });
   await publicClient.waitForTransactionReceipt({ hash: libHash });
 
-  const shopHash = await adminWalletClient.writeContract({
-    address: ADDRESSES.shopToken, abi: SHOP_TOKEN_ABI, functionName: "mint",
-    args: [account.address, 0n],
-  });
-  await publicClient.waitForTransactionReceipt({ hash: shopHash });
+  // No minteamos ShopTokens al crear usuarios: se ganan usando la app
+  // (sistema de recompensas en ShopTokenReward). Empiezan con balance 0.
+  // El contrato ShopToken revierte con ZeroAmount() si intentas mint(0),
+  // así que simplemente no llamamos al contrato.
 
   const user = await prisma.user.create({
     data: { email, password: hashedPassword, name, role, address: account.address, encryptedKey },
