@@ -13,7 +13,7 @@ const MODULES = [
     emoji: "📚",
     title: "Biblioteca",
     description:
-      "Solicita préstamos de libros, juegos de mesa y videojuegos. Se requiere un pequeño depósito en LibraryTokens que se devuelve al entregar.",
+      "Solicita préstamos de libros, juegos de mesa y videojuegos. Se requiere un pequeño depósito en Tokens de Préstamo que se devuelve al entregar.",
   },
   {
     emoji: "🚪",

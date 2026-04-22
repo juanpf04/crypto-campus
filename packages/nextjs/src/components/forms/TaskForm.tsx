@@ -58,7 +58,7 @@ export function TaskForm({ onSubmit, initialValues, isEdit, badgeTypes }: TaskFo
           label="Tokens de recompensa"
           type="number"
           min="0"
-          placeholder="5"
+          placeholder="Ej: 5"
           value={fields.rewardAmount}
           onChange={setField("rewardAmount")}
           error={errors.rewardAmount}

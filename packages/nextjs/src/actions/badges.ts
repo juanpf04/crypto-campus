@@ -20,7 +20,7 @@ import { decrypt } from "@/lib/crypto";
 import { getSession, ensureRole, logPrismaRecovery } from "@/lib/auth";
 import { adminWalletClient, publicClient } from "@/lib/viem";
 import { CONTRACT_ADDRESSES, BADGE_SYSTEM_ABI } from "@/lib/contracts";
-import { issueReward, ShopTokenRewardReason } from "@/lib/shopRewards";
+import { hasRewardOfType, issueReward, ShopTokenRewardReason, type RewardGrant } from "@/lib/shopRewards";
 
 // ── Helpers internos ─────────────────────────────────────────────────────
 
@@ -525,12 +525,14 @@ export async function awardPrize(prizeCategoryPrismaId: string, studentUserIds: 
 	}
 
 	// ── Recompensa por insignia recibida ────────────────────────────────────
+	// Sin first-use aquí: el bonus de primer uso del módulo se concede al
+	// canjear una insignia (acción del estudiante). No se notifica al
+	// estudiante porque esta acción la dispara el profesor.
 	await Promise.all(students.map(student =>
 		issueReward({
 			userId: student.id,
 			userAddress: student.address,
 			mainReason: ShopTokenRewardReason.BADGE_AWARDED,
-			firstUseReason: ShopTokenRewardReason.MODULE_FIRST_USE_BADGES,
 		}),
 	));
 
@@ -797,7 +799,22 @@ export async function redeemReward(rewardPrismaId: string) {
 			data: { supply: { decrement: 1 } },
 		});
 	}
-	return { success: true };
+
+	// Bonus primer uso del módulo Insignias
+	let rewards: RewardGrant[] = [];
+	const alreadyHad = await hasRewardOfType(
+		session.userId!,
+		ShopTokenRewardReason.MODULE_FIRST_USE_BADGES,
+	);
+	if (!alreadyHad) {
+		rewards = await issueReward({
+			userId: session.userId!,
+			userAddress: user.address,
+			mainReason: ShopTokenRewardReason.MODULE_FIRST_USE_BADGES,
+		});
+	}
+
+	return { success: true, rewards };
 }
 
 export async function getMyRedemptions() {

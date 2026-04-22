@@ -2,15 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { listAllTransactions } from "@/actions/shop";
 
 /**
- * GET /api/shop/transactions — Log unificado de compras + recargas + devoluciones (admin).
- * Query params: limit, offset, userId, type (purchase|topup|refund), direction (income|expense)
+ * GET /api/shop/transactions — Log unificado de compras + recargas + devoluciones + recompensas (admin).
+ * Query params: limit, offset, userId, type (purchase|topup|refund|reward), direction (income|expense)
  */
 export async function GET(req: NextRequest) {
 	const { searchParams } = req.nextUrl;
 	const limit = Number(searchParams.get("limit") ?? 10);
 	const offset = Number(searchParams.get("offset") ?? 0);
 	const userId = searchParams.get("userId") ?? undefined;
-	const typeFilter = searchParams.get("type") as "purchase" | "topup" | "refund" | undefined;
+	const typeFilter = searchParams.get("type") as "purchase" | "topup" | "refund" | "reward" | undefined;
 	const directionFilter = searchParams.get("direction") as "income" | "expense" | undefined;
 
 	try {

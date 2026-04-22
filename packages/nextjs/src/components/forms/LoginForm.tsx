@@ -30,14 +30,13 @@ export function LoginForm({ onSubmit }: LoginFormProps) {
         label="Email"
         type="text"
         autoComplete="email"
-        placeholder="tu@ucm.es"
+        placeholder="Ej: tu@ucm.es"
         value={fields.email}
         onChange={setField("email")}
         error={errors.email}
       />
       <PasswordInput
         label="Contraseña"
-        placeholder="••••••••"
         value={fields.password}
         onChange={setField("password")}
         error={errors.password}

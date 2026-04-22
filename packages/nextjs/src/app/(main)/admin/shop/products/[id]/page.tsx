@@ -1,38 +1,24 @@
 "use client";
 
 /**
- * Detalle de producto para el admin.
+ * Detalle de producto (admin).
  *
- * Carga el grupo completo por groupKey vía API nueva.
- * Dos niveles de gestión:
- * - Grupo: editar nombre/desc/categoría/precio, desactivar/reactivar todo
- * - Variante: editar nombre/color/stock/imagen, desactivar/reactivar individual
- *
- * Layout:
- * - Banner de alerta si está desactivado
- * - Imagen principal + selector de colores
- * - Info del grupo (badges, precio, stats)
- * - Card de variante seleccionada con acciones individuales
- * - Grid de todas las variantes con estado y acciones rápidas
- * - Botón "Añadir variante"
+ * Page fina que carga el grupo (con fallbacks por groupKey / variant id) y
+ * compone los organisms ProductAdminHeader + VariantDetailCard + VariantGrid.
  */
 
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
-import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
 import { SkeletonPage } from "@/components/ui/Skeleton";
-import { AddCard } from "@/components/ui/AddCard";
 import { ProductImage } from "@/components/shared/ProductImage";
 import { ColorSwatchRow } from "@/components/shared/ColorSwatchRow";
-import { SectionTitle } from "@/components/shared/SectionTitle";
 import { InactiveAlert } from "@/components/shared/InactiveAlert";
-import { VariantGridItem } from "@/components/shared/VariantGridItem";
-import { colorToHex } from "@/components/ui/ColorDot";
-import { icons } from "@/components/ui/icons";
+import { ProductAdminHeader } from "@/components/dashboard/ProductAdminHeader";
+import { VariantDetailCard } from "@/components/dashboard/VariantDetailCard";
+import { VariantGrid } from "@/components/dashboard/VariantGrid";
 
 interface ProductVariant {
   id: string;
@@ -71,15 +57,12 @@ export default function AdminProductDetailPage() {
   const [toggling, setToggling] = useState<string | null>(null);
 
   // El [id] puede ser un groupKey o un variant prisma ID.
-  // Intentamos primero como groupKey, si falla buscamos por variante
   const loadGroup = useCallback(async () => {
     if (!id) return;
     setLoading(true);
 
     try {
-      // 1. Intentar como groupKey directo
       const groupRes = await fetch(`/api/shop/products/groups/${id}`);
-
       if (groupRes.ok) {
         const data = await groupRes.json();
         if (data.variants) {
@@ -91,11 +74,9 @@ export default function AdminProductDetailPage() {
         }
       }
 
-      // 2. Puede ser un variant Prisma ID — buscar el producto para obtener su base
       const productRes = await fetch(`/api/shop/products/${id}`);
       if (productRes.ok) {
         const product = await productRes.json();
-        // Si tiene base con slug, cargar el grupo por slug
         if (product.base?.slug) {
           const groupBySlug = await fetch(`/api/shop/products/groups/${product.base.slug}`);
           if (groupBySlug.ok) {
@@ -107,7 +88,7 @@ export default function AdminProductDetailPage() {
         }
       }
 
-      // 3. Fallback: buscar en todos los grupos
+      // Fallback: buscar en todos los grupos
       const allRes = await fetch("/api/shop/products/admin");
       if (!allRes.ok) throw new Error("Error al cargar productos");
 
@@ -141,7 +122,6 @@ export default function AdminProductDetailPage() {
     return group.variants.find((v) => v.id === selectedVariantId) ?? group.variants[0];
   }, [group, selectedVariantId]);
 
-  // Toggle grupo completo
   const handleToggleGroup = useCallback(async () => {
     if (!group) return;
     const newActive = !group.active;
@@ -158,7 +138,6 @@ export default function AdminProductDetailPage() {
         throw new Error(body.error ?? "Error");
       }
 
-      // Recargar datos
       await loadGroup();
       addToast(
         newActive
@@ -173,7 +152,6 @@ export default function AdminProductDetailPage() {
     }
   }, [group, loadGroup, addToast]);
 
-  // Toggle variante individual
   const handleToggleVariant = useCallback(async (variantId: string, currentActive: boolean) => {
     setToggling(variantId);
 
@@ -211,15 +189,10 @@ export default function AdminProductDetailPage() {
     );
   }
 
-  const priceLabel = group.minPrice === group.maxPrice
-    ? `${group.minPrice} ShopTokens`
-    : `${group.minPrice} - ${group.maxPrice} ShopTokens`;
-
   return (
     <div className="space-y-6">
       <BackLink href="/admin/shop/products" label="Volver a productos" />
 
-      {/* Banner producto inactivo */}
       {!group.active && (
         <InactiveAlert
           resourceName={group.name}
@@ -229,9 +202,8 @@ export default function AdminProductDetailPage() {
         />
       )}
 
-      {/* ── Layout principal: imagen + info + variante seleccionada ── */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-        {/* Columna izquierda: Imagen + color swatches */}
+        {/* Columna izquierda: imagen + selector de colores */}
         <Card className="flex flex-col items-center justify-center p-8">
           <div className="w-full max-w-sm">
             <ProductImage
@@ -258,166 +230,49 @@ export default function AdminProductDetailPage() {
           )}
         </Card>
 
-        {/* Columna derecha: Info grupo + botones grupo + variante seleccionada */}
+        {/* Columna derecha: header del grupo + variante seleccionada */}
         <div className="space-y-5">
-          {/* Badges + título */}
-          <div>
-            <div className="flex items-center gap-2 mb-3 flex-wrap">
-              {group.category && <Badge variant="neutral">{group.category}</Badge>}
-              <Badge variant={group.active ? "success" : "danger"}>
-                {group.active ? "Activo" : "Inactivo"}
-              </Badge>
-              <Badge variant="info">
-                {group.activeVariantsCount}/{group.variants.length} variantes activas
-              </Badge>
-            </div>
+          <ProductAdminHeader
+            groupKey={group.groupKey}
+            name={group.name}
+            description={group.description}
+            category={group.category}
+            active={group.active}
+            totalStock={group.totalStock}
+            minPrice={group.minPrice}
+            maxPrice={group.maxPrice}
+            activeVariantsCount={group.activeVariantsCount}
+            totalVariants={group.variants.length}
+            toggling={toggling === "group"}
+            onEdit={() => router.push(`/admin/shop/products/${group.groupKey}/edit-group`)}
+            onToggleActive={handleToggleGroup}
+          />
 
-            <h1 className="text-2xl font-bold text-text">{group.name}</h1>
-
-            {group.description && (
-              <p className="text-text-muted mt-2 leading-relaxed">{group.description}</p>
-            )}
-          </div>
-
-          {/* Precio + stock en línea */}
-          <div className="flex items-baseline gap-3">
-            <span className="text-3xl font-bold text-primary">{priceLabel}</span>
-            <span className="text-sm text-text-muted">· {group.totalStock} uds. en stock</span>
-          </div>
-
-          {/* Botones del grupo */}
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => router.push(`/admin/shop/products/${group.groupKey}/edit-group`)}
-            >
-              Editar grupo
-            </Button>
-            <Button
-              variant={group.active ? "danger" : "success"}
-              className="flex-1"
-              onClick={handleToggleGroup}
-              loading={toggling === "group"}
-            >
-              {group.active ? "Desactivar grupo" : "Reactivar grupo"}
-            </Button>
-          </div>
-
-          {/* Variante seleccionada — debajo de los botones del grupo */}
-          <Card className={`${selectedVariant.active ? "bg-primary/5 border-primary/20" : "bg-danger/5 border-danger/20"}`}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-bold text-text">{selectedVariant.name}</h3>
-                <Badge variant={selectedVariant.active ? "success" : "danger"}>
-                  {selectedVariant.active ? "Activa" : "Inactiva"}
-                </Badge>
-              </div>
-              <Badge variant="neutral">#{selectedVariant.productId}</Badge>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 mb-4">
-              <div>
-                <p className="text-xs text-text-muted">Color</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <span
-                    className="inline-block h-4 w-4 rounded-full border border-border-default"
-                    style={{ backgroundColor: colorToHex(selectedVariant.color || "default") }}
-                  />
-                  <span className="text-sm font-medium text-text">{selectedVariant.color || "—"}</span>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-text-muted">Precio</p>
-                <p className="text-sm font-semibold text-primary mt-1">{selectedVariant.price} ShopTokens</p>
-              </div>
-              <div>
-                <p className="text-xs text-text-muted">Stock</p>
-                <p className="text-sm font-semibold text-text mt-1">{selectedVariant.stock} uds.</p>
-              </div>
-              {selectedVariant.variantLabel && (
-                <div>
-                  <p className="text-xs text-text-muted">Etiqueta</p>
-                  <p className="text-sm font-medium text-text mt-1">{selectedVariant.variantLabel}</p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1"
-                onClick={() => router.push(`/admin/shop/products/variants/${selectedVariant.id}/edit?from=detail&group=${group.groupKey}`)}
-              >
-                Editar variante
-              </Button>
-              <Button
-                variant={selectedVariant.active ? "danger" : "success"}
-                size="sm"
-                className="flex-1"
-                onClick={() => handleToggleVariant(selectedVariant.id, selectedVariant.active)}
-                loading={toggling === selectedVariant.id}
-              >
-                {selectedVariant.active ? "Desactivar variante" : "Reactivar variante"}
-              </Button>
-            </div>
-          </Card>
+          <VariantDetailCard
+            productId={selectedVariant.productId}
+            name={selectedVariant.name}
+            color={selectedVariant.color}
+            variantLabel={selectedVariant.variantLabel}
+            price={selectedVariant.price}
+            stock={selectedVariant.stock}
+            active={selectedVariant.active}
+            toggling={toggling === selectedVariant.id}
+            onEdit={() => router.push(`/admin/shop/products/variants/${selectedVariant.id}/edit?from=detail&group=${group.groupKey}`)}
+            onToggleActive={() => handleToggleVariant(selectedVariant.id, selectedVariant.active)}
+          />
         </div>
       </div>
 
-      {/* ── Grid de todas las variantes + card de añadir ── */}
-      <section className="space-y-4">
-        <SectionTitle icon={icons.shop}>Todas las variantes ({group.variants.length})</SectionTitle>
-
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {group.variants.map((v) => (
-            <VariantGridItem
-              key={v.id}
-              id={v.id}
-              name={v.name}
-              color={v.color}
-              price={v.price}
-              stock={v.stock}
-              imageUrl={v.imageUrl}
-              category={group.category}
-              active={v.active}
-              selected={v.id === selectedVariantId}
-              toggling={toggling === v.id}
-              onSelect={() => setSelectedVariantId(v.id)}
-              onEdit={() => router.push(`/admin/shop/products/variants/${v.id}/edit?from=detail&group=${group.groupKey}`)}
-              onToggleActive={() => handleToggleVariant(v.id, v.active)}
-            />
-          ))}
-
-          {/* Card de añadir variante — solo si no crea una fila sola */}
-          {/* Ocultar en cada breakpoint si variants.length es múltiplo de las columnas de ese breakpoint */}
-          <AddCard
-            label="Añadir variante"
-            onClick={() => router.push(`/admin/shop/products/${group.groupKey}/add-variant`)}
-            className={[
-              group.variants.length % 2 === 0 ? "hidden" : "",
-              group.variants.length % 3 === 0 ? "sm:hidden" : "sm:flex",
-              group.variants.length % 4 === 0 ? "lg:hidden" : "lg:flex",
-            ].join(" ")}
-          />
-        </div>
-
-        {/* Botón pequeño — solo visible cuando la card está oculta */}
-        <div className={[
-          "flex justify-center pt-2",
-          group.variants.length % 2 === 0 ? "" : "hidden",
-          group.variants.length % 3 === 0 ? "sm:flex" : "sm:hidden",
-          group.variants.length % 4 === 0 ? "lg:flex" : "lg:hidden",
-        ].join(" ")}>
-          <Button
-            variant="outline"
-            onClick={() => router.push(`/admin/shop/products/${group.groupKey}/add-variant`)}
-          >
-            + Añadir nueva variante
-          </Button>
-        </div>
-      </section>
+      <VariantGrid
+        variants={group.variants}
+        category={group.category}
+        selectedVariantId={selectedVariantId}
+        toggling={toggling}
+        onSelect={setSelectedVariantId}
+        onEditVariant={(variantId) => router.push(`/admin/shop/products/variants/${variantId}/edit?from=detail&group=${group.groupKey}`)}
+        onToggleVariant={handleToggleVariant}
+        onAddVariant={() => router.push(`/admin/shop/products/${group.groupKey}/add-variant`)}
+      />
     </div>
   );
 }

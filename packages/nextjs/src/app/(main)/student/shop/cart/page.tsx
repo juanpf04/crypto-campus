@@ -3,16 +3,8 @@
 /**
  * Carrito de la tienda del estudiante.
  *
- * Layout:
- * - Lista de items con imagen, nombre, variante, cantidad (editable),
- *   precio unitario, subtotal y botón eliminar
- * - Card de resumen con total y botón "Finalizar compra"
- * - Al finalizar: modal confirmación → checkout → redirige a pedidos
- *
- * Componentes usados:
- * - QuantitySelector (atómico) — selección de cantidad por item
- * - PurchaseConfirmModal (intermedio) — confirmación antes de pagar
- * - ProductImage (intermedio) — miniatura del producto
+ * Page fina que orquesta fetches y compone los organisms CartItemList +
+ * CartSummary + PurchaseConfirmModal.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -21,24 +13,15 @@ import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { SkeletonPage } from "@/components/ui/Skeleton";
-import { QuantitySelector } from "@/components/ui/QuantitySelector";
-import { ProductImage } from "@/components/shared/ProductImage";
 import { PurchaseConfirmModal, type PurchaseItem } from "@/components/shared/PurchaseConfirmModal";
+import { CartItemList, type CartItemListItem } from "@/components/dashboard/CartItemList";
+import { CartSummary } from "@/components/dashboard/CartSummary";
 import { useToast } from "@/hooks/useToast";
+import { toastRewards } from "@/lib/rewardToast";
 import { useCart } from "@/contexts/CartContext";
 
-interface CartItem {
-  id: string;
+interface CartItem extends CartItemListItem {
   productId: string;
-  name: string;
-  price: number;
-  quantity: number;
-  stock: number;
-  imageUrl: string | null;
-  category: string | null;
-  color: string | null;
-  variantLabel: string | null;
-  subtotal: number;
 }
 
 interface CartPayload {
@@ -58,11 +41,9 @@ export default function StudentCartPage() {
   const [balance, setBalance] = useState(0);
   const pendingHandledRef = useRef(false);
 
-  // Modal de confirmación
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
 
-  // Carga inicial: carrito + balance
   const loadCart = useCallback(async () => {
     try {
       const [cartRes, balanceRes] = await Promise.all([
@@ -134,7 +115,6 @@ export default function StudentCartPage() {
     addPendingProduct();
   }, [addToast, loadCart, router, searchParams, setItemCount]);
 
-  // Actualizar cantidad
   async function updateQuantity(itemId: string, newQuantity: number) {
     if (newQuantity < 1) return;
 
@@ -152,7 +132,6 @@ export default function StudentCartPage() {
     setCart(body);
   }
 
-  // Eliminar item
   async function removeItem(itemId: string) {
     const res = await fetch(`/api/shop/cart?itemId=${itemId}`, { method: "DELETE" });
     const body = await res.json();
@@ -164,7 +143,6 @@ export default function StudentCartPage() {
     addToast("Producto eliminado del carrito", "success");
   }
 
-  // Vaciar carrito
   async function clearCart() {
     const res = await fetch("/api/shop/cart?clear=1", { method: "DELETE" });
     const body = await res.json();
@@ -176,7 +154,6 @@ export default function StudentCartPage() {
     addToast("Carrito vaciado", "success");
   }
 
-  // Checkout: confirmar desde modal
   async function handleConfirmCheckout() {
     setCheckingOut(true);
     setConfirmOpen(false);
@@ -191,13 +168,13 @@ export default function StudentCartPage() {
         return;
       }
 
-      // Actualizar carrito flotante a 0
       setItemCount(0);
 
       addToast(
         `Compra realizada. ${body.ordersCreated} producto${body.ordersCreated > 1 ? "s" : ""} pagado${body.ordersCreated > 1 ? "s" : ""}. Nuevo saldo: ${body.newBalance} ShopTokens`,
         "success",
       );
+      toastRewards(addToast, body.rewards);
 
       setTimeout(() => {
         router.push(`/student/shop/orders/batch/${body.batchId}`);
@@ -208,7 +185,6 @@ export default function StudentCartPage() {
     }
   }
 
-  // Mapear items del carrito para el modal de confirmación
   const purchaseItems: PurchaseItem[] = cart?.items.map((item) => ({
     name: item.name,
     quantity: item.quantity,
@@ -219,10 +195,10 @@ export default function StudentCartPage() {
     variantLabel: item.variantLabel,
   })) ?? [];
 
-  // ── Loading ──
   if (loading) return <SkeletonPage />;
 
   const isEmpty = !cart || cart.items.length === 0;
+  const totalUnits = cart?.items.reduce((a, i) => a + i.quantity, 0) ?? 0;
 
   return (
     <div className="space-y-6">
@@ -250,91 +226,22 @@ export default function StudentCartPage() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
-          {/* ── Lista de items (75%) ── */}
-          <div className="space-y-4">
-            {cart.items.map((item) => (
-              <Card key={item.id} className="flex items-center gap-4">
-                {/* Imagen */}
-                <div className="h-20 w-20 shrink-0 rounded-lg bg-primary/5 p-2">
-                  <ProductImage
-                    imageUrl={item.imageUrl}
-                    name={item.name}
-                    category={item.category}
-                    className="h-full w-full object-contain"
-                    emojiSize="md"
-                  />
-                </div>
+          <CartItemList
+            items={cart.items}
+            onUpdateQuantity={updateQuantity}
+            onRemove={removeItem}
+          />
 
-                {/* Info */}
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-text line-clamp-2">{item.name}</p>
-                  <p className="text-sm text-text-muted">
-                    {item.variantLabel ?? item.color ?? ""} · {item.price} ShopTokens/ud.
-                  </p>
-                </div>
-
-                {/* Selector de cantidad */}
-                <QuantitySelector
-                  value={item.quantity}
-                  onChange={(q) => updateQuantity(item.id, q)}
-                  min={1}
-                  max={item.stock}
-                  size="sm"
-                />
-
-                {/* Subtotal */}
-                <div className="w-24 text-right">
-                  <p className="font-semibold text-text">{item.subtotal} ShopTokens</p>
-                </div>
-
-                {/* Eliminar */}
-                <button
-                  type="button"
-                  onClick={() => removeItem(item.id)}
-                  className="shrink-0 rounded-md p-1.5 text-text-muted hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer"
-                  aria-label="Eliminar producto"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-                    <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                  </svg>
-                </button>
-              </Card>
-            ))}
-          </div>
-
-          {/* ── Resumen (25%) ── */}
-          <div className="lg:sticky lg:top-6 self-start">
-            <Card className="space-y-4">
-              <div className="space-y-1">
-                <p className="text-lg font-semibold text-text">
-                  Total ({cart.items.reduce((a, i) => a + i.quantity, 0)} {cart.items.reduce((a, i) => a + i.quantity, 0) === 1 ? "unidad" : "unidades"})
-                </p>
-                <p className="text-xl font-bold text-primary">{cart.total} ShopTokens</p>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => router.push("/student/shop")}
-                  className="w-full"
-                >
-                  &larr; Seguir comprando
-                </Button>
-                <Button
-                  onClick={() => setConfirmOpen(true)}
-                  disabled={checkingOut}
-                  loading={checkingOut}
-                  className="w-full"
-                >
-                  Finalizar compra
-                </Button>
-              </div>
-            </Card>
-          </div>
+          <CartSummary
+            totalUnits={totalUnits}
+            totalPrice={cart.total}
+            onContinueShopping={() => router.push("/student/shop")}
+            onCheckout={() => setConfirmOpen(true)}
+            checkingOut={checkingOut}
+          />
         </div>
       )}
 
-      {/* ── Modal de confirmación ── */}
       <PurchaseConfirmModal
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}

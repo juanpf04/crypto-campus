@@ -81,7 +81,7 @@ export function SubjectOfferingForm({
       </div>
       {submitError && <p className="text-sm text-danger">{submitError}</p>}
       <Button type="submit" loading={loading}>
-        {isEdit ? "Guardar cambios" : "Crear oferta"}
+        {isEdit ? "Guardar cambios" : "Crear grupo"}
       </Button>
     </form>
   );

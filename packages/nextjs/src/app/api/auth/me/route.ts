@@ -18,6 +18,7 @@ export async function GET() {
       email: true,
       name: true,
       role: true,
+      active: true,
       onboardingCompleted: true,
       // NO devolvemos: password, address, encryptedKey
     },
@@ -30,6 +31,15 @@ export async function GET() {
     return NextResponse.json(
       { error: "Usuario no encontrado" },
       { status: 401 }
+    );
+  }
+
+  // Si el admin desactivó al usuario mientras tenía sesión abierta, la invalidamos.
+  if (!user.active) {
+    session.destroy();
+    return NextResponse.json(
+      { error: "Cuenta desactivada" },
+      { status: 403 }
     );
   }
 

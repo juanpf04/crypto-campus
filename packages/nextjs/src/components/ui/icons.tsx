@@ -225,4 +225,66 @@ export const icons: Record<string, ReactNode> = {
       <line x1="3" y1="21" x2="10" y2="14" />
     </svg>
   ),
+
+  chevronRight: (
+    <svg {...svgProps}>
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
+  ),
+
+  chevronDown: (
+    <svg {...svgProps}>
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  ),
+
+  plus: (
+    <svg {...svgProps}>
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  ),
+
+  pencil: (
+    <svg {...svgProps}>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+    </svg>
+  ),
+
+  cart: (
+    <svg {...svgProps}>
+      <circle cx="9" cy="21" r="1" />
+      <circle cx="20" cy="21" r="1" />
+      <path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6" />
+    </svg>
+  ),
+
+  trash: (
+    <svg {...svgProps}>
+      <path d="M3 6h18" />
+      <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" />
+      <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+    </svg>
+  ),
+
+  logout: (
+    <svg {...svgProps}>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  ),
+
+  close: (
+    <svg {...svgProps}>
+      <path d="M18 6L6 18M6 6l12 12" />
+    </svg>
+  ),
+
+  check: (
+    <svg {...svgProps}>
+      <path d="M20 6L9 17l-5-5" />
+    </svg>
+  ),
 };

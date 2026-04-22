@@ -26,7 +26,7 @@ import {
 	LIBRARY_MANAGER_ABI,
 	LIBRARY_TOKEN_ABI,
 } from "@/lib/contracts";
-import { issueReward, ShopTokenRewardReason } from "@/lib/shopRewards";
+import { hasRewardOfType, issueReward, ShopTokenRewardReason, type RewardGrant } from "@/lib/shopRewards";
 
 // ── Helpers internos ─────────────────────────────────────────────────────
 
@@ -468,7 +468,27 @@ export async function requestLoan(itemId: string) {
 			throw new Error(`Error al guardar en base de datos. TxHash: ${hash}`);
 		}
 
-		return { success: true, loan, queued: !isReserved };
+		// Bonus primer uso del módulo Biblioteca
+		let rewards: RewardGrant[] = [];
+		const alreadyHad = await hasRewardOfType(
+			session.userId!,
+			ShopTokenRewardReason.MODULE_FIRST_USE_LIBRARY,
+		);
+		if (!alreadyHad) {
+			const student = await prisma.user.findUnique({
+				where: { id: session.userId! },
+				select: { address: true },
+			});
+			if (student) {
+				rewards = await issueReward({
+					userId: session.userId!,
+					userAddress: student.address,
+					mainReason: ShopTokenRewardReason.MODULE_FIRST_USE_LIBRARY,
+				});
+			}
+		}
+
+		return { success: true, loan, queued: !isReserved, rewards };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al solicitar préstamo: ${error instanceof Error ? error.message : "desconocido"}`);
@@ -600,7 +620,10 @@ export async function confirmReturn(loanPrismaId: string) {
 
 		await processQueueEvents(receipt);
 
-		// ── Recompensa por devolución ────────────────────────────────────────
+		// ── Recompensa por devolución a tiempo ───────────────────────────────
+		// Solo recompensa principal: el bonus de primer uso del módulo se
+		// concede al solicitar el primer préstamo, no al devolverlo.
+		// No se notifica al estudiante (esta acción la dispara la bibliotecaria).
 		if (!isOverdue && loan.dueDate) {
 			const student = await prisma.user.findUnique({
 				where: { id: loan.userId },
@@ -617,7 +640,6 @@ export async function confirmReturn(loanPrismaId: string) {
 					userId: loan.userId,
 					userAddress: student.address,
 					mainReason,
-					firstUseReason: ShopTokenRewardReason.MODULE_FIRST_USE_LIBRARY,
 				});
 			}
 		}

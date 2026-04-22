@@ -2,14 +2,11 @@
 
 /**
  * Historial de impresiones (vista bibliotecario).
- *
- * Tabla paginada con todos los trabajos de impresión del usuario,
- * mostrando archivo, impresora, páginas, créditos usados y fecha.
  */
 
-import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
+import { usePaginatedList } from "@/hooks/usePaginatedList";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
 import { SkeletonTable } from "@/components/ui/Skeleton";
@@ -17,7 +14,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { Badge } from "@/components/ui/Badge";
 import { LinkArrow } from "@/components/shared/LinkArrow";
-import { formatShortDate, formatCredits } from "@/lib/formatters";
+import { formatShortDate } from "@/lib/formatters";
 import {
   Table,
   TableHeader,
@@ -49,34 +46,18 @@ export default function LibrarianPrintHistoryPage() {
   const router = useRouter();
   const { addToast } = useToast();
 
-  const [logs, setLogs] = useState<PrintLog[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [offset, setOffset] = useState(0);
-  const [totalLogs, setTotalLogs] = useState(0);
+  const list = usePaginatedList<PrintLog>({
+    endpoint: "/api/printer/logs",
+    pageSize: PAGE_SIZE,
+    onError: () => addToast("Error al cargar historial", "danger"),
+    parseResponse: (data, offset, limit) => {
+      const items = Array.isArray(data) ? (data as PrintLog[]) : [];
+      const total = items.length < limit ? offset + items.length : offset + limit + 1;
+      return { items, total };
+    },
+  });
 
-  const fetchLogs = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/printer/logs?limit=${PAGE_SIZE}&offset=${offset}`);
-      const data = await res.json();
-      setLogs(data ?? []);
-
-      if (data.length < PAGE_SIZE) {
-        setTotalLogs(offset + data.length);
-      } else {
-        setTotalLogs((prev) => Math.max(prev, offset + PAGE_SIZE + 1));
-      }
-    } catch {
-      addToast("Error al cargar historial", "danger");
-    } finally {
-      setLoading(false);
-    }
-  }, [offset, addToast]);
-
-  useEffect(() => {
-    fetchLogs();
-  }, [fetchLogs]);
-
-  if (loading) return <SkeletonTable columns={8} rows={8} />;
+  if (list.loading) return <SkeletonTable columns={8} rows={8} />;
 
   return (
     <div className="space-y-6">
@@ -89,7 +70,7 @@ export default function LibrarianPrintHistoryPage() {
         </p>
       </div>
 
-      {logs.length === 0 ? (
+      {list.items.length === 0 ? (
         <EmptyState
           title="Sin impresiones"
           description="Aún no has realizado ninguna impresión."
@@ -111,7 +92,7 @@ export default function LibrarianPrintHistoryPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {logs.map((log) => (
+                {list.items.map((log) => (
                   <TableRow
                     key={log.id}
                     className="cursor-pointer hover:bg-primary/5 transition-colors"
@@ -144,10 +125,10 @@ export default function LibrarianPrintHistoryPage() {
           </Card>
 
           <Pagination
-            offset={offset}
-            limit={PAGE_SIZE}
-            total={totalLogs}
-            onChange={setOffset}
+            offset={list.offset}
+            limit={list.limit}
+            total={list.total}
+            onChange={list.setOffset}
           />
         </>
       )}

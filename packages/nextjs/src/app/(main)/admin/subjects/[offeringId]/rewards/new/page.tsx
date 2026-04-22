@@ -86,7 +86,7 @@ export default function AdminNewRewardInOfferingPage() {
         )}
       </div>
 
-      <Card className="max-w-2xl p-6">
+      <Card className="max-w-2xl mx-auto p-6">
         <RewardForm onSubmit={handleSubmit} fixedOfferingId={offeringId} />
       </Card>
     </div>

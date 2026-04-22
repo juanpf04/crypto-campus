@@ -30,3 +30,4 @@ export { UseRequestsTable } from "./UseRequestsTable";
 export { PrizeAwardSection } from "./PrizeAwardSection";
 export { StudentGlobalRow } from "./StudentGlobalRow";
 export { TaskCompletionIndicator } from "./TaskCompletionIndicator";
+export { NavCard } from "./NavCard";

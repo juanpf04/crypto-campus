@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
+import { usePaginatedList } from "@/hooks/usePaginatedList";
 import { BackLink } from "@/components/ui/BackLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -26,35 +27,17 @@ interface LibraryItem {
 export default function LibrarianItemsPage() {
   const router = useRouter();
   const { addToast } = useToast();
-
-  const [items, setItems] = useState<LibraryItem[]>([]);
-  const [total, setTotal] = useState(0);
-  const [offset, setOffset] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState<LibraryTypeFilter>("ALL");
 
-  const loadItems = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        activeOnly: "false",
-        limit: String(PAGE_SIZE),
-        offset: String(offset),
-      });
-      if (typeFilter !== "ALL") params.set("type", typeFilter);
-
-      const res = await fetch(`/api/library/items?${params}`);
-      const data = await res.json();
-      setItems(data.items ?? []);
-      setTotal(data.total ?? 0);
-    } catch {
-      addToast("Error al cargar ítems", "danger");
-    } finally {
-      setLoading(false);
-    }
-  }, [addToast, offset, typeFilter]);
-
-  useEffect(() => { loadItems(); }, [loadItems]);
+  const list = usePaginatedList<LibraryItem>({
+    endpoint: "/api/library/items",
+    pageSize: PAGE_SIZE,
+    filters: {
+      activeOnly: "false",
+      type: typeFilter === "ALL" ? null : typeFilter,
+    },
+    onError: () => addToast("Error al cargar ítems", "danger"),
+  });
 
   async function handleToggleActive(itemId: string, currentlyActive: boolean) {
     try {
@@ -62,7 +45,7 @@ export default function LibrarianItemsPage() {
       const res = await fetch(`/api/library/items/${itemId}`, { method });
       if (!res.ok) throw new Error((await res.json()).error);
       addToast(currentlyActive ? "Ítem desactivado" : "Ítem reactivado", "success");
-      loadItems();
+      list.refresh();
     } catch (err) {
       addToast(err instanceof Error ? err.message : "Error", "danger");
     }
@@ -74,31 +57,31 @@ export default function LibrarianItemsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-text">Catálogo</h1>
-          {loading ? (
+          {list.loading ? (
             <Skeleton className="mt-2 h-4 w-52" />
           ) : (
-            <p className="text-text-muted mt-1">{total} ítem(s) registrados</p>
+            <p className="text-text-muted mt-1">{list.total} ítem(s) registrados</p>
           )}
         </div>
-        <Button disabled={loading} onClick={() => router.push("/librarian/items/new")}>Añadir ítem</Button>
+        <Button disabled={list.loading} onClick={() => router.push("/librarian/items/new")}>Añadir ítem</Button>
       </div>
 
-      {!loading && (
+      {!list.loading && (
         <FilterPills
           options={LIBRARY_TYPE_OPTIONS}
           selected={typeFilter}
-          onChange={(v) => { setTypeFilter(v); setOffset(0); }}
+          onChange={setTypeFilter}
         />
       )}
 
-      {loading && items.length === 0 ? (
+      {list.loading && list.items.length === 0 ? (
         <SkeletonTable columns={7} rows={8} />
-      ) : items.length === 0 ? (
+      ) : list.items.length === 0 ? (
         <EmptyState title="Sin ítems" description="No hay ítems con estos filtros." />
       ) : (
         <>
           <Card className="overflow-hidden p-0">
-            <div className={loading ? "opacity-50 transition-opacity" : ""}>
+            <div className={list.loading ? "opacity-50 transition-opacity" : ""}>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -112,7 +95,7 @@ export default function LibrarianItemsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map((item) => (
+                  {list.items.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell className="font-medium">{item.title}</TableCell>
                       <TableCell>{TYPE_LABELS[item.type] || item.type}</TableCell>
@@ -140,7 +123,7 @@ export default function LibrarianItemsPage() {
               </Table>
             </div>
           </Card>
-          <Pagination offset={offset} limit={PAGE_SIZE} total={total} onChange={setOffset} />
+          <Pagination offset={list.offset} limit={list.limit} total={list.total} onChange={list.setOffset} />
         </>
       )}
     </div>

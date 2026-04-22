@@ -58,6 +58,17 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // ─── 4.5. Cuenta desactivada ───
+  // El admin puede hacer soft-delete de un usuario (User.active = false). En ese
+  // caso el login devuelve un mensaje explícito, sin filtrar si la contraseña era
+  // correcta o no (el error va después del check de password intencionadamente).
+  if (!user.active) {
+    return NextResponse.json(
+      { error: "Tu cuenta está desactivada. Contacta con el administrador." },
+      { status: 403 }
+    );
+  }
+
   // ─── 5. Crear la sesión ───
   // iron-session cifra los datos y los guarda en una cookie httpOnly.
   // httpOnly = JavaScript del navegador NO puede leer la cookie (protege contra XSS).

@@ -164,7 +164,7 @@ export default function StudentItemDetailPage() {
               {item.availableCopies > 0
                 ? "Se reservará una copia (recogida en 3 días)"
                 : "Entrarás en la lista de espera"}
-              {" · "}1 LibraryToken como depósito
+              {" · "}1 Token de Préstamo como depósito
             </p>
           </Card>
         </div>

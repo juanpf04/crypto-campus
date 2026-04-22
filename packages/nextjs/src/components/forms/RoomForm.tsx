@@ -48,7 +48,7 @@ export function RoomForm({ onSubmit, initialValues, isEdit }: RoomFormProps) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <Input
         label="Nombre de la sala"
-        placeholder="Sala de Estudio A"
+        placeholder="Ej: Sala de Estudio A"
         value={fields.name}
         onChange={setField("name")}
         error={errors.name}
@@ -62,7 +62,7 @@ export function RoomForm({ onSubmit, initialValues, isEdit }: RoomFormProps) {
       <div className="grid grid-cols-2 gap-4">
         <Input
           label="Ubicación"
-          placeholder="Planta 2, ala norte"
+          placeholder="Ej: Planta 2, ala norte"
           value={fields.location}
           onChange={setField("location")}
         />

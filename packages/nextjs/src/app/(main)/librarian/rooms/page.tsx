@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
+import { usePaginatedList } from "@/hooks/usePaginatedList";
 import { BackLink } from "@/components/ui/BackLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -23,31 +23,13 @@ interface Room {
 export default function LibrarianRoomsPage() {
   const router = useRouter();
   const { addToast } = useToast();
-  const [items, setItems] = useState<Room[]>([]);
-  const [total, setTotal] = useState(0);
-  const [offset, setOffset] = useState(0);
-  const [loading, setLoading] = useState(true);
 
-  const loadRooms = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        activeOnly: "false",
-        limit: String(PAGE_SIZE),
-        offset: String(offset),
-      });
-      const res = await fetch(`/api/rooms?${params}`);
-      const data = await res.json();
-      setItems(data.items ?? []);
-      setTotal(data.total ?? 0);
-    } catch {
-      addToast("Error al cargar salas", "danger");
-    } finally {
-      setLoading(false);
-    }
-  }, [addToast, offset]);
-
-  useEffect(() => { loadRooms(); }, [loadRooms]);
+  const list = usePaginatedList<Room>({
+    endpoint: "/api/rooms",
+    pageSize: PAGE_SIZE,
+    filters: { activeOnly: "false" },
+    onError: () => addToast("Error al cargar salas", "danger"),
+  });
 
   async function handleToggleActive(roomId: string, currentlyActive: boolean) {
     const action = currentlyActive ? "desactivar" : "reactivar";
@@ -65,13 +47,13 @@ export default function LibrarianRoomsPage() {
         if (!res.ok) throw new Error(`Error al ${action} sala`);
       }
       addToast(`Sala ${currentlyActive ? "desactivada" : "reactivada"}`, "success");
-      loadRooms();
+      list.refresh();
     } catch (err) {
       addToast(err instanceof Error ? err.message : "Error", "danger");
     }
   }
 
-  if (loading && items.length === 0) return <SkeletonTable columns={5} rows={6} />;
+  if (list.loading && list.items.length === 0) return <SkeletonTable columns={5} rows={6} />;
 
   return (
     <div className="space-y-6">
@@ -79,17 +61,17 @@ export default function LibrarianRoomsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-text">Salas de estudio</h1>
-          <p className="text-text-muted mt-1">{total} sala(s) registradas</p>
+          <p className="text-text-muted mt-1">{list.total} sala(s) registradas</p>
         </div>
         <Button onClick={() => router.push("/librarian/rooms/new")}>Crear sala</Button>
       </div>
 
-      {items.length === 0 ? (
+      {list.items.length === 0 ? (
         <EmptyState title="Sin salas" description="No hay salas registradas." />
       ) : (
         <>
           <Card className="overflow-hidden p-0">
-            <div className={loading ? "opacity-50 transition-opacity" : ""}>
+            <div className={list.loading ? "opacity-50 transition-opacity" : ""}>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -101,7 +83,7 @@ export default function LibrarianRoomsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map((room) => (
+                  {list.items.map((room) => (
                     <TableRow key={room.id}>
                       <TableCell className="font-medium">{room.name}</TableCell>
                       <TableCell className="text-text-muted">{room.location || "—"}</TableCell>
@@ -127,7 +109,7 @@ export default function LibrarianRoomsPage() {
               </Table>
             </div>
           </Card>
-          <Pagination offset={offset} limit={PAGE_SIZE} total={total} onChange={setOffset} />
+          <Pagination offset={list.offset} limit={list.limit} total={list.total} onChange={list.setOffset} />
         </>
       )}
     </div>

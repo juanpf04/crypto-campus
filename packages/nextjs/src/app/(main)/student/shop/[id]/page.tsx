@@ -3,14 +3,8 @@
 /**
  * Detalle de un producto de la tienda.
  *
- * Layout:
- * - Izquierda (50%): Imagen grande + miniaturas de variantes
- * - Derecha (50%): Ficha con nombre, descripción, color, precio,
- *   stock, selector de cantidad + botones carrito/comprar
- *
- * Flujos:
- * - "Añadir al carrito" → toast + redirige al catálogo
- * - "Comprar ahora"     → modal confirmación → overlay animado → detalle pedido
+ * Layout: imagen + miniaturas (izq) + ProductDetailPanel (der).
+ * Orquesta fetches (grupos, balance, carrito, compra directa) y el overlay.
  */
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -19,33 +13,23 @@ import { useToast } from "@/hooks/useToast";
 import { useCart } from "@/contexts/CartContext";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
 import { SkeletonPage } from "@/components/ui/Skeleton";
-import { QuantitySelector } from "@/components/ui/QuantitySelector";
-import { DetailField } from "@/components/shared/DetailField";
 import { PurchaseOverlay } from "@/components/shared/PurchaseOverlay";
 import { PurchaseConfirmModal } from "@/components/shared/PurchaseConfirmModal";
 import { ProductImage } from "@/components/shared/ProductImage";
-import { ColorSwatchRow } from "@/components/shared/ColorSwatchRow";
+import {
+  ProductDetailPanel,
+  type ProductDetailGroup,
+  type ProductDetailVariant,
+} from "@/components/dashboard/ProductDetailPanel";
 
-interface ProductVariant {
-  id: string;
+interface ProductVariant extends ProductDetailVariant {
   productId: number;
-  name: string;
-  color: string;
-  variantLabel: string | null;
-  price: number;
-  stock: number;
-  category: string | null;
-  imageUrl: string | null;
 }
 
-interface ProductGroup {
+interface ProductGroup extends ProductDetailGroup {
   groupKey: string;
-  name: string;
   category: string | null;
-  description: string | null;
   variants: ProductVariant[];
 }
 
@@ -62,17 +46,14 @@ export default function StudentProductDetailPage() {
   const [quantity, setQuantity] = useState(1);
   const [addingToCart, setAddingToCart] = useState(false);
 
-  // Estado del modal de confirmación
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmLoading, setConfirmLoading] = useState(false);
 
-  // Estado del overlay de compra
   const [purchaseState, setPurchaseState] = useState<{
     active: boolean;
     promise: Promise<string | null> | null;
   }>({ active: false, promise: null });
 
-  // Carga inicial
   useEffect(() => {
     if (!id) return;
 
@@ -113,25 +94,19 @@ export default function StudentProductDetailPage() {
           setSelectedVariantId(singleProduct.id);
         }
       })
-        .catch(() => addToast("Error al cargar el producto", "danger"))
-        .finally(() => setLoading(false));
-      }, [id, addToast]);
+      .catch(() => addToast("Error al cargar el producto", "danger"))
+      .finally(() => setLoading(false));
+  }, [id, addToast]);
 
-  // Variante seleccionada
   const selectedVariant = useMemo(
     () => group?.variants.find((v) => v.id === selectedVariantId) ?? group?.variants[0] ?? null,
     [group, selectedVariantId],
   );
 
-  // Reset cantidad al cambiar de variante
   useEffect(() => {
     setQuantity(1);
   }, [selectedVariantId]);
 
-  // Precio total según cantidad
-  const totalPrice = selectedVariant ? selectedVariant.price * quantity : 0;
-
-  // ── Añadir al carrito ──
   async function handleAddToCart() {
     if (!selectedVariant) return;
     setAddingToCart(true);
@@ -161,18 +136,11 @@ export default function StudentProductDetailPage() {
     }
   }
 
-  // ── Compra directa: abrir modal ──
-  function handleBuyNowClick() {
-    setConfirmOpen(true);
-  }
-
-  // ── Compra directa: confirmar desde el modal ──
   async function handleConfirmPurchase() {
     if (!selectedVariant) return;
     setConfirmLoading(true);
     setConfirmOpen(false);
 
-    // Una sola llamada con quantity — crea batch + auto-deliver
     const purchasePromise = (async () => {
       const res = await fetch("/api/shop/purchase", {
         method: "POST",
@@ -192,22 +160,17 @@ export default function StudentProductDetailPage() {
     setConfirmLoading(false);
   }
 
-  // Cuando termina el overlay → redirigir al detalle del ticket
   const handlePurchaseComplete = useCallback((batchId: string | null) => {
     if (batchId) {
       addToast("Compra realizada correctamente", "success");
-      // No desactivamos el overlay — se mantiene visible hasta que
-      // router.replace() desmonte este componente al navegar
       router.replace(`/student/shop/orders/batch/${batchId}`);
     } else {
       setPurchaseState({ active: false, promise: null });
     }
   }, [router, addToast]);
 
-  // ── Loading ──
   if (loading) return <SkeletonPage />;
 
-  // ── Producto no encontrado ──
   if (!group || !selectedVariant) {
     return (
       <div className="space-y-6">
@@ -217,7 +180,6 @@ export default function StudentProductDetailPage() {
     );
   }
 
-  // ── Overlay de compra ──
   if (purchaseState.active && purchaseState.promise) {
     return (
       <PurchaseOverlay
@@ -227,8 +189,6 @@ export default function StudentProductDetailPage() {
       />
     );
   }
-
-  const isOutOfStock = selectedVariant.stock <= 0;
 
   return (
     <div className="space-y-6">
@@ -275,105 +235,20 @@ export default function StudentProductDetailPage() {
           )}
         </div>
 
-        {/* ── Columna derecha: Información ── */}
-        <Card className="space-y-5">
-          {/* Categoría */}
-          {selectedVariant.category && (
-            <Badge variant="neutral">{selectedVariant.category}</Badge>
-          )}
-
-          {/* Nombre */}
-          <h1 className="text-2xl font-bold text-text">{group.name}</h1>
-
-          {/* Descripción */}
-          {group.description && (
-            <p className="text-text-muted leading-relaxed">{group.description}</p>
-          )}
-
-          {/* Selector de color */}
-          {group.variants.length > 1 && (
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-text">
-                Color: <span className="text-text-muted">{selectedVariant.variantLabel ?? selectedVariant.color}</span>
-              </p>
-              <ColorSwatchRow
-                variants={group.variants}
-                selectedId={selectedVariantId}
-                onSelect={setSelectedVariantId}
-                size="md"
-              />
-            </div>
-          )}
-
-          <div className="border-t border-border-default" />
-
-          {/* Detalles del producto */}
-          <div className="space-y-3">
-            <DetailField
-              label="Precio unitario"
-              value={
-                <span className="text-xl font-bold text-primary">{selectedVariant.price} ShopTokens</span>
-              }
-            />
-            <DetailField
-              label="Disponibilidad"
-              value={
-                isOutOfStock ? (
-                  <Badge variant="danger">Agotado</Badge>
-                ) : (
-                  <span className="text-text">{selectedVariant.stock} unidades disponibles</span>
-                )
-              }
-            />
-          </div>
-
-          <div className="border-t border-border-default" />
-
-          {/* Selector de cantidad */}
-          {!isOutOfStock && (
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-text">Cantidad</p>
-              <div className="flex items-center gap-4">
-                <QuantitySelector
-                  value={quantity}
-                  onChange={setQuantity}
-                  min={1}
-                  max={selectedVariant.stock}
-                  size="md"
-                />
-                {quantity > 1 && (
-                  <span className="text-sm text-text-muted">
-                    Total: <span className="font-semibold text-primary">{totalPrice} ShopTokens</span>
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Botones */}
-          <div className="space-y-3 pt-2">
-            <Button
-              onClick={handleAddToCart}
-              disabled={isOutOfStock || addingToCart}
-              loading={addingToCart}
-              className="w-full"
-              variant="secondary"
-            >
-              {isOutOfStock ? "Sin stock" : "Añadir al carrito"}
-            </Button>
-
-            <Button
-              onClick={handleBuyNowClick}
-              disabled={isOutOfStock}
-              className="w-full"
-            >
-              {isOutOfStock ? "Sin stock" : "Comprar ahora"}
-            </Button>
-          </div>
-        </Card>
+        {/* ── Columna derecha: Panel de detalle ── */}
+        <ProductDetailPanel
+          group={group}
+          selectedVariant={selectedVariant}
+          selectedVariantId={selectedVariantId}
+          onSelectVariant={setSelectedVariantId}
+          quantity={quantity}
+          onQuantityChange={setQuantity}
+          onAddToCart={handleAddToCart}
+          onBuyNow={() => setConfirmOpen(true)}
+          addingToCart={addingToCart}
+        />
       </div>
 
-      {/* ── Modal de confirmación de compra ── */}
       <PurchaseConfirmModal
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}

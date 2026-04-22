@@ -98,7 +98,7 @@ export function RewardForm({
           label="Coste (en insignias)"
           type="number"
           min="1"
-          placeholder="3"
+          placeholder="Ej: 3"
           value={fields.badgeCost}
           onChange={setField("badgeCost")}
           error={errors.badgeCost}
@@ -107,7 +107,7 @@ export function RewardForm({
           label="Unidades disponibles (0 = ilimitado)"
           type="number"
           min="0"
-          placeholder="0"
+          placeholder="Ej: 10"
           value={fields.supply}
           onChange={setField("supply")}
           error={errors.supply}

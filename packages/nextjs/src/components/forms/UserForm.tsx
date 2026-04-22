@@ -66,7 +66,7 @@ export function UserForm({ onSubmit, initialValues, isEdit }: UserFormProps) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <Input
         label="Nombre completo"
-        placeholder="Nombre del usuario"
+        placeholder="Ej: Juan Pérez"
         value={fields.name}
         onChange={setField("name")}
         error={errors.name}
@@ -75,7 +75,7 @@ export function UserForm({ onSubmit, initialValues, isEdit }: UserFormProps) {
         label="Email UCM"
         type="text"
         autoComplete="email"
-        placeholder="usuario@ucm.es"
+        placeholder="Ej: usuario@ucm.es"
         value={fields.email}
         onChange={setField("email")}
         error={errors.email}
@@ -100,6 +100,7 @@ export function UserForm({ onSubmit, initialValues, isEdit }: UserFormProps) {
         value={fields.role}
         onChange={setField("role")}
         error={errors.role}
+        disabled={isEdit}
       />
 
       {submitError && <p className="text-sm text-danger">{submitError}</p>}

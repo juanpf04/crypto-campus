@@ -10,3 +10,8 @@ export { SubjectForm, type SubjectFormData } from "./SubjectForm";
 export { SubjectOfferingForm, type SubjectOfferingFormData } from "./SubjectOfferingForm";
 export { ProductGroupForm, type ProductGroupFormValues } from "./ProductGroupForm";
 export { VariantForm, type VariantFormValues } from "./VariantForm";
+export {
+  AssignmentForm,
+  type AssignmentFormData,
+  type AssignmentPrize,
+} from "./AssignmentForm";

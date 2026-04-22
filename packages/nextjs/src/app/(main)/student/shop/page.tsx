@@ -59,6 +59,24 @@ export default function StudentShopPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  async function handleAddToCart(variantId: string) {
+    try {
+      const res = await fetch("/api/shop/cart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: variantId, quantity: 1 }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        addToast(body.error ?? "No se pudo añadir al carrito", "danger");
+        return;
+      }
+      openCart();
+    } catch {
+      addToast("No se pudo añadir al carrito", "danger");
+    }
+  }
+
   // Carga inicial
   useEffect(() => {
     Promise.all([
@@ -144,12 +162,7 @@ export default function StudentShopPage() {
           <button type="button" onClick={openCart} className="group text-left cursor-pointer">
             <Card className="flex items-center gap-4 h-full relative hover:border-primary/50 transition-colors">
               <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                {/* Icono carrito */}
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-                  <circle cx="9" cy="21" r="1" />
-                  <circle cx="20" cy="21" r="1" />
-                  <path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6" />
-                </svg>
+                {icons.cart}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-text-muted">Carrito</p>
@@ -225,7 +238,7 @@ export default function StudentShopPage() {
                 totalStock={product.totalStock}
                 category={product.category}
                 variants={product.variants}
-                onAddToCart={() => openCart()}
+                onAddToCart={handleAddToCart}
               />
             ))}
           </div>

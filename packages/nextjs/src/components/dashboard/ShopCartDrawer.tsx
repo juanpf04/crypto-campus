@@ -1,17 +1,13 @@
 "use client";
 
 /**
- * CartDrawer — Drawer lateral del carrito de compras.
+ * ShopCartDrawer — Organism del carrito de compras (drawer lateral).
  *
- * Componente intermedio que compone:
- * - Drawer (atómico) — panel slide-in
- * - QuantitySelector (atómico) — cantidad por item
- * - ProductImage (intermedio) — miniatura
- * - PurchaseConfirmModal (intermedio) — confirmación de checkout
- * - Button (atómico) — acciones
+ * Promovido desde components/shared/CartDrawer porque orquesta 6 fetches
+ * (cart, balance, patch, delete, clear, checkout) y un overlay de compra,
+ * lo que lo saca del contrato de "molécula sin side-effects".
  *
- * Se monta en cualquier página de la tienda. Al añadir un producto
- * se abre automáticamente mostrando el carrito actualizado.
+ * Montado en student/shop/layout.tsx y disparado vía CartContext.
  *
  * Props:
  * - open/onClose: control de visibilidad
@@ -23,6 +19,8 @@ import Link from "next/link";
 import { Drawer } from "@/components/ui/Drawer";
 import { Button } from "@/components/ui/Button";
 import { QuantitySelector } from "@/components/ui/QuantitySelector";
+import { Spinner } from "@/components/ui/Spinner";
+import { icons } from "@/components/ui/icons";
 import { ProductImage } from "@/components/shared/ProductImage";
 import { PurchaseConfirmModal, type PurchaseItem } from "@/components/shared/PurchaseConfirmModal";
 import { useToast } from "@/hooks/useToast";
@@ -49,25 +47,23 @@ interface CartPayload {
   total: number;
 }
 
-interface CartDrawerProps {
+interface ShopCartDrawerProps {
   open: boolean;
   onClose: () => void;
   /** Callback cuando el carrito cambia (items añadidos/eliminados/cantidad) */
   onCartChange?: (itemCount: number, total: number) => void;
 }
 
-export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
+export function ShopCartDrawer({ open, onClose, onCartChange }: ShopCartDrawerProps) {
   const { addToast } = useToast();
   const { startPurchase } = useCart();
   const [cart, setCart] = useState<CartPayload | null>(null);
   const [balance, setBalance] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  // Modal de confirmación
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
 
-  // Cargar carrito cuando se abre
   const loadCart = useCallback(async () => {
     setLoading(true);
     try {
@@ -98,14 +94,12 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
     if (open) loadCart();
   }, [open, loadCart]);
 
-  // Notificar cambios al padre
   function notifyChange(updatedCart: CartPayload) {
     setCart(updatedCart);
     const itemCount = updatedCart.items?.length ?? 0;
     onCartChange?.(itemCount, updatedCart.total ?? 0);
   }
 
-  // Actualizar cantidad
   async function updateQuantity(itemId: string, newQuantity: number) {
     if (newQuantity < 1) return;
 
@@ -122,7 +116,6 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
     notifyChange(body);
   }
 
-  // Eliminar item
   async function removeItem(itemId: string) {
     const res = await fetch(`/api/shop/cart?itemId=${itemId}`, { method: "DELETE" });
     const body = await res.json();
@@ -134,7 +127,6 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
     addToast("Producto eliminado del carrito", "success");
   }
 
-  // Vaciar carrito
   async function clearCart() {
     const res = await fetch("/api/shop/cart?clear=1", { method: "DELETE" });
     const body = await res.json();
@@ -146,23 +138,19 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
     addToast("Carrito vaciado", "success");
   }
 
-  // Checkout — delega al overlay vía CartContext
   function handleConfirmCheckout() {
     setConfirmOpen(false);
 
-    // Reseteamos carrito y contador inmediatamente
     setCart(null);
     onCartChange?.(0, 0);
     setCheckingOut(false);
     onClose();
 
-    // Nombre para el overlay (resumen de artículos)
     const itemNames = cart?.items.map((i) => i.name) ?? [];
     const overlayName = itemNames.length <= 2
       ? itemNames.join(", ")
       : `${itemNames[0]} y ${itemNames.length - 1} más`;
 
-    // Crear la promise del checkout y activar el overlay
     const checkoutPromise = (async () => {
       const res = await fetch("/api/shop/checkout", { method: "POST" });
       const body = await res.json();
@@ -179,7 +167,6 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
   const isEmpty = !cart || cart.items.length === 0;
   const totalUnits = cart?.items.reduce((a, i) => a + i.quantity, 0) ?? 0;
 
-  // Items para el modal de confirmación
   const purchaseItems: PurchaseItem[] = cart?.items.map((item) => ({
     name: item.name,
     quantity: item.quantity,
@@ -190,10 +177,8 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
     variantLabel: item.variantLabel,
   })) ?? [];
 
-  // Footer fijo con total + botones
   const drawerFooter = !isEmpty ? (
     <div className="space-y-3">
-      {/* Total */}
       <div className="flex items-center justify-between">
         <span className="text-text-muted">
           Total ({totalUnits} {totalUnits === 1 ? "ud." : "uds."})
@@ -201,7 +186,6 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
         <span className="text-xl font-bold text-primary">{cart?.total ?? 0} ShopTokens</span>
       </div>
 
-      {/* Finalizar compra */}
       <Button
         onClick={() => setConfirmOpen(true)}
         disabled={checkingOut}
@@ -212,7 +196,6 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
         Finalizar compra
       </Button>
 
-      {/* Seguir comprando */}
       <Button
         variant="outline"
         onClick={onClose}
@@ -221,7 +204,6 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
         Seguir comprando
       </Button>
 
-      {/* Ver carrito completo */}
       <Link
         href="/student/shop/cart"
         onClick={() => onClose()}
@@ -243,17 +225,14 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
         footer={drawerFooter}
       >
         {loading ? (
-          <div className="flex items-center justify-center py-10">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <div className="flex items-center justify-center py-10 text-primary">
+            <Spinner size="md" />
           </div>
         ) : isEmpty ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            {/* Icono carrito vacío */}
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className="h-16 w-16 text-text-muted/40 mb-4">
-              <circle cx="9" cy="21" r="1" />
-              <circle cx="20" cy="21" r="1" />
-              <path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6" />
-            </svg>
+            <div className="mb-4 text-text-muted/40 [&_svg]:h-16 [&_svg]:w-16">
+              {icons.cart}
+            </div>
             <p className="text-text-muted mb-4">Tu carrito esta vacio</p>
             <Button variant="outline" size="sm" onClick={onClose}>
               Explorar tienda
@@ -261,7 +240,6 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Botón vaciar */}
             <div className="flex justify-end">
               <button
                 type="button"
@@ -272,13 +250,11 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
               </button>
             </div>
 
-            {/* Lista de items */}
             {cart.items.map((item) => (
               <div
                 key={item.id}
                 className="flex gap-3 rounded-lg border border-border-default p-3"
               >
-                {/* Imagen */}
                 <div className="h-16 w-16 shrink-0 rounded-lg bg-primary/5 p-1">
                   <ProductImage
                     imageUrl={item.imageUrl}
@@ -289,7 +265,6 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
                   />
                 </div>
 
-                {/* Info */}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-text line-clamp-2 leading-tight">
                     {item.name}
@@ -300,7 +275,6 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
                     </p>
                   )}
 
-                  {/* Precio + cantidad + eliminar */}
                   <div className="mt-2 flex items-center justify-between">
                     <QuantitySelector
                       value={item.quantity}
@@ -316,12 +290,10 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
                       <button
                         type="button"
                         onClick={() => removeItem(item.id)}
-                        className="rounded p-1 text-text-muted hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer"
+                        className="rounded p-1 text-text-muted hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer [&_svg]:h-4 [&_svg]:w-4"
                         aria-label="Eliminar "
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                          <path d="M18 6L6 18M6 6l12 12" />
-                        </svg>
+                        {icons.close}
                       </button>
                     </div>
                   </div>
@@ -332,7 +304,6 @@ export function CartDrawer({ open, onClose, onCartChange }: CartDrawerProps) {
         )}
       </Drawer>
 
-      {/* Modal de confirmación */}
       <PurchaseConfirmModal
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}

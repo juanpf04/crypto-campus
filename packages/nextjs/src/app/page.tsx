@@ -224,12 +224,9 @@ export default function HomePage() {
               <div className="flex justify-center pt-2">
                 <Link
                   href={buildLoginHref("/shop")}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-border-default bg-card px-5 py-2 text-sm font-medium text-text-muted transition-colors hover:border-primary/50 hover:text-text"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border-default bg-card px-5 py-2 text-sm font-medium text-text-muted transition-colors hover:border-primary/50 hover:text-text [&_svg]:h-4 [&_svg]:w-4"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                    <line x1="12" y1="5" x2="12" y2="19" />
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                  </svg>
+                  {icons.plus}
                   Ver catálogo completo
                 </Link>
               </div>

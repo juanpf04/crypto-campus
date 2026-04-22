@@ -7,7 +7,8 @@
  * Ambos endpoints verifican que quien llama tiene sesión activa con role ADMIN.
  * El POST hace el mismo flujo que /api/auth/register pero:
  * - Acepta cualquier rol (PROFESSOR, LIBRARIAN, ADMIN)
- * - Solo mintea tokens LIB/SHOP si el rol es STUDENT
+ * - Mintea 10 LibraryTokens iniciales a STUDENT/PROFESSOR (depósito de préstamos)
+ * - NO mintea ShopTokens: se ganan usando la app (sistema de recompensas)
  * - No requiere dominio @ucm.es (el admin puede crear cualquier email)
  */
 
@@ -30,7 +31,6 @@ import {
   CONTRACT_ADDRESSES,
   CAMPUS_ROLES_ABI,
   LIBRARY_TOKEN_ABI,
-  SHOP_TOKEN_ABI,
   ROLES,
 } from "@/lib/contracts";
 
@@ -123,7 +123,9 @@ export async function POST(req: NextRequest) {
   });
   await publicClient.waitForTransactionReceipt({ hash: regHash });
 
-  // Mintear tokens a estudiantes y profesores (admin y bibliotecario no los necesitan)
+  // Mintear LibraryTokens iniciales (depósito para préstamos) a estudiantes y profesores.
+  // NO se minean ShopTokens: se ganan usando la app (sistema de recompensas en
+  // ShopTokenReward). Todos arrancan con balance 0 de SHPT.
   if (role === "STUDENT" || role === "PROFESSOR") {
     const mintLibHash = await adminWalletClient.writeContract({
       address: CONTRACT_ADDRESSES.libraryToken,
@@ -132,14 +134,6 @@ export async function POST(req: NextRequest) {
       args: [account.address, BigInt(10)],
     });
     await publicClient.waitForTransactionReceipt({ hash: mintLibHash });
-
-    const mintShopHash = await adminWalletClient.writeContract({
-      address: CONTRACT_ADDRESSES.shopToken,
-      abi: SHOP_TOKEN_ABI,
-      functionName: "mint",
-      args: [account.address, BigInt(100)],
-    });
-    await publicClient.waitForTransactionReceipt({ hash: mintShopHash });
   }
 
   // Guardar en BD

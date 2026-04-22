@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useToast } from "@/hooks/useToast";
+import { usePaginatedList } from "@/hooks/usePaginatedList";
 import { BackLink } from "@/components/ui/BackLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -28,30 +29,14 @@ interface Loan {
 
 export default function LibrarianLoansPage() {
   const { addToast } = useToast();
-  const [items, setItems] = useState<Loan[]>([]);
-  const [total, setTotal] = useState(0);
-  const [offset, setOffset] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<LoanStatusFilter>("ALL");
 
-  const loadLoans = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
-      if (statusFilter !== "ALL") params.set("status", statusFilter);
-
-      const res = await fetch(`/api/library/loans?${params}`);
-      const data = await res.json();
-      setItems(data.items ?? []);
-      setTotal(data.total ?? 0);
-    } catch {
-      addToast("Error al cargar préstamos", "danger");
-    } finally {
-      setLoading(false);
-    }
-  }, [addToast, offset, statusFilter]);
-
-  useEffect(() => { loadLoans(); }, [loadLoans]);
+  const list = usePaginatedList<Loan>({
+    endpoint: "/api/library/loans",
+    pageSize: PAGE_SIZE,
+    filters: { status: statusFilter === "ALL" ? null : statusFilter },
+    onError: () => addToast("Error al cargar préstamos", "danger"),
+  });
 
   async function handleAction(loanId: string, action: "pickup" | "return" | "force-return" | "expire") {
     try {
@@ -62,7 +47,7 @@ export default function LibrarianLoansPage() {
       });
       if (!res.ok) throw new Error((await res.json()).error);
       addToast("Acción realizada correctamente", "success");
-      loadLoans();
+      list.refresh();
     } catch (err) {
       addToast(err instanceof Error ? err.message : "Error", "danger");
     }
@@ -82,25 +67,25 @@ export default function LibrarianLoansPage() {
       <BackLink href="/librarian" label="Volver al panel" />
       <div>
         <h1 className="text-2xl font-bold text-text">Préstamos</h1>
-        {loading ? <Skeleton className="mt-2 h-4 w-56" /> : null}
+        {list.loading ? <Skeleton className="mt-2 h-4 w-56" /> : null}
       </div>
 
-      {!loading && (
+      {!list.loading && (
         <FilterPills
           options={LOAN_STATUS_OPTIONS}
           selected={statusFilter}
-          onChange={(v) => { setStatusFilter(v); setOffset(0); }}
+          onChange={setStatusFilter}
         />
       )}
 
-      {loading && items.length === 0 ? (
+      {list.loading && list.items.length === 0 ? (
         <SkeletonTable columns={6} rows={8} />
-      ) : items.length === 0 ? (
+      ) : list.items.length === 0 ? (
         <EmptyState title="Sin préstamos" description="No hay préstamos con estos filtros." />
       ) : (
         <>
           <Card className="overflow-hidden p-0">
-            <div className={loading ? "opacity-50 transition-opacity" : ""}>
+            <div className={list.loading ? "opacity-50 transition-opacity" : ""}>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -113,7 +98,7 @@ export default function LibrarianLoansPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map((loan) => (
+                  {list.items.map((loan) => (
                     <TableRow key={loan.id}>
                       <TableCell className="font-medium">{loan.libraryItem.title}</TableCell>
                       <TableCell className="text-text-muted">{loan.user.name}</TableCell>
@@ -142,7 +127,7 @@ export default function LibrarianLoansPage() {
               </Table>
             </div>
           </Card>
-          <Pagination offset={offset} limit={PAGE_SIZE} total={total} onChange={setOffset} />
+          <Pagination offset={list.offset} limit={list.limit} total={list.total} onChange={list.setOffset} />
         </>
       )}
     </div>

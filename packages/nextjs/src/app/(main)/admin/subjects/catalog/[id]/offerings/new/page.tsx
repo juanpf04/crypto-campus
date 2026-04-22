@@ -66,19 +66,19 @@ export default function AdminNewOfferingPage() {
 
     if (!res.ok) {
       const err = await res.json();
-      throw new Error(err.error || "Error al crear oferta");
+      throw new Error(err.error || "Error al crear grupo");
     }
 
-    addToast("Oferta creada", "success");
-    router.push(`/admin/subjects/${id}`);
+    addToast("Grupo creado", "success");
+    router.push(`/admin/subjects/catalog/${id}`);
   }
 
   if (loading) return <SkeletonPage />;
 
   return (
     <div className="space-y-6">
-      <BackLink href={`/admin/subjects/${id}`} label="Volver a asignatura" />
-      <h1 className="text-2xl font-bold text-text">Crear oferta</h1>
+      <BackLink href={`/admin/subjects/catalog/${id}`} label="Volver a asignatura" />
+      <h1 className="text-2xl font-bold text-text">Crear grupo</h1>
       <Card className="max-w-2xl mx-auto p-6">
         <SubjectOfferingForm
           onSubmit={handleSubmit}

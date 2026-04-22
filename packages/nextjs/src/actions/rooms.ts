@@ -22,7 +22,7 @@ import {
 	CONTRACT_ADDRESSES,
 	ROOM_BOOKING_ABI,
 } from "@/lib/contracts";
-import { issueReward, ShopTokenRewardReason } from "@/lib/shopRewards";
+import { issueReward, ShopTokenRewardReason, type RewardGrant } from "@/lib/shopRewards";
 
 // ── Helpers internos ─────────────────────────────────────────────────────
 
@@ -351,12 +351,13 @@ export async function bookRoom(
 		});
 
 		// ── Recompensa por reserva ───────────────────────────────────────────
+		let rewards: RewardGrant[] = [];
 		const student = await prisma.user.findUnique({
 			where: { id: session.userId! },
 			select: { address: true },
 		});
 		if (student) {
-			await issueReward({
+			rewards = await issueReward({
 				userId: session.userId!,
 				userAddress: student.address,
 				mainReason: ShopTokenRewardReason.ROOM_BOOKED,
@@ -364,7 +365,7 @@ export async function bookRoom(
 			});
 		}
 
-		return { success: true, booking };
+		return { success: true, booking, rewards };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al reservar sala: ${error instanceof Error ? error.message : "desconocido"}`);

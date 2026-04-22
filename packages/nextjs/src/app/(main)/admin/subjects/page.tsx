@@ -2,35 +2,30 @@
 
 /**
  * Hub de "Asignaturas del campus" para admin.
- * Tabla de TODAS las SubjectOfferings del sistema (asignaturas impartidas).
- * Incluye buscador, filtros por año y profesor, y botón "Gestionar catálogo".
- * Cada fila lleva al resumen de la asignatura: /admin/subjects/[offeringId].
+ * Tabla agrupada por asignatura: cada fila representa una asignatura y es
+ * desplegable para mostrar sus grupos (SubjectOfferings). El render de cada
+ * fila (+ acciones + subtabla) está en components/dashboard/SubjectExpandableRow.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { CategoryFilter } from "@/components/ui/CategoryFilter";
 import { SkeletonPage } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table, TableBody, TableHead, TableHeader, TableRow,
 } from "@/components/ui/Table";
-
-interface Offering {
-  id: string;
-  group: string;
-  academicYear: string;
-  subject: { name: string; code: string };
-  professor: { id: string; name: string; email: string };
-  _count: { enrollments: number };
-}
+import { icons } from "@/components/ui/icons";
+import {
+  SubjectExpandableRow,
+  type SubjectRowOffering,
+  type SubjectRowSubject,
+} from "@/components/dashboard/SubjectExpandableRow";
 
 interface Professor {
   id: string;
@@ -38,16 +33,22 @@ interface Professor {
   email: string;
 }
 
+type RawOffering = SubjectRowOffering & {
+  subject: { id: string; name: string; code: string };
+};
+
+const COLUMN_COUNT = 6;
+
 export default function AdminSubjectsHubPage() {
-  const router = useRouter();
   const { addToast } = useToast();
 
-  const [offerings, setOfferings] = useState<Offering[]>([]);
+  const [rawOfferings, setRawOfferings] = useState<RawOffering[]>([]);
   const [professors, setProfessors] = useState<Professor[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [yearFilter, setYearFilter] = useState<string | null>(null);
   const [profFilter, setProfFilter] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     try {
@@ -55,7 +56,7 @@ export default function AdminSubjectsHubPage() {
         fetch("/api/badges/subject-offerings"),
         fetch("/api/badges/professors"),
       ]);
-      if (offeringsRes.ok) setOfferings(await offeringsRes.json());
+      if (offeringsRes.ok) setRawOfferings(await offeringsRes.json());
       if (profsRes.ok) setProfessors(await profsRes.json());
     } catch {
       addToast("Error al cargar asignaturas", "danger");
@@ -67,18 +68,19 @@ export default function AdminSubjectsHubPage() {
   useEffect(() => { load(); }, [load]);
 
   const yearOptions = useMemo(() => {
-    const set = new Set(offerings.map((o) => o.academicYear));
+    const set = new Set(rawOfferings.map((o) => o.academicYear));
     return [...set].sort().reverse().map((y) => ({ value: y, label: y }));
-  }, [offerings]);
+  }, [rawOfferings]);
 
   const profOptions = useMemo(
     () => professors.map((p) => ({ value: p.id, label: p.name })),
     [professors],
   );
 
-  const filtered = useMemo(() => {
+  // Filtrado de grupos (offerings) según buscador + filtros
+  const filteredOfferings = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return offerings.filter((o) => {
+    return rawOfferings.filter((o) => {
       if (yearFilter && o.academicYear !== yearFilter) return false;
       if (profFilter && o.professor.id !== profFilter) return false;
       if (q) {
@@ -87,7 +89,37 @@ export default function AdminSubjectsHubPage() {
       }
       return true;
     });
-  }, [offerings, search, yearFilter, profFilter]);
+  }, [rawOfferings, search, yearFilter, profFilter]);
+
+  // Agrupado por asignatura
+  const subjects = useMemo<SubjectRowSubject[]>(() => {
+    const map = new Map<string, SubjectRowSubject>();
+    for (const o of filteredOfferings) {
+      const existing = map.get(o.subject.id);
+      if (existing) {
+        existing.offerings.push(o);
+        existing.studentsTotal += o._count.enrollments;
+      } else {
+        map.set(o.subject.id, {
+          id: o.subject.id,
+          name: o.subject.name,
+          code: o.subject.code,
+          offerings: [o],
+          studentsTotal: o._count.enrollments,
+        });
+      }
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }, [filteredOfferings]);
+
+  function toggleExpand(subjectId: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(subjectId)) next.delete(subjectId);
+      else next.add(subjectId);
+      return next;
+    });
+  }
 
   if (loading) return <SkeletonPage />;
 
@@ -99,15 +131,20 @@ export default function AdminSubjectsHubPage() {
         <div>
           <h1 className="text-2xl font-bold text-text">Asignaturas del campus</h1>
           <p className="text-text-muted mt-1">
-            {offerings.length} asignatura{offerings.length !== 1 ? "s" : ""} impartida{offerings.length !== 1 ? "s" : ""} en total
+            {rawOfferings.length} grupo{rawOfferings.length !== 1 ? "s" : ""} impartido{rawOfferings.length !== 1 ? "s" : ""} en total
           </p>
         </div>
-        <Link href="/admin/subjects/catalog">
-          <Button variant="secondary">Gestionar catálogo</Button>
+        <Link href="/admin/subjects/catalog/new">
+          <Button>
+            <span className="flex items-center gap-1.5">
+              {icons.plus}
+              Crear asignatura
+            </span>
+          </Button>
         </Link>
       </div>
 
-      {offerings.length === 0 ? (
+      {rawOfferings.length === 0 ? (
         <EmptyState
           title="Sin asignaturas"
           description="Aún no hay asignaturas impartidas en el sistema."
@@ -151,7 +188,7 @@ export default function AdminSubjectsHubPage() {
             )}
           </div>
 
-          {filtered.length === 0 ? (
+          {subjects.length === 0 ? (
             <EmptyState
               title="Sin resultados"
               description="Ninguna asignatura coincide con los filtros."
@@ -161,37 +198,23 @@ export default function AdminSubjectsHubPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10" />
                     <TableHead>Código</TableHead>
                     <TableHead>Asignatura</TableHead>
-                    <TableHead>Grupo</TableHead>
-                    <TableHead>Año</TableHead>
-                    <TableHead>Profesor</TableHead>
+                    <TableHead>Grupos</TableHead>
                     <TableHead>Alumnos</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map((o) => (
-                    <TableRow
-                      key={o.id}
-                      className="cursor-pointer"
-                      onClick={() => router.push(`/admin/subjects/${o.id}`)}
-                    >
-                      <TableCell className="font-mono text-sm">{o.subject.code}</TableCell>
-                      <TableCell className="font-medium">{o.subject.name}</TableCell>
-                      <TableCell>{o.group}</TableCell>
-                      <TableCell className="text-text-muted">{o.academicYear}</TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          <p className="text-text">{o.professor.name}</p>
-                          <p className="text-xs text-text-muted">{o.professor.email}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={o._count.enrollments > 0 ? "info" : "neutral"}>
-                          {o._count.enrollments}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
+                  {subjects.map((s) => (
+                    <SubjectExpandableRow
+                      key={s.id}
+                      subject={s}
+                      isOpen={expanded.has(s.id)}
+                      onToggle={() => toggleExpand(s.id)}
+                      columnCount={COLUMN_COUNT}
+                    />
                   ))}
                 </TableBody>
               </Table>

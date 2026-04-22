@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/hooks/useToast";
+import { toastRewards } from "@/lib/rewardToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Button } from "@/components/ui/Button";
 import { SkeletonPage, Skeleton } from "@/components/ui/Skeleton";
@@ -111,8 +112,10 @@ export default function StudentRoomsPage() {
         body: JSON.stringify({ roomId: selectedRoom.id, date: todayStr, startHour, duration }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
+      const data = await res.json();
 
       addToast("Sala reservada correctamente", "success");
+      toastRewards(addToast, data.rewards);
       setShowModal(false);
       setStartHour(null);
       setDuration(1);

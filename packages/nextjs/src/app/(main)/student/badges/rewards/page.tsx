@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { RewardCategory } from "@prisma/client";
 import { useToast } from "@/hooks/useToast";
+import { toastRewards } from "@/lib/rewardToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Button } from "@/components/ui/Button";
 import { SkeletonPage } from "@/components/ui/Skeleton";
@@ -146,7 +147,9 @@ export default function StudentRewardsPage() {
     try {
       const res = await fetch(`/api/badges/rewards/${rewardId}/redeem`, { method: "POST" });
       if (!res.ok) throw new Error((await res.json()).error);
+      const data = await res.json();
       addToast("Recompensa canjeada", "success");
+      toastRewards(addToast, data.rewards);
       loadData();
     } catch (err) {
       addToast(err instanceof Error ? err.message : "Error al canjear", "danger");

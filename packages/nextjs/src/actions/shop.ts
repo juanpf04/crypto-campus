@@ -30,6 +30,7 @@ import {
 	CAMPUS_SHOP_ABI,
 	SHOP_TOKEN_ABI,
 } from "@/lib/contracts";
+import { hasRewardOfType, issueReward, ShopTokenRewardReason, REWARD_DESCRIPTIONS, type RewardGrant } from "@/lib/shopRewards";
 import {
 	type ProductGroupSummary,
 	type ProductVariantSummary,
@@ -1738,6 +1739,22 @@ export async function checkoutCart() {
 		// 9. Limpiar el carrito
 		await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
 
+		// 10. Bonus de primer uso del módulo Tienda (solo estudiantes)
+		let rewards: RewardGrant[] = [];
+		if (session.role === "STUDENT") {
+			const alreadyHad = await hasRewardOfType(
+				session.userId!,
+				ShopTokenRewardReason.MODULE_FIRST_USE_SHOP,
+			);
+			if (!alreadyHad) {
+				rewards = await issueReward({
+					userId: session.userId!,
+					userAddress: address,
+					mainReason: ShopTokenRewardReason.MODULE_FIRST_USE_SHOP,
+				});
+			}
+		}
+
 		const newBalance = await readShopBalance(address);
 
 		return {
@@ -1746,6 +1763,7 @@ export async function checkoutCart() {
 			ordersCreated: createdOrders.length,
 			totalPaid: totalPrice,
 			newBalance: Number(newBalance),
+			rewards,
 		};
 	} catch (error) {
 		if (error instanceof Error && (
@@ -2334,14 +2352,15 @@ export async function getShopStats() {
 // ════════════════════════════════════════════════════
 
 /**
- * Devuelve un log unificado de transacciones: compras (gasto) + recargas (ingreso).
+ * Devuelve un log unificado de transacciones: compras (gasto) + recargas,
+ * devoluciones y recompensas por uso de la aplicación (ingresos).
  * Solo admin. Paginado, filtrable por userId.
  */
 export async function listAllTransactions(
 	limit = 10,
 	offset = 0,
 	userId?: string,
-	typeFilter?: "purchase" | "topup" | "refund",
+	typeFilter?: "purchase" | "topup" | "refund" | "reward",
 	directionFilter?: "income" | "expense",
 ) {
 	const session = await getSession();
@@ -2352,8 +2371,8 @@ export async function listAllTransactions(
 
 	const userWhere = userId ? { userId } : {};
 
-	// Cargar las 3 fuentes en paralelo
-	const [orders, topups] = await Promise.all([
+	// Cargar las 4 fuentes en paralelo
+	const [orders, topups, rewards] = await Promise.all([
 		prisma.order.findMany({
 			where: userWhere,
 			include: {
@@ -2369,12 +2388,19 @@ export async function listAllTransactions(
 			},
 			orderBy: { createdAt: "desc" },
 		}),
+		prisma.shopTokenReward.findMany({
+			where: userWhere,
+			include: {
+				user: { select: { name: true, email: true } },
+			},
+			orderBy: { createdAt: "desc" },
+		}),
 	]);
 
 	// Unificar en un formato común
 	type TransactionEntry = {
 		id: string;
-		type: "purchase" | "topup" | "refund";
+		type: "purchase" | "topup" | "refund" | "reward";
 		direction: "income" | "expense";
 		date: Date;
 		userName: string;
@@ -2428,6 +2454,22 @@ export async function listAllTransactions(
 			amount: topup.amount,
 			description: `Recarga: +${topup.amount} ShopTokens`,
 			txHash: topup.txHash,
+		});
+	}
+
+	// Recompensas por uso de la app (ingreso)
+	for (const reward of rewards) {
+		const label = REWARD_DESCRIPTIONS[reward.reason] ?? reward.reason;
+		unified.push({
+			id: `reward-${reward.id}`,
+			type: "reward",
+			direction: "income",
+			date: reward.createdAt,
+			userName: reward.user.name,
+			userEmail: reward.user.email,
+			amount: reward.amount,
+			description: `Recompensa: ${label}`,
+			txHash: reward.txHash,
 		});
 	}
 

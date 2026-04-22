@@ -7,17 +7,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/hooks/useToast";
+import { toastRewards } from "@/lib/rewardToast";
 import { BackLink } from "@/components/ui/BackLink";
-import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterPills } from "@/components/ui/FilterPills";
 import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { LibraryItemCard } from "@/components/shared/LibraryItemCard";
 import { LoanCard } from "@/components/shared/LoanCard";
+import { NavCard } from "@/components/shared/NavCard";
 import { icons } from "@/components/ui/icons";
 import { LIBRARY_TYPE_OPTIONS, type LibraryTypeFilter } from "@/lib/library-constants";
-import Link from "next/link";
 
 interface LibraryItem {
   id: string; tokenId: number; type: string; title: string;
@@ -37,19 +37,28 @@ export default function StudentLibraryPage() {
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [myLoans, setMyLoans] = useState<MyLoan[]>([]);
   const [balance, setBalance] = useState<number | null>(null);
+  const [roomsCount, setRoomsCount] = useState<number | null>(null);
+  const [printersCount, setPrintersCount] = useState<number | null>(null);
+  const [printCredits, setPrintCredits] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState<LibraryTypeFilter>("ALL");
   const [requesting, setRequesting] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
-      const [itemsRes, balanceRes] = await Promise.all([
+      const [itemsRes, balanceRes, roomsRes, printersRes, creditsRes] = await Promise.all([
         fetch("/api/library/items"),
         fetch("/api/library/balance").then((r) => r.json()).catch(() => ({ balance: 0 })),
+        fetch("/api/rooms").then((r) => r.json()).catch(() => ({ total: 0 })),
+        fetch("/api/printer").then((r) => r.json()).catch(() => []),
+        fetch("/api/printer/credits").then((r) => r.json()).catch(() => ({ availableCredits: 0 })),
       ]);
       const itemsData = await itemsRes.json();
       setItems(itemsData.items ?? (Array.isArray(itemsData) ? itemsData : []));
       setBalance(balanceRes.balance ?? 0);
+      setRoomsCount(roomsRes.total ?? (Array.isArray(roomsRes.items) ? roomsRes.items.length : 0));
+      setPrintersCount(Array.isArray(printersRes) ? printersRes.length : 0);
+      setPrintCredits(creditsRes.availableCredits ?? 0);
     } catch { /* no-op */ }
 
     try {
@@ -74,6 +83,7 @@ export default function StudentLibraryPage() {
       if (!res.ok) throw new Error((await res.json()).error);
       const data = await res.json();
       addToast(data.queued ? "Te has unido a la cola de espera" : "Ítem reservado correctamente", "success");
+      toastRewards(addToast, data.rewards);
       loadData();
     } catch (err) {
       addToast(err instanceof Error ? err.message : "Error al solicitar préstamo", "danger");
@@ -100,27 +110,51 @@ export default function StudentLibraryPage() {
     <div className="space-y-8">
       <BackLink href="/student" label="Volver al panel" />
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-text">Biblioteca</h1>
-          {!loading && balance !== null && (
-            <p className="text-text-muted mt-1">{balance} LibraryTokens disponibles</p>
-          )}
-          {loading && <Skeleton className="mt-2 h-4 w-56" />}
-        </div>
-        <div className="flex gap-2">
-          <Link href="/student/library/printing">
-            <Button variant="secondary" disabled={loading}>
-              <span className="flex items-center gap-2">{icons.print} Imprimir</span>
-            </Button>
-          </Link>
-          <Link href="/student/library/rooms">
-            <Button disabled={loading}>
-              <span className="flex items-center gap-2">{icons.rooms} Reservar sala</span>
-            </Button>
-          </Link>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold text-text">Biblioteca</h1>
+        {!loading && balance !== null && (
+          <p className="text-text-muted mt-1">{balance} Tokens de Préstamo disponibles</p>
+        )}
+        {loading && <Skeleton className="mt-2 h-4 w-56" />}
       </div>
+
+      {/* ── Accesos destacados: Salas (2/3) + Impresiones (1/3) ── */}
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <NavCard
+          className="md:col-span-2"
+          href="/student/library/rooms"
+          icon={icons.rooms}
+          label="Salas"
+          title="Reservar sala de estudio"
+          description={
+            <>
+              Reserva hoy hasta 4 horas en cualquiera de las{" "}
+              <span className="font-semibold text-text">
+                {loading || roomsCount === null ? "—" : roomsCount}
+              </span>{" "}
+              salas disponibles. Individuales y grupales.
+            </>
+          }
+        />
+
+        <NavCard
+          href="/student/library/printing"
+          icon={icons.print}
+          label="Impresiones"
+          title="Imprimir"
+          description={
+            <>
+              <span className="font-semibold text-text">
+                {loading || printCredits === null ? "—" : printCredits}
+              </span>{" "}
+              créditos disponibles
+              {!loading && printersCount !== null && printersCount > 0 && (
+                <> · {printersCount} impresoras</>
+              )}
+            </>
+          }
+        />
+      </section>
 
       {/* ── Mis préstamos activos ── */}
       {loading ? (

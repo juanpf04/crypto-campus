@@ -107,7 +107,7 @@ export default function AdminLibraryPage() {
           <ActionRow
             href="/admin/library/tokens"
             icon={icons.token}
-            title="LibraryTokens"
+            title="Tokens de Préstamo"
             description="Consultar y asignar tokens de préstamo a estudiantes"
             stat=""
           />

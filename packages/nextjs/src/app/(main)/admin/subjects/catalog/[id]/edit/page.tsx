@@ -45,14 +45,14 @@ export default function AdminEditSubjectPage() {
     }
 
     addToast("Asignatura actualizada", "success");
-    router.push(`/admin/subjects/${id}`);
+    router.push(`/admin/subjects/catalog/${id}`);
   }
 
   if (loading || !initialValues) return <SkeletonPage />;
 
   return (
     <div className="space-y-6">
-      <BackLink href={`/admin/subjects/${id}`} label="Volver a asignatura" />
+      <BackLink href={`/admin/subjects/catalog/${id}`} label="Volver a asignatura" />
       <h1 className="text-2xl font-bold text-text">Editar asignatura</h1>
       <Card className="max-w-2xl mx-auto p-6">
         <SubjectForm onSubmit={handleSubmit} initialValues={initialValues} isEdit />

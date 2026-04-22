@@ -162,8 +162,8 @@ export default function StudentDashboard() {
             icon={icons.token}
             title="Mis tokens"
             slots={[
-              { value: val(libBalance), label: "LIB", color: "text-primary" },
-              { value: val(shopBalance), label: "SHOP", color: "text-success" },
+              { value: val(libBalance), label: "Préstamos", color: "text-primary" },
+              { value: val(shopBalance), label: "ShopTokens", color: "text-success" },
             ]}
           />
           <StatCard
@@ -180,6 +180,36 @@ export default function StudentDashboard() {
               { value: val(badgeSummary?.availableAssignments), label: "Tareas", color: "text-primary" },
             ]}
           />
+        </div>
+      </section>
+
+      {/* ── Accesos rápidos ── */}
+      <section className="space-y-4">
+        <SectionTitle icon={icons.home}>Accede</SectionTitle>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {/* Biblioteca */}
+          <Card className="overflow-hidden p-0">
+            <ActionRow href="/student/library" icon={icons.library} title="Biblioteca" description="Explorar catálogo y préstamos" stat={`${activeLoans.length} activos`} />
+            <ActionRow href="/student/library/rooms" icon={icons.rooms} title="Salas de estudio" description="Reservar sala" stat="" isLast />
+          </Card>
+
+          {/* Tienda */}
+          <Card className="overflow-hidden p-0">
+            <ActionRow href="/student/shop" icon={icons.shop} title="Tienda" description="Comprar con ShopTokens" stat={`${val(shopBalance)} SHOP`} />
+            <ActionRow href="/student/shop/orders" icon={icons.orders} title="Mis pedidos" description="Historial de compras" stat={`${orders.length} recientes`} isLast />
+          </Card>
+
+          {/* Impresión */}
+          <Card className="overflow-hidden p-0">
+            <ActionRow href="/student/library/printing" icon={icons.print} title="Imprimir" description="Enviar documento a impresora" stat={printCredits !== null ? `${formatCredits(printCredits)} créditos` : "—"} />
+            <ActionRow href="/student/library/printing/history" icon={icons.history} title="Historial" description="Ver impresiones anteriores" stat={`${printCount} total`} isLast />
+          </Card>
+
+          {/* Insignias */}
+          <Card className="overflow-hidden p-0">
+            <ActionRow href="/student/badges" icon={icons.badge} title="Insignias" description="Tareas y logros" stat={`${badgeSummary?.availableAssignments ?? "—"} tareas`} />
+            <ActionRow href="/student/badges/rewards" icon={icons.reward} title="Recompensas" description="Canjear con insignias" stat={badgeSummary?.pendingRedemptions ? `${badgeSummary.pendingRedemptions} pendientes` : ""} isLast />
+          </Card>
         </div>
       </section>
 
@@ -253,36 +283,6 @@ export default function StudentDashboard() {
             }))}
             emptyMessage="Aún no tienes pedidos"
           />
-        </div>
-      </section>
-
-      {/* ── Accesos rápidos ── */}
-      <section className="space-y-4">
-        <SectionTitle icon={icons.home}>Accede</SectionTitle>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {/* Biblioteca */}
-          <Card className="overflow-hidden p-0">
-            <ActionRow href="/student/library" icon={icons.library} title="Biblioteca" description="Explorar catálogo y préstamos" stat={`${activeLoans.length} activos`} />
-            <ActionRow href="/student/library/rooms" icon={icons.rooms} title="Salas de estudio" description="Reservar sala" stat="" isLast />
-          </Card>
-
-          {/* Tienda */}
-          <Card className="overflow-hidden p-0">
-            <ActionRow href="/student/shop" icon={icons.shop} title="Tienda" description="Comprar con ShopTokens" stat={`${val(shopBalance)} SHOP`} />
-            <ActionRow href="/student/shop/orders" icon={icons.orders} title="Mis pedidos" description="Historial de compras" stat={`${orders.length} recientes`} isLast />
-          </Card>
-
-          {/* Impresión */}
-          <Card className="overflow-hidden p-0">
-            <ActionRow href="/student/library/printing" icon={icons.print} title="Imprimir" description="Enviar documento a impresora" stat={printCredits !== null ? `${formatCredits(printCredits)} créditos` : "—"} />
-            <ActionRow href="/student/library/printing/history" icon={icons.history} title="Historial" description="Ver impresiones anteriores" stat={`${printCount} total`} isLast />
-          </Card>
-
-          {/* Insignias */}
-          <Card className="overflow-hidden p-0">
-            <ActionRow href="/student/badges" icon={icons.badge} title="Insignias" description="Tareas y logros" stat={`${badgeSummary?.availableAssignments ?? "—"} tareas`} />
-            <ActionRow href="/student/badges/rewards" icon={icons.reward} title="Recompensas" description="Canjear con insignias" stat={badgeSummary?.pendingRedemptions ? `${badgeSummary.pendingRedemptions} pendientes` : ""} isLast />
-          </Card>
         </div>
       </section>
     </div>

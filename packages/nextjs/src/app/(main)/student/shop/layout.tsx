@@ -1,7 +1,7 @@
 /**
  * Layout de la tienda del estudiante.
  *
- * Monta el CartProvider, el CartDrawer, el FloatingCartButton
+ * Monta el CartProvider, el ShopCartDrawer, el FloatingCartButton
  * y el PurchaseOverlay compartidos entre todas las páginas de la tienda.
  */
 
@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { CartProvider, useCart } from "@/contexts/CartContext";
-import { CartDrawer } from "@/components/shared/CartDrawer";
+import { ShopCartDrawer } from "@/components/dashboard/ShopCartDrawer";
 import { FloatingCartButton } from "@/components/ui/FloatingCartButton";
 import { PurchaseOverlay } from "@/components/shared/PurchaseOverlay";
 
@@ -59,7 +59,7 @@ function ShopLayoutInner({ children }: { children: ReactNode }) {
     <>
       {children}
       <FloatingCartButton itemCount={itemCount} onClick={openCart} />
-      <CartDrawer
+      <ShopCartDrawer
         open={isCartOpen}
         onClose={closeCart}
         onCartChange={(count) => setItemCount(count)}

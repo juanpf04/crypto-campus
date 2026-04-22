@@ -23,7 +23,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession, ensureRole } from "@/lib/auth";
 import { adminWalletClient, publicClient } from "@/lib/viem";
 import { CONTRACT_ADDRESSES, PRINTER_ABI } from "@/lib/contracts";
-import { issueReward, hasRewardOfType, ShopTokenRewardReason } from "@/lib/shopRewards";
+import { issueReward, hasRewardOfType, ShopTokenRewardReason, type RewardGrant } from "@/lib/shopRewards";
 
 interface ExecutePrintInput {
 	printerId: string;
@@ -609,12 +609,13 @@ export async function executeMyPrintJob(input: ExecutePrintInput) {
 		revalidatePath("/student/library/printing");
 
 		// ── Recompensa por impresión (solo estudiantes) ──────────────────────
+		let rewards: RewardGrant[] = [];
 		if (session.role === "STUDENT") {
 			const pages = Math.max(1, input.pages);
 			const copies = Math.max(1, input.copies ?? 1);
 			const rewardAmount = Math.floor((pages * copies) / 10);
 			if (rewardAmount > 0) {
-				await issueReward({
+				rewards = await issueReward({
 					userId: user.id,
 					userAddress: user.address,
 					mainReason: ShopTokenRewardReason.PRINT_JOB,
@@ -624,7 +625,7 @@ export async function executeMyPrintJob(input: ExecutePrintInput) {
 			} else {
 				const hasPrinting = await hasRewardOfType(user.id, ShopTokenRewardReason.MODULE_FIRST_USE_PRINTING);
 				if (!hasPrinting) {
-					await issueReward({
+					rewards = await issueReward({
 						userId: user.id,
 						userAddress: user.address,
 						mainReason: ShopTokenRewardReason.MODULE_FIRST_USE_PRINTING,
@@ -634,7 +635,7 @@ export async function executeMyPrintJob(input: ExecutePrintInput) {
 			}
 		}
 
-		return result;
+		return { ...result, rewards };
 	} catch (error) {
 		throw new Error(`Error al ejecutar trabajo personal: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
@@ -666,6 +667,9 @@ export async function executePrintJobAsAdmin(input: ExecutePrintAsAdminInput) {
 		revalidatePath("/admin/printing");
 
 		// ── Recompensa por impresión ─────────────────────────────────────────
+		// Solo la recompensa principal: el bonus de primer uso se concede cuando
+		// el estudiante imprime por sí mismo (executePrintJob), no cuando lo hace
+		// un admin en su nombre.
 		const pages = Math.max(1, input.pages);
 		const copies = Math.max(1, input.copies ?? 1);
 		const rewardAmount = Math.floor((pages * copies) / 10);
@@ -675,19 +679,7 @@ export async function executePrintJobAsAdmin(input: ExecutePrintAsAdminInput) {
 				userAddress: user.address,
 				mainReason: ShopTokenRewardReason.PRINT_JOB,
 				mainAmount: rewardAmount,
-				firstUseReason: ShopTokenRewardReason.MODULE_FIRST_USE_PRINTING,
 			});
-		} else {
-			// El trabajo no da SHPT pero puede ser el primer uso
-			const hasPrinting = await hasRewardOfType(user.id, ShopTokenRewardReason.MODULE_FIRST_USE_PRINTING);
-			if (!hasPrinting) {
-				await issueReward({
-					userId: user.id,
-					userAddress: user.address,
-					mainReason: ShopTokenRewardReason.MODULE_FIRST_USE_PRINTING,
-					mainAmount: 2,
-				});
-			}
 		}
 
 		return result;

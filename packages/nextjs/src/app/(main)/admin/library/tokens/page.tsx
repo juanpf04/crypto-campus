@@ -122,10 +122,10 @@ export default function AdminLibraryTokensPage() {
       <BackLink href="/admin/library" label="Volver a biblioteca" />
 
       <div>
-        <h1 className="text-2xl font-bold text-text">LibraryTokens</h1>
+        <h1 className="text-2xl font-bold text-text">Tokens de Préstamo</h1>
         <p className="text-text-muted mt-1">
-          Consulta y gestiona los tokens de biblioteca de los estudiantes.
-          Cada préstamo requiere 1 token como depósito.
+          Consulta y gestiona los tokens de préstamo de los estudiantes.
+          Cada préstamo de biblioteca requiere 1 token como depósito.
         </p>
       </div>
 
@@ -177,7 +177,7 @@ export default function AdminLibraryTokensPage() {
       >
         <div className="flex flex-col gap-4">
           <p className="text-sm text-text-muted">
-            Introduce la nueva cantidad de LibraryTokens para este estudiante.
+            Introduce la nueva cantidad de Tokens de Préstamo para este estudiante.
             Solo se pueden añadir tokens (mintear), no reducir el balance.
           </p>
           <Input

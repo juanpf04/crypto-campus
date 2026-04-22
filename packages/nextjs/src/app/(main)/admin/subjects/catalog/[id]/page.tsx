@@ -76,24 +76,24 @@ export default function AdminSubjectDetailPage() {
             <Badge variant="info">{subject.code}</Badge>
           </div>
         </div>
-        <Button variant="secondary" onClick={() => router.push(`/admin/subjects/${id}/edit`)}>
+        <Button variant="secondary" onClick={() => router.push(`/admin/subjects/catalog/${id}/edit`)}>
           Editar
         </Button>
       </div>
 
-      {/* Sección: Ofertas */}
+      {/* Sección: Grupos */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
-          <SectionTitle icon={icons.items}>Ofertas</SectionTitle>
-          <Button size="sm" onClick={() => router.push(`/admin/subjects/${id}/offerings/new`)}>
-            Crear oferta
+          <SectionTitle icon={icons.items}>Grupos</SectionTitle>
+          <Button size="sm" onClick={() => router.push(`/admin/subjects/catalog/${id}/offerings/new`)}>
+            Crear grupo
           </Button>
         </div>
 
         {subject.offerings.length === 0 ? (
           <EmptyState
-            title="Sin ofertas"
-            description="Aún no se ha creado ninguna oferta para esta asignatura."
+            title="Sin grupos"
+            description="Aún no se ha creado ningún grupo para esta asignatura."
           />
         ) : (
           <Card className="overflow-hidden p-0">
@@ -104,6 +104,7 @@ export default function AdminSubjectDetailPage() {
                   <TableHead>Grupo</TableHead>
                   <TableHead>Curso</TableHead>
                   <TableHead>N.º alumnos</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -111,12 +112,29 @@ export default function AdminSubjectDetailPage() {
                   <TableRow
                     key={offering.id}
                     className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => router.push(`/admin/subjects/offerings/${offering.id}`)}
+                    onClick={() => router.push(`/admin/subjects/${offering.id}`)}
                   >
                     <TableCell className="font-medium">{offering.professor?.name ?? "—"}</TableCell>
                     <TableCell>{offering.group}</TableCell>
                     <TableCell>{offering.academicYear}</TableCell>
                     <TableCell>{offering._count?.enrollments ?? 0}</TableCell>
+                    <TableCell className="text-right">
+                      <div
+                        className="inline-flex gap-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => router.push(`/admin/subjects/${offering.id}/edit`)}
+                        >
+                          <span className="flex items-center gap-1.5">
+                            {icons.pencil}
+                            Editar
+                          </span>
+                        </Button>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

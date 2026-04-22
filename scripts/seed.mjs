@@ -57,8 +57,9 @@ function runNodeScript(scriptName, { prefix, allowFailure = false, nonCriticalMe
 }
 
 const seeds = [
-	{ name: "admin",    file: "scripts/seed-admin.mjs",    label: "Admin por defecto" },
-	{ name: "academic", file: "scripts/seed-academic.mjs", label: "Datos académicos (profesores, estudiantes, asignaturas, matrículas, insignias/recompensas demo)" },
+	{ name: "admin",     file: "scripts/seed-admin.mjs",     label: "Admin por defecto" },
+	{ name: "librarian", file: "scripts/seed-librarian.mjs", label: "Bibliotecario por defecto" },
+	{ name: "academic",  file: "scripts/seed-academic.mjs",  label: "Datos académicos (profesores, estudiantes, asignaturas, matrículas, insignias/recompensas demo)" },
 	{ name: "products", file: "scripts/seed-products.mjs", label: "Catálogo de productos de la tienda" },
 	{ name: "badges",   file: "scripts/seed-badges.mjs",   label: "Tareas y premios de insignias" },
 	{ name: "library",  file: "scripts/seed-library.mjs",  label: "Catálogo de biblioteca" },

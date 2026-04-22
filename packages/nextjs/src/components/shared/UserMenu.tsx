@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
+import { icons } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/types";
 
@@ -60,13 +61,10 @@ export function UserMenu({ name, role, collapsed = false, className }: UserMenuP
           "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors",
           "hover:bg-danger/10 hover:text-danger",
           "disabled:opacity-50",
+          "[&_svg]:h-4 [&_svg]:w-4",
         )}
       >
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-          <polyline points="16 17 21 12 16 7" />
-          <line x1="21" y1="12" x2="9" y2="12" />
-        </svg>
+        {icons.logout}
       </button>
     </div>
   );

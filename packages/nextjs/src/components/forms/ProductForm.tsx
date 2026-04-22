@@ -62,14 +62,14 @@ export function ProductForm({ onSubmit, initialValues, isEdit }: ProductFormProp
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <Input
         label="Nombre del producto"
-        placeholder="Camiseta UCM Blanca"
+        placeholder="Ej: Camiseta UCM Blanca"
         value={fields.name}
         onChange={setField("name")}
         error={errors.name}
       />
       <Textarea
         label="Descripción (opcional)"
-        placeholder="Camiseta 100% algodón con el escudo de la UCM"
+        placeholder="Ej: Camiseta 100% algodón con el escudo de la UCM"
         value={fields.description}
         onChange={setField("description")}
       />
@@ -99,7 +99,7 @@ export function ProductForm({ onSubmit, initialValues, isEdit }: ProductFormProp
       />
       <Input
         label="URL de imagen (opcional)"
-        placeholder="/products/camiseta/basica/blanca/main.webp"
+        placeholder="Ej: /products/camiseta/basica/blanca/main.webp"
         value={fields.imageUrl}
         onChange={setField("imageUrl")}
       />

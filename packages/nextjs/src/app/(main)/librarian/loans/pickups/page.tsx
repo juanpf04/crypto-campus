@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useToast } from "@/hooks/useToast";
+import { usePaginatedList } from "@/hooks/usePaginatedList";
 import { BackLink } from "@/components/ui/BackLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -23,28 +24,13 @@ interface PendingPickup {
 
 export default function LibrarianPendingPickupsPage() {
   const { addToast } = useToast();
-  const [items, setItems] = useState<PendingPickup[]>([]);
-  const [total, setTotal] = useState(0);
-  const [offset, setOffset] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
 
-  const loadRequests = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
-      const res = await fetch(`/api/library/loans/requests?${params}`);
-      const data = await res.json();
-      setItems(data.items ?? []);
-      setTotal(data.total ?? 0);
-    } catch {
-      addToast("Error al cargar reservas", "danger");
-    } finally {
-      setLoading(false);
-    }
-  }, [addToast, offset]);
-
-  useEffect(() => { loadRequests(); }, [loadRequests]);
+  const list = usePaginatedList<PendingPickup>({
+    endpoint: "/api/library/loans/requests",
+    pageSize: PAGE_SIZE,
+    onError: () => addToast("Error al cargar reservas", "danger"),
+  });
 
   async function handleAction(id: string, action: "pickup" | "expire") {
     setProcessing(id);
@@ -56,7 +42,7 @@ export default function LibrarianPendingPickupsPage() {
       });
       if (!res.ok) throw new Error((await res.json()).error);
       addToast(action === "pickup" ? "Recogida confirmada" : "Reserva expirada", "success");
-      loadRequests();
+      list.refresh();
     } catch (err) {
       addToast(err instanceof Error ? err.message : "Error", "danger");
     } finally {
@@ -69,22 +55,22 @@ export default function LibrarianPendingPickupsPage() {
     return new Date().getTime() > new Date(reservationDate).getTime() + RESERVATION_TIMEOUT_MS;
   }
 
-  if (loading && items.length === 0) return <SkeletonTable columns={5} rows={6} />;
+  if (list.loading && list.items.length === 0) return <SkeletonTable columns={5} rows={6} />;
 
   return (
     <div className="space-y-6">
       <BackLink href="/librarian" label="Volver al panel" />
       <div>
         <h1 className="text-2xl font-bold text-text">Reservas pendientes de recogida</h1>
-        <p className="text-text-muted mt-1">{total} reserva(s) esperando recogida</p>
+        <p className="text-text-muted mt-1">{list.total} reserva(s) esperando recogida</p>
       </div>
 
-      {items.length === 0 ? (
+      {list.items.length === 0 ? (
         <EmptyState title="Sin reservas pendientes" description="No hay reservas esperando recogida." />
       ) : (
         <>
           <Card className="overflow-hidden p-0">
-            <div className={loading ? "opacity-50 transition-opacity" : ""}>
+            <div className={list.loading ? "opacity-50 transition-opacity" : ""}>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -96,7 +82,7 @@ export default function LibrarianPendingPickupsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map((req) => (
+                  {list.items.map((req) => (
                     <TableRow key={req.id} className={isExpired(req.reservationDate) ? "bg-danger/5" : ""}>
                       <TableCell className="font-medium">{req.libraryItem.title}</TableCell>
                       <TableCell>{req.user.name}</TableCell>
@@ -127,7 +113,7 @@ export default function LibrarianPendingPickupsPage() {
               </Table>
             </div>
           </Card>
-          <Pagination offset={offset} limit={PAGE_SIZE} total={total} onChange={setOffset} />
+          <Pagination offset={list.offset} limit={list.limit} total={list.total} onChange={list.setOffset} />
         </>
       )}
     </div>

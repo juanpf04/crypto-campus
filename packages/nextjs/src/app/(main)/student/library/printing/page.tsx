@@ -8,16 +8,18 @@
  * - Sección principal: Simulador de impresión completo dentro de una Card
  */
 
-import { useEffect, useState, useCallback } from "react";
-import Link from "next/link";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
+import { toastRewards } from "@/lib/rewardToast";
+import type { RewardGrant } from "@/lib/shopRewardsMeta";
 import { icons } from "@/components/ui/icons";
-import { LinkArrow } from "@/components/shared/LinkArrow";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 import { CreditsBanner } from "@/components/shared/CreditsBanner";
+import { NavCard } from "@/components/shared/NavCard";
 import { PrintingOverlay } from "@/components/shared/PrintingOverlay";
 import { PrintJobForm, type PrintJobResult } from "@/components/forms/PrintJobForm";
+import { BackLink } from "@/components/ui/BackLink";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/Card";
 import { SkeletonPage } from "@/components/ui/Skeleton";
 
@@ -42,6 +44,9 @@ export default function StudentPrintingPage() {
     filename: string;
     promise: Promise<string | null> | null;
   }>({ active: false, filename: "", promise: null });
+
+  // Recompensas del último trabajo, pendientes de toastear cuando acabe el overlay
+  const pendingRewardsRef = useRef<RewardGrant[]>([]);
 
   // Carga inicial: créditos + impresoras + total de impresiones
   useEffect(() => {
@@ -88,6 +93,7 @@ export default function StudentPrintingPage() {
       }
       setCredits(body.printLog?.creditsAfter ?? credits);
       setTotalPrints((prev) => prev + 1);
+      pendingRewardsRef.current = body.rewards ?? [];
       return (body.printLog?.id as string) ?? null;
     }).catch(() => {
       addToast("Error al ejecutar impresión", "danger");
@@ -103,6 +109,8 @@ export default function StudentPrintingPage() {
     setPrintingState({ active: false, filename: "", promise: null });
     if (logId) {
       addToast("Impresión completada correctamente", "success");
+      toastRewards(addToast, pendingRewardsRef.current);
+      pendingRewardsRef.current = [];
       // replace para que "atrás" vuelva al formulario, no al overlay
       router.replace(`/student/library/printing/history/${logId}`);
     }
@@ -123,6 +131,8 @@ export default function StudentPrintingPage() {
 
   return (
     <div className="space-y-10">
+      <BackLink href="/student/library" label="Volver a biblioteca" />
+
       {/* ── 1. Fila superior: Créditos (50%) + Historial (50%) ── */}
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {/* Créditos */}
@@ -134,23 +144,14 @@ export default function StudentPrintingPage() {
         />
 
         {/* Card clicable de historial */}
-        <Link href="/student/library/printing/history" className="group">
-          <Card className="flex items-center gap-4 h-full relative hover:border-primary/50 transition-colors">
-            {/* Icono */}
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-              {icons.history}
-            </div>
-
-            {/* Contenido */}
-            <div className="flex-1 min-w-0">
-              <p className="text-sm text-text-muted">Mis impresiones</p>
-              <p className="text-3xl font-bold text-text">{totalPrints}</p>
-              <p className="text-xs text-text-muted mt-0.5">Ver historial completo</p>
-            </div>
-
-            <LinkArrow />
-          </Card>
-        </Link>
+        <NavCard
+          href="/student/library/printing/history"
+          icon={icons.history}
+          iconSize="md"
+          label="Mis impresiones"
+          title={<span className="text-3xl font-bold text-text">{totalPrints}</span>}
+          description="Ver historial completo"
+        />
       </section>
 
       {/* ── 2. Simulador de impresión ── */}

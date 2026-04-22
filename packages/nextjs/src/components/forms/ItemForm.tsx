@@ -69,7 +69,7 @@ export function ItemForm({ onSubmit, initialValues, isEdit }: ItemFormProps) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <Input
         label="Título"
-        placeholder="Nombre del ítem"
+        placeholder="Ej: El Señor de los Anillos"
         value={fields.title}
         onChange={setField("title")}
         error={errors.title}
@@ -84,7 +84,7 @@ export function ItemForm({ onSubmit, initialValues, isEdit }: ItemFormProps) {
       />
       <Input
         label="Autor / Diseñador / Estudio"
-        placeholder="Creador del ítem"
+        placeholder="Ej: J.R.R. Tolkien"
         value={fields.creator}
         onChange={setField("creator")}
       />
@@ -129,25 +129,25 @@ export function ItemForm({ onSubmit, initialValues, isEdit }: ItemFormProps) {
 
       {fields.type === "BOOK" && (
         <div className="grid grid-cols-2 gap-4">
-          <Input label="ISBN" placeholder="978-..." value={fields.isbn} onChange={setField("isbn")} />
-          <Input label="Editorial" placeholder="Editorial" value={fields.publisher} onChange={setField("publisher")} />
-          <Input label="Año" type="number" placeholder="2024" value={fields.year} onChange={setField("year")} />
-          <Input label="Páginas" type="number" placeholder="320" value={fields.pages} onChange={setField("pages")} />
+          <Input label="ISBN" placeholder="Ej: 978-84-376-0494-7" value={fields.isbn} onChange={setField("isbn")} />
+          <Input label="Editorial" placeholder="Ej: Anaya" value={fields.publisher} onChange={setField("publisher")} />
+          <Input label="Año" type="number" placeholder="Ej: 2024" value={fields.year} onChange={setField("year")} />
+          <Input label="Páginas" type="number" placeholder="Ej: 320" value={fields.pages} onChange={setField("pages")} />
         </div>
       )}
 
       {fields.type === "BOARD_GAME" && (
         <div className="grid grid-cols-3 gap-4">
-          <Input label="Jugadores" placeholder="2-4" value={fields.players} onChange={setField("players")} />
-          <Input label="Duración (min)" placeholder="60" value={fields.duration} onChange={setField("duration")} />
-          <Input label="Edad mínima" placeholder="12+" value={fields.ageRating} onChange={setField("ageRating")} />
+          <Input label="Jugadores" placeholder="Ej: 2-4" value={fields.players} onChange={setField("players")} />
+          <Input label="Duración (min)" placeholder="Ej: 60" value={fields.duration} onChange={setField("duration")} />
+          <Input label="Edad mínima" placeholder="Ej: 12+" value={fields.ageRating} onChange={setField("ageRating")} />
         </div>
       )}
 
       {fields.type === "VIDEO_GAME" && (
         <div className="grid grid-cols-2 gap-4">
-          <Input label="Plataforma" placeholder="PS5, Switch, PC..." value={fields.platform} onChange={setField("platform")} />
-          <Input label="Género" placeholder="RPG, Puzzle..." value={fields.genre} onChange={setField("genre")} />
+          <Input label="Plataforma" placeholder="Ej: PS5, Switch, PC" value={fields.platform} onChange={setField("platform")} />
+          <Input label="Género" placeholder="Ej: RPG, Puzzle" value={fields.genre} onChange={setField("genre")} />
         </div>
       )}
 

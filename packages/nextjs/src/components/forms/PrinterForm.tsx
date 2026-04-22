@@ -44,7 +44,7 @@ export function PrinterForm({ onSubmit, initialValues, isEdit }: PrinterFormProp
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <Input
         label="Identificador"
-        placeholder="IMP-BIB-01"
+        placeholder="Ej: IMP-BIB-01"
         value={fields.id}
         onChange={setField("id")}
         error={errors.id}
@@ -52,7 +52,7 @@ export function PrinterForm({ onSubmit, initialValues, isEdit }: PrinterFormProp
       />
       <Input
         label="Ubicación"
-        placeholder="Biblioteca, entrada principal"
+        placeholder="Ej: Biblioteca, entrada principal"
         value={fields.location}
         onChange={setField("location")}
         error={errors.location}
