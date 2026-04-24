@@ -7,8 +7,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { SkeletonPage } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -63,11 +65,16 @@ export default function ProfessorStudentsGlobalPage() {
     <div className="space-y-6">
       <BackLink href="/professor" label="Volver al panel" />
 
-      <div>
-        <h1 className="text-2xl font-bold text-text">Mis alumnos</h1>
-        <p className="text-text-muted mt-1">
-          Todos los alumnos matriculados en cualquiera de tus asignaturas. Haz click en una fila para ver qué asignaturas comparte contigo.
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-text">Mis alumnos</h1>
+          <p className="text-text-muted mt-1">
+            Todos los alumnos matriculados en cualquiera de tus asignaturas. Haz click en una fila para ver qué asignaturas comparte contigo.
+          </p>
+        </div>
+        <Link href="/professor/students/rewards">
+          <Button variant="secondary">Ver inventario de recompensas</Button>
+        </Link>
       </div>
 
       {students.length === 0 ? (

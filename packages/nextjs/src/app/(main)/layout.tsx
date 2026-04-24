@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { StudentOnboardingModal } from "@/components/layout/StudentOnboardingModal";
@@ -13,15 +13,17 @@ function MainContent({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuthUser();
   const { open } = useOnboarding();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [onboardingTriggered, setOnboardingTriggered] = useState(false);
+  // Flag de una sola ejecución: usamos ref (no state) para evitar el render en
+  // cascada que ocasionaba setOnboardingTriggered dentro del effect.
+  const onboardingTriggeredRef = useRef(false);
 
   // Abre el modal automáticamente si el estudiante no ha completado el onboarding
   useEffect(() => {
-    if (!loading && user && user.role === "STUDENT" && !user.onboardingCompleted && !onboardingTriggered) {
-      setOnboardingTriggered(true);
+    if (!loading && user && user.role === "STUDENT" && !user.onboardingCompleted && !onboardingTriggeredRef.current) {
+      onboardingTriggeredRef.current = true;
       open();
     }
-  }, [loading, user, open, onboardingTriggered]);
+  }, [loading, user, open]);
 
   if (loading || !user) {
     return (

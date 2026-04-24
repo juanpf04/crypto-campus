@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Button } from "@/components/ui/Button";
@@ -79,7 +79,6 @@ const STATUS_BADGE: Record<Status, { label: string; variant: "success" | "warnin
 export default function ProfessorAssignmentDetailPage() {
   const params = useParams<{ offeringId: string; id: string }>();
   const { offeringId, id } = params;
-  const router = useRouter();
   const { addToast } = useToast();
 
   const [detail, setDetail] = useState<AssignmentDetail | null>(null);

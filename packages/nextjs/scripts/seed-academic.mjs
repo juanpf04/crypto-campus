@@ -87,7 +87,6 @@ const ADDRESSES = {
 
 const CAMPUS_ABI = loadAbi("CampusRoles");
 const LIBRARY_TOKEN_ABI = loadAbi("LibraryToken");
-const SHOP_TOKEN_ABI = loadAbi("ShopToken");
 const BADGE_SYSTEM_ABI = loadAbi("BadgeSystem");
 
 // ── Plantillas de recompensas por categoría ─────────────────────────────────

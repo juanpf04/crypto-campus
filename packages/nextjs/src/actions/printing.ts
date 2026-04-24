@@ -42,10 +42,6 @@ interface ExecutePrintInput {
 	filePath?: string | null;
 }
 
-interface ExecutePrintAsAdminInput extends ExecutePrintInput {
-	userId: string;
-}
-
 function ensurePositiveInt(value: number, fieldName: string): number {
 	if (!Number.isInteger(value) || value <= 0) {
 		throw new Error(`${fieldName} debe ser un entero positivo`);
@@ -467,7 +463,7 @@ export async function setStudentPrinterCredits(userId: string, credits: number) 
  * Lógica compartida para ejecutar un trabajo de impresión.
  * Valida la impresora, consume créditos en el contrato y registra en BD.
  *
- * @internal Uso solo desde executeMyPrintJob y executePrintJobAsAdmin.
+ * @internal Uso solo desde executeMyPrintJob.
  */
 async function executePrinterJob(
 	userId: string,
@@ -638,53 +634,6 @@ export async function executeMyPrintJob(input: ExecutePrintInput) {
 		return { ...result, rewards };
 	} catch (error) {
 		throw new Error(`Error al ejecutar trabajo personal: ${error instanceof Error ? error.message : "desconocido"}`);
-	}
-}
-
-/**
- * Ejecuta un trabajo de impresión en nombre de un usuario (solo admin).
- * Consume créditos del usuario en el contrato y registra el evento.
- *
- * @param input Especificación del trabajo incluyendo ID del usuario, impresora, páginas y archivo.
- * @returns Hash de transacción y detalles del log de impresión.
- */
-export async function executePrintJobAsAdmin(input: ExecutePrintAsAdminInput) {
-	const session = await getSession();
-	ensureRole(session, ["ADMIN", "LIBRARIAN"]);
-
-	try {
-		const user = await prisma.user.findUnique({
-			where: { id: input.userId },
-			select: { id: true, address: true },
-		});
-
-		if (!user) {
-			throw new Error("Usuario no encontrado en la base de datos");
-		}
-
-		// Ejecutar trabajo en nombre del usuario y revalidar caché de admin
-		const result = await executePrinterJob(user.id, user.address, input);
-		revalidatePath("/admin/printing");
-
-		// ── Recompensa por impresión ─────────────────────────────────────────
-		// Solo la recompensa principal: el bonus de primer uso se concede cuando
-		// el estudiante imprime por sí mismo (executePrintJob), no cuando lo hace
-		// un admin en su nombre.
-		const pages = Math.max(1, input.pages);
-		const copies = Math.max(1, input.copies ?? 1);
-		const rewardAmount = Math.floor((pages * copies) / 10);
-		if (rewardAmount > 0) {
-			await issueReward({
-				userId: user.id,
-				userAddress: user.address,
-				mainReason: ShopTokenRewardReason.PRINT_JOB,
-				mainAmount: rewardAmount,
-			});
-		}
-
-		return result;
-	} catch (error) {
-		throw new Error(`Error al ejecutar trabajo de impresión admin: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
 

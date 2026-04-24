@@ -225,14 +225,3 @@ export async function listProfessors() {
 		orderBy: { name: "asc" },
 	});
 }
-
-export async function listStudentsForAdmin() {
-	const session = await getSession();
-	ensureRole(session, ["ADMIN"]);
-
-	return prisma.user.findMany({
-		where: { role: "STUDENT", active: true },
-		select: { id: true, name: true, email: true },
-		orderBy: { name: "asc" },
-	});
-}

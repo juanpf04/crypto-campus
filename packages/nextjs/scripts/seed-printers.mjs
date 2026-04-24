@@ -19,7 +19,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const cyan = (s) => `\x1b[36m${s}\x1b[0m`;
 const green = (s) => `\x1b[32m${s}\x1b[0m`;
-const yellow = (s) => `\x1b[33m${s}\x1b[0m`;
 
 function log(msg) {
   console.log(`${cyan("[seed-printers]")} ${msg}`);

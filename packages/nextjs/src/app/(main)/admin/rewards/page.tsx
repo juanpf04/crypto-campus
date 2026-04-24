@@ -6,10 +6,12 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { RewardCategory } from "@prisma/client";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { CategoryFilter } from "@/components/ui/CategoryFilter";
@@ -114,11 +116,16 @@ export default function AdminRewardsGlobalPage() {
     <div className="space-y-6">
       <BackLink href="/admin" label="Volver al panel" />
 
-      <div>
-        <h1 className="text-2xl font-bold text-text">Recompensas (global)</h1>
-        <p className="text-text-muted mt-1">
-          Todas las recompensas del sistema. Pincha en una fila para ir a su asignatura.
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-text">Recompensas (global)</h1>
+          <p className="text-text-muted mt-1">
+            Todas las recompensas del sistema. Pincha en una fila para ir a su asignatura.
+          </p>
+        </div>
+        <Link href="/admin/rewards/inventory">
+          <Button variant="secondary">Inventario por alumno</Button>
+        </Link>
       </div>
 
       <div className="space-y-3">

@@ -1,4 +1,3 @@
-export { Alert } from "./Alert";
 export { BackLink } from "./BackLink";
 export { Avatar } from "./Avatar";
 export { Badge } from "./Badge";
