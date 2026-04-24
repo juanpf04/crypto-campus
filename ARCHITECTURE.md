@@ -1,6 +1,9 @@
-# CryptoCampus — Arquitectura del Proyecto
+# CryptoCampus — Arquitectura del proyecto
 
-Documento de referencia completo. Explica cada decisión técnica, qué hace cada carpeta, cómo fluyen los datos y las convenciones del proyecto. Se mantiene actualizado conforme avanza el desarrollo.
+Documento de referencia técnica. Explica cada decisión arquitectónica, qué hace cada carpeta, cómo fluyen los datos y las convenciones del proyecto. Complementa:
+
+- [README.md](./README.md) — onboarding y comandos
+- [TFG-DOCUMENTACION-TECNICA.md](./TFG-DOCUMENTACION-TECNICA.md) — enfoque de memoria académica con flujos end-to-end y glosario
 
 ---
 
@@ -9,69 +12,78 @@ Documento de referencia completo. Explica cada decisión técnica, qué hace cad
 1. [Visión general](#1-visión-general)
 2. [Stack tecnológico](#2-stack-tecnológico)
 3. [Estructura del monorepo](#3-estructura-del-monorepo)
-4. [Smart Contracts (packages/hardhat)](#4-smart-contracts-packageshardhat)
-5. [Base de datos — Prisma Schema](#5-base-de-datos--prisma-schema)
-6. [Aplicación Next.js (packages/nextjs)](#6-aplicación-nextjs-packagesnextjs)
+4. [Smart Contracts (`packages/hardhat`)](#4-smart-contracts-packageshardhat)
+5. [Base de datos — Prisma schema](#5-base-de-datos--prisma-schema)
+6. [Aplicación Next.js (`packages/nextjs`)](#6-aplicación-nextjs-packagesnextjs)
 7. [Flujo de datos: blockchain vs Prisma](#7-flujo-de-datos-blockchain-vs-prisma)
-8. [Sistema de autenticación](#8-sistema-de-autenticación)
+8. [Autenticación y sesiones](#8-autenticación-y-sesiones)
 9. [Roles y permisos](#9-roles-y-permisos)
-10. [Convenciones de código](#10-convenciones-de-código)
-11. [Cómo arrancar el proyecto](#11-cómo-arrancar-el-proyecto)
+10. [Sistema de recompensas automáticas](#10-sistema-de-recompensas-automáticas)
+11. [Motor blockchain: Anvil vs Hardhat](#11-motor-blockchain-anvil-vs-hardhat)
+12. [Convenciones de código](#12-convenciones-de-código)
+13. [Cómo arrancar el proyecto](#13-cómo-arrancar-el-proyecto)
 
 ---
 
 ## 1. Visión general
 
-CryptoCampus es una plataforma universitaria para la UCM que gestiona cuatro módulos usando blockchain como capa de confianza:
+CryptoCampus es una plataforma universitaria para la UCM que integra **cinco módulos** usando blockchain como capa de verdad:
 
 | Módulo | Descripción |
 |---|---|
-| **Biblioteca** | Préstamo de libros, juegos de mesa y videojuegos con tokens ERC-20 como depósito |
-| **Tienda** | Compra de productos de papelería/merchandising universitario con ShopTokens |
-| **Badges** | Sistema de insignias académicas que los profesores otorgan a alumnos por tareas |
-| **Impresión** | Solicitud y gestión de trabajos de impresión con pago en tokens |
+| **Biblioteca** | Préstamo de libros, juegos de mesa y videojuegos con `LibraryToken` como depósito. Cola FIFO si no hay copias |
+| **Tienda** | Compra de productos/merchandising con `ShopTokens`. Checkout en lote, devoluciones con recibos |
+| **Insignias académicas (Badges)** | Sistema de insignias soulbound emitidas por profesores. Canjeables por recompensas |
+| **Impresión** | Créditos por alumno, simulador con opciones (color/dúplex/páginas/hoja) |
+| **Salas de estudio** | Reserva por franja horaria, 1 al día por alumno, máx 4 h consecutivas. QR de confirmación |
 
 ### Principio fundamental de diseño
 
-**La blockchain es la fuente de verdad para ownership y estado financiero. Prisma es la fuente de verdad para metadata y relaciones.**
+**La blockchain es la fuente de verdad para ownership y estado financiero. Prisma es la fuente de verdad para metadatos y relaciones.**
 
-- On-chain: precios, stocks, saldos, roles, estados de préstamos/pedidos, eventos auditables
-- Prisma: nombres, descripciones, imágenes, ISBN, categorías, historial legible
+- On-chain: precios, stock, saldos, roles, estados de préstamo/pedido, eventos auditables
+- Prisma: nombres, descripciones, imágenes, ISBN, categorías, relaciones complejas, historial legible
 
-### Tipo de dApp
+### Tipo de dApp: custodial
 
-CryptoCampus **NO** es una dApp estándar donde el usuario conecta MetaMask. Es una aplicación web tradicional con blockchain en el backend:
+CryptoCampus **no** es una dApp estándar con MetaMask. Es una aplicación web tradicional con blockchain en el backend:
 
-- Las wallets son generadas automáticamente por el servidor al registrar un usuario
-- El usuario nunca ve ni maneja su clave privada
-- Las transacciones blockchain las firma el backend en nombre del usuario
-- La UX es idéntica a una app web normal (email + contraseña)
+- Las wallets se generan server-side al registrar un usuario.
+- El usuario nunca ve ni maneja su clave privada (cifrada con AES-256-GCM en `User.encryptedKey`).
+- Las transacciones on-chain las firma el backend en nombre del usuario.
+- La UX es idéntica a una app web convencional (email + contraseña).
 
 ---
 
 ## 2. Stack tecnológico
 
-### Frontend / Backend
-- **Next.js 15** (App Router) — framework full-stack
-- **TypeScript** — tipado estático en todo el proyecto
-- **Tailwind CSS** — estilos utilitarios
+### Frontend / Backend (`packages/nextjs`)
+- **Next.js 16** (App Router + React Server Components) — framework full-stack
+- **React 19** — librería de UI
+- **TypeScript 5.8** — tipado estático en todo el proyecto
+- **Tailwind CSS 4** — estilos utility-first
+- **Prisma 7** — ORM para PostgreSQL con cliente tipado
 - **iron-session** — sesiones cifradas en cookies httpOnly
-- **wagmi + viem** — solo para configuración de red; las txs van server-side con viem puro
+- **bcryptjs** — hash de contraseñas
+- **Viem 2** — cliente blockchain server-side (la wallet del admin y las de los alumnos firman vía viem puro)
+- **Wagmi 2** — hooks React lado cliente, solo para configuración de red (lecturas puntuales)
+- **Recharts 3** — gráficos en dashboards
+- **pdf-lib 1** — manipulación de PDFs (simulador de impresión)
+- **qrcode.react 4** — generación de QR (reservas de salas)
 
-### Blockchain
-- **Solidity ^0.8.20** — contratos inteligentes
-- **Hardhat** — entorno de desarrollo y red local
-- **Hardhat Ignition** — sistema de despliegue declarativo
-- **OpenZeppelin** — contratos base (ERC20, AccessControl)
-- **viem** — cliente blockchain server-side (reemplaza ethers.js)
+### Blockchain (`packages/hardhat`)
+- **Solidity 0.8.28** — contratos inteligentes
+- **Hardhat 3** — entorno de desarrollo
+- **Hardhat Ignition 3** — sistema de despliegue declarativo
+- **OpenZeppelin Contracts 5.6** — contratos base (ERC-20, ERC-1155, AccessControl, Pausable, ReentrancyGuard)
+- **Viem** — cliente blockchain en tests y server actions
+- **Foundry (Anvil + Forge)** — nodo local persistente (Anvil) y testing en Solidity (Forge)
 
 ### Base de datos
-- **PostgreSQL** — base de datos relacional (puerto 5435 en local)
-- **Prisma** — ORM con migraciones y cliente TypeScript generado
+- **PostgreSQL 15** — base de datos relacional (puerto 5435 en local, levantada con Docker)
 
 ### Herramientas
-- **pnpm workspaces** — monorepo con packages/hardhat y packages/nextjs
-- **bcryptjs** — hash de contraseñas
+- **pnpm 10.33 workspaces** — monorepo con `packages/hardhat` y `packages/nextjs`
 - **Node crypto (AES-256-GCM)** — cifrado de claves privadas en BD
 
 ---
@@ -81,389 +93,495 @@ CryptoCampus **NO** es una dApp estándar donde el usuario conecta MetaMask. Es 
 ```
 CryptoCampus/
 ├── packages/
-│   ├── hardhat/          # Contratos Solidity + despliegue
-│   └── nextjs/           # Aplicación web full-stack
-├── ARCHITECTURE.md       # Este archivo
-├── package.json          # Workspace root
+│   ├── hardhat/                  # Contratos Solidity + despliegue + tests
+│   └── nextjs/                   # Aplicación web full-stack
+│
+├── scripts/
+│   ├── dev.mjs                   # Orquestador de arranque (Anvil + Prisma + Next)
+│   ├── seed.mjs                  # Lanzador de todos los seeds
+│   └── reset-chain.mjs           # Borra estado on-chain local
+│
+├── docker-compose.yaml           # PostgreSQL (puerto 5435)
+├── ARCHITECTURE.md               # Este archivo
+├── README.md                     # Onboarding
+├── TFG-DOCUMENTACION-TECNICA.md  # Memoria TFG
+├── CLAUDE.md                     # Guía para Claude Code
+├── package.json                  # Workspace root (scripts globales)
 └── pnpm-workspace.yaml
 ```
 
 ---
 
-## 4. Smart Contracts (packages/hardhat)
+## 4. Smart Contracts (`packages/hardhat`)
 
 ### Archivos importantes
 
 ```
 packages/hardhat/
-├── contracts/            # Código Solidity
-├── ignition/modules/     # CampusModule.ts — despliegue declarativo
-├── artifacts/            # ABIs generados (importados desde Next.js)
-└── ignition/deployments/chain-31337/deployed_addresses.json
+├── contracts/                               # Código Solidity (8 producción + Example)
+├── ignition/modules/CampusModule.ts         # Despliegue declarativo de todos los contratos
+├── artifacts/                               # ABIs generados (consumidos desde Next.js)
+└── ignition/deployments/chain-31337/
+    └── deployed_addresses.json              # Direcciones tras el primer deploy
 ```
 
-### Los 7 contratos
+### 4.1 Los 8 contratos de producción
 
-#### CampusRoles
-- **Hereda de**: OpenZeppelin AccessControl
+#### `CampusRoles` — AccessControl + Pausable
 - **Responsabilidad**: Registro de usuarios y gestión de roles
-- **Roles**: `STUDENT_ROLE`, `PROFESSOR_ROLE`, `LIBRARIAN_ROLE` (ADMIN = DEFAULT_ADMIN_ROLE)
-- **Funciones clave**: `registerUser(address, name, role)`, `hasRole(role, address)`
-- **Nota**: Solo el admin (account[0] de Hardhat) puede registrar usuarios y asignar roles
+- **Roles**: `STUDENT_ROLE`, `PROFESSOR_ROLE`, `LIBRARIAN_ROLE`, y `DEFAULT_ADMIN_ROLE` (admin)
+- **Funciones clave**: `registerUser(address, role)`, `hasRole(role, address)`, `grantRole()`, `revokeRole()`
+- **Nota**: Solo el admin (Account #0 de Anvil/Hardhat) puede registrar usuarios y asignar roles
 
-#### LibraryToken (ERC-20)
+#### `LibraryToken` — ERC-20 + Pausable
 - **Símbolo**: LIB
-- **Responsabilidad**: Token de depósito para préstamos de biblioteca
+- **Decimales**: 0 (unidades enteras)
+- **Responsabilidad**: Token de depósito para préstamos
 - **Flujo**: Al solicitar préstamo, el usuario "gasta" 1 LIB → al devolver, lo recupera
-- **Mint**: Solo el admin puede mintear (10 tokens iniciales por estudiante al registrarse)
+- **`trustedSpender`**: `LibraryManager` puede mover tokens del alumno sin `approve` previo
+- **Mint**: Solo el admin. En el registro se minetan 10 LIB iniciales por alumno
 
-#### ShopToken (ERC-20)
-- **Símbolo**: SHOP
-- **Responsabilidad**: Moneda interna de la tienda
-- **Mint**: Solo el admin puede mintear (100 tokens iniciales por estudiante al registrarse)
+#### `ShopToken` — ERC-20 + Pausable
+- **Símbolo**: SHPT
+- **Decimales**: 0
+- **Responsabilidad**: Moneda de la tienda y sistema de recompensas
+- **`trustedSpender`**: `CampusShop` y el admin. El sistema de recompensas automáticas también mintea aquí
+- **Mint**: admin (+ recompensas automáticas según las acciones del usuario)
 
-#### LibraryManager
-- **Responsabilidad**: Gestión on-chain del estado de préstamos
-- **Struct Book**: `{ totalCopies, availableCopies, exists }` — sin strings (gas optimization)
-- **Funciones**: `addBook(copies)`, `requestLoan(bookId, borrower)`, `returnLoan(loanId)`
-- **Vinculación con Prisma**: `bookId` (uint256) ↔ `LibraryItem.tokenId` en Prisma
+#### `LibraryManager` — ERC-1155 + ERC1155Supply + ReentrancyGuard + Pausable
+- **Responsabilidad**: Catálogo de ítems + gestión de préstamos + cola FIFO
+- **`tokenId`** = id de un título (libro, juego, videojuego). `supply` = número de copias
+- **Funciones**: `addItem(copies)`, `requestLoan(itemId)`, `pickupLoan(loanId)`, `returnLoan(loanId)`, `expireReservation(loanId)`
+- **Cola FIFO**: si `availableCopies == 0`, la solicitud entra en `QUEUED`. Al devolverse una copia, la primera en cola pasa a `RESERVED` automáticamente
+- **Vinculación con Prisma**: `tokenId` ↔ `LibraryItem.tokenId`, `loanId` ↔ `Loan.loanId`
 
-#### CampusShop
-- **Responsabilidad**: Gestión on-chain de productos y compras
-- **Struct Product**: `{ price, stock, active, exists }` — sin nombre (gas optimization)
-- **Funciones**: `addProduct(price, stock)`, `purchase(productId, buyer)`
-- **Vinculación con Prisma**: `productId` (uint256) ↔ `Product.tokenId` en Prisma
+#### `CampusShop` — ERC-1155 + ERC1155Supply + ReentrancyGuard + Pausable
+- **Responsabilidad**: Tienda (catálogo, compras, devoluciones)
+- **`tokenId`** = variante de producto (ej. camiseta roja talla M). Cada variante tiene `price` y `stock`
+- **Funciones**: `addProduct(price, stock)`, `purchaseBatch(ids[], amounts[])`, `returnItem(orderId)`
+- **Batches**: Una compra con múltiples productos genera un `batchId` único para agrupar
+- **Vinculación con Prisma**: `tokenId` ↔ `Product.tokenId`, `batchId` ↔ `OrderBatch.batchId`
 
-#### BadgeSystem
-- **Responsabilidad**: Emisión y verificación de insignias académicas
-- **Structs**: `BadgeType { creator, exists }`, `Task { badgeTypeId, rewardAmount, exists }`, `Reward { badgeCost, supply, minted, exists }`
-- **Sin strings**: nombre y descripción viven en Prisma
-- **Funciones**: `createBadgeType()`, `createTask(badgeTypeId, rewardAmount)`, `createReward(badgeTypeId, badgeCost, supply)`, `awardBadge(taskId, student)`
+#### `BadgeSystem` — ERC-1155 + ERC1155Supply + Pausable
+- **Responsabilidad**: Insignias académicas soulbound + recompensas canjeables
+- **Tokens de dos tipos**:
+  - **SubjectBadge tokens** (1 por offering): ganados por los alumnos, soulbound (no transferibles)
+  - **Reward tokens**: creados por profesores, consumen badges para mintearse
+- **Soulbound**: `_update()` sobrescrito para bloquear transferencias entre usuarios (solo mint/burn)
+- **Funciones**: `createSubjectBadge()`, `createAssignment()`, `createPrizeCategory()`, `awardBadge()`, `createReward()`, `redeemReward()`, `burnReward()`
 
-#### Printer
-- **Responsabilidad**: Gestión de créditos de impresión de estudiantes (1 crédito = 1 página)
-- **Constantes**: `INITIAL_CREDITS = 200` — créditos por defecto para cada estudiante
-- **Funciones**: `setCredits(student, credits)`, `print(student, pages)`, `getCredits(student)`
-- **Eventos**: `CreditsSet(student, credits)`, `PrintJobExecuted(student, pages, remainingCredits)`
-- **Nota**: Solo el admin puede llamar a `setCredits` y `print`. `getCredits` devuelve -1 si la dirección no es estudiante
+#### `Printer` — Pausable
+- **Responsabilidad**: Créditos de impresión por alumno
+- **Constantes**: `INITIAL_CREDITS = 200` al registrarse
+- **Funciones**: `print(student, pages)`, `setCredits(student, credits)`, `getCredits(student)`
+- **Admin/Librarian**: Créditos ilimitados (bypass en la Server Action, no en el contrato)
+- **Eventos**: `PrintJobExecuted(student, pages, remainingCredits)`
 
-### Direcciones desplegadas (chain-31337 — Hardhat local)
+#### `RoomBooking` — ReentrancyGuard + Pausable
+- **Responsabilidad**: Reservas de salas de estudio
+- **Granularidad**: Slots por hora. Máx 4 h consecutivas, 1 reserva por día por alumno
+- **Funciones**: `bookSlot(roomId, startHour, duration)`, `cancelBooking(bookingId)`
+- **Validación**: El contrato impide solapes, extras y múltiples reservas mismo día
 
-```json
-{
-  "CampusRoles": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-  "BadgeSystem":         "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
-  "LibraryToken":        "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
-  "Printer":     "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
-  "ShopToken":           "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
-  "CampusShop":          "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
-  "LibraryManager":      "0x0165878A594ca255338adfa4d48449f69242Eb8F"
+### 4.2 Direcciones desplegadas (chain 31337)
+
+Las direcciones son **deterministas** en Hardhat/Anvil si se despliega siempre desde cero en el mismo orden:
+
+```
+CampusRoles:    0x5FbDB2315678afecb367f032d93F642f64180aa3
+LibraryToken:   0x...
+ShopToken:      0x...
+LibraryManager: 0x...
+CampusShop:     0x...
+BadgeSystem:    0x...
+Printer:        0x...
+RoomBooking:    0x...
+```
+
+Tras el primer deploy de Ignition, las direcciones exactas quedan en `packages/hardhat/ignition/deployments/chain-31337/deployed_addresses.json`. El frontend las lee desde [`packages/nextjs/src/lib/contracts.ts`](packages/nextjs/src/lib/contracts.ts) que las re-exporta tipadas.
+
+### 4.3 Optimización de gas
+
+Se eliminaron todos los strings de los structs on-chain. Nombres, descripciones, títulos, autores e ISBN viven en Prisma. La blockchain solo guarda lo que necesita para ejecutar lógica: precios, cantidades, estados, direcciones. Esto reduce el coste de gas y simplifica las upgrades.
+
+### 4.4 Patrones de seguridad
+
+- **CEI (Checks-Effects-Interactions)**: Todas las funciones verifican, actualizan estado y después hacen llamadas externas. Previene reentrancia.
+- **ReentrancyGuard**: Aplicado en funciones con transferencias ERC-1155.
+- **Pausable**: Todos los contratos pueden pausarse por el admin en emergencia.
+- **Custom errors**: En vez de `require("...")` se usan errores tipados (`error NotStudent(address)`). Gas más barato y más informativos.
+- **Restricción de transferencias**: `LibraryManager` y `BadgeSystem` sobrescriben `_update()` para impedir transferencias directas (solo el contrato media).
+
+---
+
+## 5. Base de datos — Prisma schema
+
+**Archivo**: [`packages/nextjs/prisma/schema.prisma`](packages/nextjs/prisma/schema.prisma).
+
+27 modelos en total. Resumen por dominio:
+
+### 5.1 Usuarios y autenticación
+
+```prisma
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  password      String   // bcrypt (12 rondas)
+  name          String
+  address       String   @unique   // wallet address on-chain
+  encryptedKey  String             // AES-256-GCM
+  role          UserRole
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  // relaciones: Enrollments, Loans, Orders, BadgeAwards, ...
 }
 ```
 
-Estas direcciones son deterministas en Hardhat (siempre las mismas si se despliega desde cero en el mismo orden). Si se redespliegas, actualizar `src/lib/contracts.ts`.
+- `address`: dirección pública de la wallet generada server-side.
+- `encryptedKey`: clave privada cifrada. **Nunca se expone al frontend**.
+- `role`: refleja el rol on-chain (`CampusRoles`) para evitar consultas blockchain en cada request.
 
-### Optimización de gas
+### 5.2 Academic (asignaturas)
 
-Se eliminaron todos los strings de los structs on-chain. Nombres, descripciones, títulos, autores e ISBN viven en Prisma. La blockchain solo guarda lo que necesita para ejecutar lógica: precios, cantidades, estados, direcciones.
+```prisma
+model Subject           { id, name, code unique }
+model SubjectOffering   { id, subjectId, professorId, group, academicYear (unique compuesto) }
+model Enrollment        { id, userId, subjectOfferingId (unique compuesto) }
+```
+
+Cada `SubjectOffering` es una instancia concreta de una asignatura (profesor + grupo + curso). Un alumno se matricula en ofertas concretas.
+
+### 5.3 Badges (insignias académicas)
+
+```prisma
+model SubjectBadge       { id, subjectOfferingId unique, tokenId }
+model Assignment         { id, subjectBadgeId, name, description, deadline, autoClose }
+model PrizeCategory      { id, assignmentId, name, badgeReward, maxWinners }
+model TaskSubmission     { id, assignmentId, studentId, ... }
+model BadgeAward         { id, prizeCategoryId, userId, subjectBadgeId, awardedAt, txHash }
+model Reward             { id, subjectBadgeId, name, description, category, badgeCost, supply, active, rewardId }
+model RewardRedemption   { id, rewardId, userId, redeemedAt, txHash }
+model UseRequest         { id, rewardId, studentId, status (PENDING/APPROVED/REJECTED/CANCELLED) }
+```
+
+Un `Assignment` contiene una o más `PrizeCategory`. Cuando el profesor concede un award, se crea un `BadgeAward` y se mintea el token on-chain.
+
+### 5.4 Library (biblioteca)
+
+```prisma
+model LibraryItem  { id, tokenId, type, title, creator, totalCopies, coverUrl, category, active, ... }
+model Loan         { id, loanId, userId, libraryItemId, status (QUEUED/RESERVED/PICKED_UP/RETURNED/EXPIRED/CANCELLED), requestDate, reservationDate, dueDate, txHash }
+```
+
+Un `Loan` pasa por una máquina de estados. El `LibraryManager` on-chain garantiza las transiciones atómicas.
+
+### 5.5 Rooms (salas)
+
+```prisma
+model Room         { id, name, capacity, location, amenities, active }
+model RoomBooking  { id, userId, roomId, date, startHour, duration, cancelled, txHash }
+```
+
+### 5.6 Printing (impresión)
+
+```prisma
+model Printer   { id, name, location, active }
+model PrintLog  { id, userId, printerId, filename, pages, copies, color, duplex, paperSize, orientation, creditsUsed, txHash }
+```
+
+### 5.7 Shop (tienda)
+
+```prisma
+model ProductBase  { id, name, description, category, slug unique }
+model Product      { id, productBaseId, tokenId, color, variantLabel, price, stock, imageUrl, active }
+model Cart         { id, userId unique }
+model CartItem     { id, cartId, productId, quantity }
+model Order        { id, orderId, userId, productId, pricePaid, status (PAID/DELIVERED/RETURNED), txHash, purchaseDate, deliveryDate, returnDate }
+model OrderBatch   { id, batchId, userId, totalPaid, generalStatus, txHash, purchaseDate }
+// Order.batchId ↔ OrderBatch.id
+```
+
+### 5.8 Recompensas y simulación
+
+```prisma
+model ShopTokenReward        { id, userId, amount, reason (enum), txHash, createdAt }
+model PaymentSimulationLog   { ... }
+model CardTopupSimulation    { ... }
+```
+
+`ShopTokenReward` es el ledger auditable de todas las recompensas automáticas que se han minteado.
+
+### 5.9 Principio de vinculación Prisma ↔ Blockchain
+
+Cada entidad con representación on-chain tiene un campo `tokenId` (o `loanId`/`orderId`/`batchId`/`rewardId`) que es el uint256 devuelto por el contrato al crearla. Este ID es la clave de unión entre los dos ledgers. Los `txHash` permiten trazar cada acción a su transacción on-chain.
 
 ---
 
-## 5. Base de datos — Prisma Schema
-
-### Archivo: `packages/nextjs/prisma/schema.prisma`
-### Migraciones en: `packages/nextjs/prisma/migrations/`
-
-### Modelos y responsabilidades
-
-#### User
-```
-id, email, password (bcrypt), name, address (wallet), encryptedKey (AES-256-GCM),
-role (STUDENT|PROFESSOR|LIBRARIAN|ADMIN), createdAt
-```
-- `address`: dirección pública de la wallet generada server-side
-- `encryptedKey`: clave privada cifrada — NUNCA se expone al frontend
-- `role`: refleja el rol on-chain pero se guarda aquí para evitar consultas blockchain en cada request
-
-#### Subject / SubjectOffering / Enrollment
-- `Subject`: asignatura (nombre, código)
-- `SubjectOffering`: instancia de asignatura (profesor + grupo + cuatrimestre). Un profesor imparte una asignatura a un grupo concreto
-- `Enrollment`: qué estudiante está en qué SubjectOffering. Restringe qué badges puede recibir un alumno (solo los de su profesor/grupo)
-
-#### BadgeType / Task / BadgeAward
-- `BadgeType`: tipo de insignia creado por un profesor. `tokenId` = ID on-chain en BadgeSystem
-- `Task`: tarea asociada a un BadgeType. `taskId` = ID on-chain
-- `BadgeAward`: registro de que un profesor otorgó una badge a un alumno. Incluye `txHash` de la tx on-chain
-
-#### Reward / RewardRedemption
-- `Reward`: recompensa canjeable con badges. `rewardId` = ID on-chain
-- `RewardRedemption`: registro de un canje. Incluye `txHash`
-
-#### LibraryItem
-- Representa cualquier ítem prestable: libro, juego de mesa, videojuego
-- `type`: enum `BOOK | BOARD_GAME | VIDEO_GAME`
-- `metadata`: campo JSON flexible para datos específicos del tipo (ISBN, plataforma, número de jugadores...)
-- `tokenId`: ID on-chain en LibraryManager
-
-#### Loan
-- Registro de cada préstamo
-- `status`: `ACTIVE | RETURNED | OVERDUE`
-- `loanId`: ID on-chain en LibraryManager
-- `txHash` en `requestTxHash` y `returnTxHash`
-
-#### Printer / PrintLog
-- `Printer`: impresora física registrada (ubicación, modelo)
-- `PrintLog`: solicitud de impresión. `jobId` = ID on-chain en PrintingService
-
-#### Product / Order
-- `Product`: artículo de la tienda. `tokenId` = ID on-chain en CampusShop
-- `Order`: compra realizada. `txHash` incluido
-
-### Principio de vinculación Prisma ↔ Blockchain
-
-Cada entidad que tiene representación on-chain tiene un campo `tokenId` (o `loanId`, `jobId`, `rewardId`) que es el `uint256` devuelto por el contrato al crear la entidad. Este ID es la clave de unión entre las dos fuentes de verdad.
-
----
-
-## 6. Aplicación Next.js (packages/nextjs)
+## 6. Aplicación Next.js (`packages/nextjs`)
 
 ### Estructura de carpetas
 
 ```
 packages/nextjs/
-├── src/                          # Todo el código fuente
-│   ├── app/                      # Next.js App Router
-│   ├── actions/                  # Server Actions (lógica de negocio)
-│   ├── components/               # Componentes React
-│   ├── lib/                      # Configuración de librerías
-│   ├── middleware.ts              # Protección de rutas
-│   └── types/                    # Tipos TypeScript compartidos
-├── prisma/                       # Schema y migraciones (fuera de src — es config)
-├── public/                       # Assets estáticos
-├── tsconfig.json                 # @/* apunta a ./src/*
+├── src/
+│   ├── app/                  # App Router (rutas)
+│   ├── actions/              # Server Actions (8 módulos)
+│   ├── components/           # ui/ + shared/ + forms/ + dashboard/ + layout/
+│   ├── lib/                  # viem, prisma, crypto, session, shopRewards, contracts, ...
+│   ├── hooks/                # 5 hooks custom
+│   ├── contexts/             # 4 React Contexts
+│   ├── types/                # tipos compartidos
+│   └── proxy.ts              # middleware de protección de rutas
+├── prisma/
+│   ├── schema.prisma
+│   └── seed.ts               # utilidad CLI para reejecutar seeds
+├── scripts/                  # 10 scripts .mjs (seeds, resync, cleanup)
+├── public/                   # assets estáticos + uploads
+├── tsconfig.json             # alias @/ → ./src/
 └── next.config.ts
 ```
 
----
-
 ### 6.1 `src/app/` — Rutas y páginas
 
-El App Router de Next.js mapea carpetas a URLs. Cada `page.tsx` es una página. Cada `layout.tsx` envuelve sus hijos.
+Next.js App Router mapea carpetas a URLs. Cada `page.tsx` es una página; cada `layout.tsx` envuelve sus hijos.
 
 #### Grupos de rutas
 
-- `(auth)/` — grupo sin prefijo en URL: `/login`
-- `dashboard/` — área privada protegida por middleware
+- `(auth)/` — grupo sin prefijo: `/login`
+- `(main)/` — área privada protegida por middleware `proxy.ts`
 
-#### Estructura completa de rutas
+#### Rutas por rol (resumen)
+
+Ver [RUTAS.md](./packages/nextjs/RUTAS.md) para el listado exhaustivo. Estructura base:
 
 ```
 src/app/
-├── layout.tsx                    # Root layout: Providers (Wagmi, QueryClient)
-├── page.tsx                      # Homepage pública: botones Login / Register
-├── providers.tsx                 # WagmiProvider + QueryClientProvider
-├── globals.css
+├── layout.tsx                        # Root layout: Providers
+├── page.tsx                          # Homepage pública (preview)
+├── (auth)/login/page.tsx             # Formulario login
 │
-├── (auth)/
-│   └── login/
-│       └── page.tsx              # Formulario login → POST /api/auth/login
+├── (main)/
+│   ├── layout.tsx                    # Sidebar + Header + contextos globales
+│   │
+│   ├── admin/                        # Rol ADMIN
+│   │   ├── page.tsx                  # Dashboard con stats globales
+│   │   ├── users/...                 # Gestión de usuarios
+│   │   ├── subjects/...              # Asignaturas y grupos
+│   │   ├── library/...               # Ítems, préstamos, salas, impresión
+│   │   ├── shop/...                  # Productos, transacciones, pedidos
+│   │   ├── rewards/...               # Recompensas globales e inventario por alumno
+│   │   └── ...
+│   │
+│   ├── professor/                    # Rol PROFESSOR
+│   │   ├── page.tsx                  # Dashboard con sus asignaturas
+│   │   ├── subjects/[offeringId]/... # Alumnos, tareas, recompensas, solicitudes
+│   │   ├── students/...              # Todos sus alumnos + inventario recompensas
+│   │   └── ...
+│   │
+│   ├── librarian/                    # Rol LIBRARIAN
+│   │   ├── page.tsx
+│   │   ├── items/, loans/, rooms/, printing/ ...
+│   │
+│   └── student/                      # Rol STUDENT
+│       ├── page.tsx                  # Dashboard personal
+│       ├── library/...               # Catálogo, mis préstamos, salas, impresión
+│       ├── shop/...                  # Catálogo, carrito, pedidos, topup
+│       └── badges/...                # Mis insignias, recompensas, solicitudes
 │
-├── api/                          # API Routes (Next.js Route Handlers)
-│   ├── auth/
-│   │   ├── login/route.ts        # POST: valida credenciales, crea sesión iron-session
-│   │   ├── logout/route.ts       # POST: destruye la sesión
-│   │   ├── me/route.ts           # GET: devuelve datos del usuario autenticado
-│   ├── admin/                    # Rutas de administración (solo ADMIN)
-│   ├── library/                  # Rutas de biblioteca
-│   ├── shop/                     # Rutas de tienda
-│   ├── badges/                   # Rutas de badges
-│   └── printing/                 # Rutas de impresión
-│
-└── dashboard/
-    ├── layout.tsx                # Sidebar + Navbar comunes a todos los roles
-    ├── page.tsx                  # Redirect según session.role al subdashboard correcto
-    │
-    ├── admin/
-    │   ├── page.tsx              # Panel inicial: 4 tarjetas (biblioteca, tienda, badges, impresión)
-    │   ├── users/
-    │   │   ├── page.tsx          # Tabla de todos los usuarios con filtros por rol
-    │   │   ├── new/page.tsx      # Formulario crear usuario (profesor, bibliotecario, admin)
-    │   │   └── [id]/page.tsx     # Detalle y edición de usuario
-    │   ├── library/
-    │   │   ├── page.tsx          # Panel biblioteca del admin
-    │   │   ├── items/
-    │   │   │   ├── page.tsx      # Catálogo completo de ítems
-    │   │   │   ├── new/page.tsx  # Formulario añadir ítem (libro/juego/videojuego)
-    │   │   │   └── [id]/
-    │   │   │       └── edit/page.tsx
-    │   │   └── loans/
-    │   │       ├── page.tsx      # Tabla préstamos con filtros (activos/finalizados/retrasados)
-    │   │       └── requests/page.tsx  # Solicitudes de préstamo pendientes
-    │   ├── shop/
-    │   │   ├── page.tsx          # Panel tienda del admin
-    │   │   ├── products/
-    │   │   │   ├── page.tsx      # Catálogo de productos
-    │   │   │   ├── new/page.tsx  # Formulario añadir producto
-    │   │   │   └── [id]/
-    │   │   │       └── edit/page.tsx
-    │   │   └── orders/page.tsx   # Historial de pedidos
-    │   ├── badges/
-    │   │   ├── page.tsx          # Panel badges del admin
-    │   │   ├── types/
-    │   │   │   ├── page.tsx      # Lista de tipos de badge
-    │   │   │   ├── new/page.tsx  # Crear tipo de badge
-    │   │   │   └── [id]/
-    │   │   │       └── edit/page.tsx
-    │   │   └── rewards/
-    │   │       ├── page.tsx      # Lista de recompensas
-    │   │       ├── new/page.tsx
-    │   │       └── [id]/
-    │   │           └── edit/page.tsx
-    │   └── printing/
-    │       ├── page.tsx          # Cola de trabajos pendientes
-    │       └── logs/page.tsx     # Historial de impresiones
-    │
-    ├── librarian/
-    │   ├── page.tsx              # Panel inicial: stats rápidas
-    │   ├── items/
-    │   │   ├── page.tsx          # Catálogo de ítems (libros, juegos...)
-    │   │   ├── new/page.tsx      # Añadir ítem
-    │   │   └── [id]/
-    │   │       └── edit/page.tsx
-    │   └── loans/
-    │       ├── page.tsx          # Tabla préstamos con filtros
-    │       └── requests/page.tsx # Solicitudes pendientes de aprobación
-    │
-    ├── professor/
-    │   ├── page.tsx              # Panel inicial: mis asignaturas
-    │   ├── students/
-    │   │   ├── page.tsx          # Mis alumnos: tabla con conteo de badges/recompensas
-    │   │   └── [id]/page.tsx     # Detalle alumno: badges obtenidos, recompensas canjeadas
-    │   ├── badges/
-    │   │   ├── page.tsx          # Mis tipos de badge
-    │   │   ├── new/page.tsx      # Crear badge type + tasks
-    │   │   └── [id]/
-    │   │       └── edit/page.tsx
-    │   └── rewards/
-    │       ├── page.tsx          # Mis recompensas
-    │       ├── new/page.tsx      # Crear recompensa
-    │       └── [id]/
-    │           └── edit/page.tsx
-    │
-    └── student/
-        ├── page.tsx              # Mi perfil: datos personales + saldo de tokens
-        ├── library/page.tsx      # Mis préstamos activos + catálogo para solicitar
-        ├── shop/page.tsx         # Catálogo de productos + comprar con ShopTokens
-        ├── badges/page.tsx       # Mis badges obtenidos + recompensas canjeables
-        └── printing/page.tsx     # Solicitar trabajo de impresión + mis solicitudes
+└── api/                              # API Routes — thin wrappers de server actions
+    ├── auth/, admin/, academic/,
+    ├── library/, rooms/, printer/,
+    ├── badges/, shop/, ...
 ```
-
----
 
 ### 6.2 `src/actions/` — Server Actions
 
-**Regla**: Toda lógica que toca Prisma o firma transacciones blockchain va aquí.
-Las páginas y componentes llaman a estas funciones directamente (no a `fetch`).
+**Regla**: Toda lógica que toca Prisma o firma transacciones blockchain vive aquí.
 
+Los 8 módulos:
+
+| Módulo | Responsabilidad |
+|---|---|
+| `auth.ts` | `createUser`, `loginUser`, `logoutUser`, `getMe`, `updatePassword` |
+| `academic.ts` | `listSubjects`, `createSubject`, `createOffering`, `enrollStudent`, `unenrollStudent`, `listAvailableStudents`, ... |
+| `badges.ts` | `createSubjectBadge`, `createAssignment`, `awardBadge`, `createReward`, `redeemReward`, `requestUseReward`, `getOfferingRewardsInventory`, ... |
+| `library.ts` | `addItem`, `requestLoan`, `pickupLoan`, `returnLoan`, `listMyLoans`, `listRequests`, `getLibraryStats`, ... |
+| `rooms.ts` | `listRooms`, `bookSlot`, `cancelBooking`, `getAvailability`, `listMyBookings`, ... |
+| `printing.ts` | `executeMyPrintJob`, `getMyPrinterCredits`, `listMyPrinterLogs`, `createPrinter`, `getMyPrintsByMonth`, ... |
+| `shop.ts` | `listProducts`, `addToCart`, `checkout`, `returnOrder`, `createProduct`, `topup`, ... |
+| `onboarding.ts` | `markModuleFirstUse`, helpers de primer uso para gatillar recompensas bonus |
+
+### 6.3 Patrón canónico de una Server Action
+
+```typescript
+"use server";
+
+export async function requestLoan(itemId: string) {
+  const session = await getSession();
+  ensureRole(session, ["STUDENT"]);
+
+  const item = await prisma.libraryItem.findUnique({ where: { id: itemId } });
+  if (!item) throw new Error("Ítem no encontrado");
+
+  const wallet = await getUserWalletClient(session.userId!);
+  const txHash = await wallet.writeContract({
+    address: CONTRACT_ADDRESSES.libraryManager,
+    abi: LIBRARY_MANAGER_ABI,
+    functionName: "requestLoan",
+    args: [BigInt(item.tokenId)],
+  });
+  await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+  const loan = await prisma.loan.create({
+    data: { userId: session.userId!, libraryItemId: item.id, status: "RESERVED", requestTxHash: txHash },
+  });
+
+  const rewards = await issueReward({
+    userId: session.userId!,
+    userAddress: session.address!,
+    mainReason: null,
+    moduleFirstUse: "LIBRARY",
+  });
+
+  return { loan, rewards };
+}
 ```
-src/actions/
-├── auth.ts        # register, login — flujo completo: wallet + on-chain + Prisma
-├── badges.ts      # createBadgeType, createTask, createReward, awardBadge, redeemReward
-├── library.ts     # addItem, requestLoan, approveLoan, returnLoan, getLoans
-├── shop.ts        # addProduct, updateProduct, purchaseProduct, getOrders
-└── printing.ts    # getPrinterConfig, createPrinter, updatePrinter, getMyPrinterCredits,
-│                  # setStudentPrinterCredits, executeMyPrintJob, executePrintJobAsAdmin
+
+Pasos:
+1. Sesión + role guard (`ensureRole`).
+2. Validación de inputs y estado.
+3. Ejecución on-chain (descifra clave del usuario → `walletClient.writeContract`).
+4. Espera `waitForTransactionReceipt` → confirma tx minada.
+5. Persistencia de metadata en Prisma.
+6. Recompensas automáticas si aplica (`issueReward`).
+7. Devuelve resultado al cliente.
+
+### 6.4 API Routes como thin wrappers
+
+Las rutas API (`app/api/...`) son wrappers mínimos sobre actions. Responsabilidades:
+
+1. Extraer parámetros del request (body, query, params).
+2. Llamar al Server Action correspondiente.
+3. Transformar errores en códigos HTTP (`401`, `403`, `404`, `409`, `500`).
+
+Ejemplo:
+```ts
+// app/api/library/loans/route.ts
+export async function POST(req: NextRequest) {
+  try {
+    const { itemId } = await req.json();
+    const result = await requestLoan(itemId);
+    return NextResponse.json(result, { status: 201 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Error";
+    const status = message === "No autenticado" ? 401
+      : message === "No autorizado" ? 403
+      : 500;
+    return NextResponse.json({ error: message }, { status });
+  }
+}
 ```
 
-**Patrón de una Server Action con blockchain:**
-1. Validar inputs
-2. Leer estado de Prisma si es necesario
-3. Descifrar `encryptedKey` del usuario para obtener su walletClient
-4. Enviar tx on-chain → obtener `txHash`
-5. Guardar resultado + `txHash` en Prisma
-6. Devolver resultado al componente
+### 6.5 `src/components/` — Componentes React (Atomic Design)
 
----
+Ver sección 10 de [TFG-DOCUMENTACION-TECNICA.md](./TFG-DOCUMENTACION-TECNICA.md) para detalle. Resumen:
 
-### 6.3 `src/components/` — Componentes React
+| Capa | Carpeta | Nº | Qué tiene |
+|---|---|---|---|
+| Atoms | `components/ui/` | 36 | `Button`, `Input`, `Card`, `Table`, `Modal`, `Pagination`, etc. Sin lógica de negocio |
+| Molecules | `components/shared/` | 49 | `StatCard`, `LoanCard`, `ProductCard`, `SectionTitle`, `NavCard`, etc. Sin side-effects pesados |
+| Forms | `components/forms/` | 13 | Formularios con `onSubmit(data)` (`LoginForm`, `ItemForm`, `AssignmentForm`, ...) |
+| Organisms | `components/dashboard/` | 13 | `ShopCartDrawer`, `OrderBatchTable`, `SubjectExpandableRow`, `StudentRewardsInventoryTable`, etc. Orquestan hooks + actions |
+| Layout | `components/layout/` | 4 | `Header`, `Sidebar`, `ProfessorSubjectsNav`, `StudentOnboardingModal` |
 
-Organizado por nivel de abstracción (Atomic Design simplificado):
+Cada carpeta tiene un `index.ts` que re-exporta todo (barrel). La carpeta `shared/` tiene cobertura 100% (49/49).
 
-```
-src/components/
-├── ui/            # ATOMS — sin lógica de negocio
-│                  # Button, Input, Badge, Card, Spinner, Avatar, Table, Modal
-│                  # Reciben props, emiten eventos. No saben nada de la app.
-│
-├── forms/         # MOLÉCULAS con lógica de formulario
-│                  # LoginForm, RegisterForm, ItemForm, ProductForm, BadgeTypeForm
-│                  # Reciben onSubmit callback, delegan lógica a actions/
-│
-└── dashboard/     # ORGANISMS — componentes "smart" por sección
-                   # Combinan ui/ + forms/ + llamadas a actions/
-                   # LibraryTable, ShopGrid, BadgeList, PrintQueue, UserTable
-                   # Tienen estado propio y saben con qué datos trabajar
-```
-
-**Regla de oro**: Si un componente necesita saber qué es un "préstamo" o un "badge", pertenece a `dashboard/`. Si solo sabe que es un botón o una tabla genérica, pertenece a `ui/`.
-
----
-
-### 6.4 `src/lib/` — Configuración de librerías
+### 6.6 `src/lib/` — Utilidades y configuración
 
 ```
 src/lib/
-├── prisma.ts      # Singleton de PrismaClient (patrón necesario en Next.js dev con HMR)
-├── contracts.ts   # ABIs importados de hardhat/artifacts + CONTRACT_ADDRESSES + ROLES
-├── viem.ts        # adminWalletClient (account[0] Hardhat) + publicClient server-side
-├── wagmi.ts       # Configuración wagmi para el cliente (chain hardhat, SSR: true)
-├── session.ts     # SessionOptions de iron-session + interfaz SessionData
-└── crypto.ts      # encrypt/decrypt AES-256-GCM para claves privadas
+├── prisma.ts                # Singleton de PrismaClient (patrón Next.js dev con HMR)
+├── contracts.ts             # ABIs importados de artifacts + CONTRACT_ADDRESSES + ROLE_CONSTANTS
+├── viem.ts                  # adminWalletClient (Account #0) + publicClient server-side
+├── wagmi.ts                 # Configuración Wagmi client-side (chain hardhat, SSR: true)
+├── session.ts               # SessionOptions de iron-session + SessionData
+├── crypto.ts                # encrypt/decrypt AES-256-GCM para claves privadas
+├── auth.ts                  # getSession(), ensureRole(), ensureAdmin() helpers
+├── shopRewards.ts           # mintShopReward, issueReward (server-only)
+├── shopRewardsMeta.ts       # Enums + constantes (cliente/servidor safe)
+├── rewardToast.ts           # toastRewards() helper cliente
+├── formatters.ts            # formatShortDate, formatCredits, etc.
+├── library-constants.ts     # opciones filtros, labels
+├── shop-constants.ts        # idem
+├── shop-utils.ts            # helpers de shop (slug, buildGroupSummary, ...)
+├── rate-limit.ts            # Rate limiter en memoria
+└── utils.ts                 # cn() (clsx + tailwind-merge)
 ```
 
 #### Por qué existe `viem.ts` separado de `wagmi.ts`
 
-- `wagmi.ts` es para el **cliente** (browser): configura la conexión de red para hooks de lectura
-- `viem.ts` es para el **servidor**: contiene el `adminWalletClient` que firma transacciones. La clave privada del admin NUNCA sale del servidor
+- `wagmi.ts`: cliente (browser). Configura la conexión de red para hooks de lectura puntuales.
+- `viem.ts`: **servidor**. Contiene el `adminWalletClient` (Account #0) y el `publicClient`. La clave privada del admin nunca sale del servidor.
 
----
+#### Por qué `shopRewardsMeta.ts` separado de `shopRewards.ts`
 
-### 6.5 `src/middleware.ts` — Protección de rutas
+- `shopRewardsMeta.ts`: enums, constantes y tipos. **Safe para importar desde cliente**.
+- `shopRewards.ts`: helpers server-only (`mintShopReward`, `issueReward`). Importa Prisma + Viem. No se puede arrastrar al bundle del navegador.
 
-Intercepta todas las peticiones a `/dashboard/*`, `/login` y `/register`.
-proxy.ts` — Protección de rutas
+### 6.7 `src/proxy.ts` — Middleware de protección de rutas
 
-Intercepta todas las peticiones a `/{role}/*` y `/login`.
+Intercepta todas las peticiones a `/{role}/*` y `/login`:
 
-- Si un usuario no autenticado intenta acceder a una ruta de rol → redirige a `/login`
-- Si un usuario ya autenticado va a `/login` → redirige a su panel de rol
----
+- Usuario no autenticado intentando entrar en rutas de rol → redirige a `/login?returnUrl=...`
+- Usuario autenticado intentando entrar en `/login` → redirige a `/{suRol}`
+- Usuario autenticado intentando entrar en la ruta de otro rol → redirige a `/{suRol}`
 
-### 6.6 `src/types/index.ts` — Tipos compartidos
+### 6.8 `src/hooks/` — Hooks custom (5)
+
+| Hook | Propósito |
+|---|---|
+| `useAuthUser` | Carga la sesión actual (`/api/auth/me`). Usado en layouts y guards |
+| `useForm<T>` | Gestión de formularios con validación + submit async (`fields`, `errors`, `submitError`, `loading`, `setField`, `handleSubmit`) |
+| `usePaginatedList<T>` | Listados paginados. Encapsula offset/limit/filters/refresh, elimina boilerplate en ~17 pages |
+| `useToast` | Acceso al contexto de toasts (crear/eliminar notificaciones) |
+| `useTheme` | Acceso al contexto de tema (light/dark persistido en localStorage) |
+
+### 6.9 `src/contexts/` — Contextos React (4)
+
+| Contexto | Propósito |
+|---|---|
+| `CartContext` | Carrito compartido entre todas las pages de `/student/shop/*`. Controla apertura del drawer y estado del checkout overlay |
+| `OnboardingContext` | Gestiona la primera entrada del STUDENT — controla apertura del modal |
+| `ThemeContext` | Tema light/dark, persistencia en localStorage |
+| `ToastContext` | Notificaciones globales (toast stack + `addToast` API) |
+
+### 6.10 `src/types/index.ts` — Tipos compartidos
 
 ```typescript
 UserRole = "STUDENT" | "PROFESSOR" | "LIBRARIAN" | "ADMIN"
 SessionUser = { id, email, name, role, address }
+ServiceRoute, ServiceSection, ROLE_FOLDERS, ...
 ```
 
 ---
 
 ## 7. Flujo de datos: blockchain vs Prisma
 
-### Crear un ítem de biblioteca (ejemplo completo)
+### Crear un ítem de biblioteca (ejemplo canónico)
 
 ```
 Admin hace click en "Añadir libro"
   ↓
 <ItemForm onSubmit={addItem} />
   ↓
-actions/library.ts → addItem({ title, author, isbn, copies, type, ... })
+actions/library.ts → addItem({ title, creator, type, totalCopies, ... })
   ↓
-  1. adminWalletClient.writeContract(LibraryManager.addBook(copies))
+  1. adminWalletClient.writeContract(LibraryManager.addItem(totalCopies))
      → devuelve txHash
-     → el evento BookAdded emite bookId (uint256)
-  2. prisma.libraryItem.create({
-       title, author, isbn, type, tokenId: bookId, metadata: {...}
+     → el evento ItemAdded emite itemId (uint256)
+  2. publicClient.waitForTransactionReceipt(txHash)
+  3. prisma.libraryItem.create({
+       title, creator, type, tokenId: itemId, coverUrl, metadata: {...},
      })
   ↓
 Respuesta al componente: { success: true, item: { id, title, tokenId } }
@@ -473,141 +591,205 @@ Respuesta al componente: { success: true, item: { id, title, tokenId } }
 
 | Dato | Blockchain | Prisma |
 |---|---|---|
-| Número de copias disponibles | ✅ LibraryManager | No |
-| Título, autor, ISBN | No | ✅ LibraryItem |
-| Estado del préstamo (activo/devuelto) | ✅ LibraryManager | ✅ Loan.status (redundante para queries rápidas) |
-| txHash del préstamo | No | ✅ Loan.requestTxHash |
-| Saldo de LibraryTokens | ✅ LibraryToken (ERC-20) | No |
-| Precio de un producto | ✅ CampusShop | No |
-| Nombre del producto | No | ✅ Product.name |
+| Copias disponibles | ✅ `LibraryManager` (supply) | No |
+| Título, autor, ISBN | No | ✅ `LibraryItem` |
+| Estado del préstamo | ✅ `LibraryManager.loans.status` | ✅ `Loan.status` (redundante para queries rápidas) |
+| `txHash` del préstamo | No | ✅ `Loan.requestTxHash` |
+| Saldo de LibraryToken | ✅ `LibraryToken` (ERC-20) | No |
+| Precio de un producto | ✅ `CampusShop` | No |
+| Nombre del producto | No | ✅ `Product.name` |
+| Insignia ganada por un alumno | ✅ `BadgeSystem` (balance ERC-1155) | ✅ `BadgeAward` (registro con `txHash`) |
 
 ---
 
-## 8. Sistema de autenticación
+## 8. Autenticación y sesiones
 
 ### Registro de otros roles (PROFESSOR, LIBRARIAN, ADMIN)
 
-Solo el admin puede crear usuarios con otros roles. Se hace desde `/admin/users/new`. El flujo es el siguiente:
+Solo el admin puede crear usuarios con otros roles. Flujo desde `/admin/users/new`:
 
-1. `prisma.user.findUnique({ where: { email } })`
-2. `bcrypt.compare(password, user.password)`
-3. `getIronSession()` → `session.userId = user.id; session.role = user.role; session.save()`
-4. Cookie httpOnly cifrada con `SESSION_SECRET` → el browser nunca ve su contenido
+```
+actions/auth.ts::createUser()
+   ├── 1. Valida email único
+   ├── 2. Genera wallet: privateKey = generatePrivateKey()
+   ├── 3. Cifra clave: encryptedKey = encrypt(privateKey, SESSION_SECRET)
+   ├── 4. bcrypt.hash(password, 12)
+   ├── 5. prisma.user.create({...})
+   ├── 6. On-chain: CampusRoles.grantRole(ROLE, address)  — admin firma
+   ├── 7. On-chain: LibraryToken.mint(address, 10)       — solo si STUDENT
+   └── Retorna { user, passwordIfGenerated }
+```
 
-### Sesión en cada request
+### Login
 
-El middleware y las API routes llaman a `getIronSession()` con la cookie para obtener `{ userId, address, role }`. No hay JWT ni tokens Bearer.
+```
+POST /api/auth/login { email, password }
+   ├── prisma.user.findUnique({ where: { email } })
+   ├── bcrypt.compare(password, user.password)
+   ├── getIronSession()
+   │   └── session.userId = user.id; session.role = user.role; session.address = user.address
+   └── session.save()
+      → Cookie httpOnly cifrada con SESSION_SECRET
+```
 
-### Cómo se firma una tx en nombre de un usuario no-admin
+### Cómo se firma una tx en nombre del usuario
 
 ```typescript
 // En una Server Action
-const user = await prisma.user.findUnique({ where: { id: session.userId } });
-const privateKey = decrypt(user.encryptedKey); // AES-256-GCM
+const session = await getSession();
+const user = await prisma.user.findUnique({ where: { id: session.userId! } });
+const privateKey = decrypt(user.encryptedKey);           // AES-256-GCM
 const account = privateKeyToAccount(privateKey as `0x${string}`);
 const userWalletClient = createWalletClient({
   account,
   chain: hardhat,
   transport: http(),
 });
-await userWalletClient.writeContract({ ... });
+const txHash = await userWalletClient.writeContract({ ... });
 ```
 
 ---
 
 ## 9. Roles y permisos
 
-### On-chain (CampusRoles)
+### On-chain (`CampusRoles`)
 
 | Rol | Capacidades on-chain |
 |---|---|
-| `DEFAULT_ADMIN_ROLE` | Todo. Registrar usuarios, asignar roles, mintear tokens |
-| `PROFESSOR_ROLE` | Crear badge types, tasks, rewards. Otorgar badges |
-| `LIBRARIAN_ROLE` | Añadir libros, aprobar/rechazar préstamos |
-| `STUDENT_ROLE` | Solicitar préstamos, comprar en tienda, canjear recompensas |
+| `DEFAULT_ADMIN_ROLE` | Todo. Registrar usuarios, asignar roles, mintear tokens, pausar contratos |
+| `PROFESSOR_ROLE` | Crear subject badges, assignments, prize categories, rewards. Otorgar badges |
+| `LIBRARIAN_ROLE` | Añadir ítems, aprobar/rechazar préstamos, confirmar devoluciones |
+| `STUDENT_ROLE` | Solicitar préstamos, comprar, canjear recompensas, reservar salas, imprimir |
 
-### En la app (middleware + páginas)
+### En la app (middleware + server actions)
 
 | Ruta | Roles permitidos |
 |---|---|
-| `/dashboard/admin/*` | ADMIN |
-| `/dashboard/librarian/*` | LIBRARIAN, ADMIN |
-| `/dashboard/professor/*` | PROFESSOR, ADMIN |
-| `/dashboard/student/*` | STUDENT, ADMIN |
+| `/admin/*` | ADMIN |
+| `/librarian/*` | LIBRARIAN (ADMIN también tiene acceso redirigiendo explícitamente) |
+| `/professor/*` | PROFESSOR (ADMIN) |
+| `/student/*` | STUDENT (ADMIN) |
 
-El ADMIN puede acceder a todas las vistas de todos los roles porque puede ejercer cualquier función de la plataforma.
+El ADMIN puede acceder a todas las vistas usando la URL directa. Server Actions verifican con `ensureRole()` y los modifiers on-chain verifican con `CampusRoles.hasRole()`.
 
 ---
 
-## 10. Convenciones de código
+## 10. Sistema de recompensas automáticas
+
+Ver [TFG-DOCUMENTACION-TECNICA.md — sección 6](./TFG-DOCUMENTACION-TECNICA.md#6-sistema-de-recompensas-automáticas) para el detalle completo.
+
+Resumen:
+
+- Cada vez que un usuario completa una acción premiable, el backend llama `issueReward()` de `lib/shopRewards.ts`.
+- El helper:
+  1. Determina si procede recompensa principal + bonus de primer uso del módulo.
+  2. Por cada una, llama `ShopToken.mint()` vía `adminWalletClient`.
+  3. Registra la fila en `ShopTokenReward` (auditoría completa).
+  4. Devuelve un array `RewardGrant[]` que el cliente muestra como toast.
+
+Razones y cantidades definidas en `lib/shopRewardsMeta.ts` (safe cliente/servidor). Los puntos de invocación están en `actions/library.ts`, `actions/rooms.ts`, `actions/printing.ts`, `actions/badges.ts` y `actions/shop.ts`.
+
+---
+
+## 11. Motor blockchain: Anvil vs Hardhat
+
+Por defecto `pnpm dev` usa **Anvil** (Foundry) con estado persistente en `.anvil-state.json`:
+- Auto-guarda cada 30 s y recarga al reiniciar.
+- Contratos desplegados, balances y transacciones **persisten** entre reinicios.
+
+Para forzar Hardhat (volátil):
+- `pnpm dev:hardhat`, o flag `--hardhat`, o `BLOCKCHAIN_NODE=hardhat pnpm dev`.
+
+El script `scripts/dev.mjs`:
+1. Arranca el nodo elegido.
+2. Detecta si los contratos ya están desplegados (`eth_getCode` a `CampusRoles`). Si sí, salta el deploy.
+3. Si es necesario (fresh o primer arranque), corre `hardhat ignition deploy` + `setTrustedSpender()`.
+4. `resync-users.mjs` alinea usuarios on-chain (grants de rol) con los que haya en Prisma.
+5. Ejecuta los seeds idempotentes.
+6. Arranca Next.js.
+
+Al cambiar de motor: `pnpm reset:all` para evitar divergencia entre estado on-chain y Prisma.
+
+---
+
+## 12. Convenciones de código
 
 ### Nombrado de archivos
 
-- Páginas: `page.tsx` (obligatorio Next.js)
-- Layouts: `layout.tsx` (obligatorio Next.js)
-- Componentes: PascalCase → `LibraryTable.tsx`, `ItemForm.tsx`
-- Server Actions: camelCase de función → `addBook`, `requestLoan`
+- Páginas Next.js: `page.tsx` (obligatorio)
+- Layouts: `layout.tsx` (obligatorio)
+- Componentes: PascalCase → `LibraryItemCard.tsx`, `ItemForm.tsx`
+- Server Actions: camelCase de función → `addItem`, `requestLoan`
 - Tipos: PascalCase con sufijo descriptivo → `SessionUser`, `UserRole`
 
 ### Imports
 
-- `@/lib/...` — configuración de librerías
+- `@/lib/...` — utilidades
 - `@/actions/...` — Server Actions
-- `@/components/...` — componentes React
+- `@/components/...` — componentes (el barrel permite `@/components/shared` para los de dominio)
+- `@/hooks/...` — hooks custom
+- `@/contexts/...` — Contextos React
 - `@/types` — tipos compartidos
 
-### Comentarios
+### Server Actions
 
-Las API routes y Server Actions incluyen comentarios por sección numerados (`─── 1. Nombre ───`) explicando qué hace cada bloque. Los contratos Solidity tienen comentarios NatSpec en funciones públicas.
+- Comentarios numerados por sección (`─── 1. Nombre ───`) explicando qué hace cada bloque.
+- Siempre empiezan con `"use server";`.
+- Siempre verifican sesión + rol antes de ejecutar.
+- Errores tipados; el wrapper API traduce a HTTP.
+
+### Componentes
+
+- Un componente por archivo; el nombre del archivo coincide con el export.
+- Los atoms no importan de `@/actions` ni `@/hooks` (salvo `useToast` para `Button` loading).
+- Las moléculas reciben callbacks, no gatillan fetch pesados.
+- Los organismos orquestan; las pages delegan.
+
+### Loading states
+
+- **Páginas**: siempre `Skeleton*` (atoms). Nunca `Spinner`.
+- **Botones**: `<Button loading>...` que internamente usa `Spinner`.
+- **No** crear `loading.tsx` por ruta individual — solo a nivel layout.
+
+### Contratos Solidity
+
+- Siguen el [Solidity Style Guide](https://docs.soliditylang.org/en/latest/style-guide.html).
+- NatSpec en todas las funciones públicas.
+- Custom errors (no `require` con strings).
+- CEI pattern.
+- `Pausable` + `ReentrancyGuard` donde aplique.
 
 ### Variables de entorno
 
 ```
-DATABASE_URL         # PostgreSQL connection string (con puerto 5435)
-SESSION_SECRET       # Mínimo 32 chars, para iron-session + AES-256-GCM
-NEXT_PUBLIC_CHAIN_ID # 31337 para Hardhat local
+DATABASE_URL         # PostgreSQL connection string (puerto 5435)
+SESSION_SECRET       # ≥32 chars, para iron-session + AES-256-GCM
+BLOCKCHAIN_NODE      # opcional: "anvil" (default) | "hardhat"
 ```
 
 ---
 
-## 11. Cómo arrancar el proyecto
+## 13. Cómo arrancar el proyecto
 
-### Requisitos previos
-- Node.js 20+
-- pnpm
-- Docker (para PostgreSQL) o PostgreSQL instalado en puerto 5435
-
-### Pasos
+Ver [README.md](./README.md) para la guía completa de onboarding. Resumen:
 
 ```bash
-# 1. Instalar dependencias
+# 1. Clonar + instalar
+git clone <repo>
+cd CryptoCampus
 pnpm install
 
-# 2. Levantar la base de datos (si usas Docker)
-docker run --name cryptocampus-db -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=cryptocampusdb -p 5435:5432 -d postgres
+# 2. Crear .env en packages/nextjs
+echo 'DATABASE_URL="postgresql://root:root@localhost:5435/cryptocampusdb?schema=public"' > packages/nextjs/.env
+echo 'SESSION_SECRET="mi-secreto-local-de-al-menos-32-caracteres"' >> packages/nextjs/.env
 
-# 3. Aplicar migraciones y generar cliente Prisma
-cd packages/nextjs
-pnpm exec prisma migrate deploy
-pnpm exec prisma generate
-
-# 4. Levantar la red Hardhat local (terminal separada)
-cd packages/hardhat
-pnpm exec hardhat node
-
-# 5. Desplegar contratos
-pnpm exec hardhat ignition deploy ignition/modules/CampusModule.ts --network localhost
-
-# 6. Levantar Next.js
-cd packages/nextjs
+# 3. Arrancar todo (Docker debe estar corriendo; necesita Foundry o pasar --hardhat)
 pnpm dev
 ```
 
 ### Puertos
-- Next.js: http://localhost:3000
-- Hardhat RPC: http://localhost:8545
-- PostgreSQL: localhost:5435
 
----
-
-*Documento mantenido por el equipo de desarrollo. Actualizar cuando se modifiquen contratos, schema o estructura de carpetas.*
+- Next.js: `http://localhost:3000`
+- Nodo Ethereum: `http://127.0.0.1:8545` (chain 31337)
+- PostgreSQL: `localhost:5435`
+- Prisma Studio (opcional, `pnpm run db:studio`): `http://localhost:5555`

@@ -1,24 +1,44 @@
 # CryptoCampus
 
-TFG — Sistema de tokens en la FDI UCM
+TFG — Plataforma universitaria sobre blockchain para la FDI UCM. Integra 5 módulos (biblioteca, tienda, insignias académicas, impresión, salas de estudio) con contratos inteligentes como capa de verdad y PostgreSQL para metadatos.
+
+## Tabla de contenidos
+
+- [Requisitos previos](#requisitos-previos)
+- [Instalación](#instalación)
+- [Quick start](#quick-start)
+- [Modelo custodial — no necesitas MetaMask](#modelo-custodial--no-necesitas-metamask)
+- [Motor blockchain: Anvil vs Hardhat](#motor-blockchain-anvil-vs-hardhat)
+- [Flujos típicos](#flujos-típicos)
+- [Estructura del proyecto](#estructura-del-proyecto)
+- [Módulos funcionales](#módulos-funcionales)
+- [Roles del sistema](#roles-del-sistema)
+- [Sistema de recompensas automáticas](#sistema-de-recompensas-automáticas)
+- [Variables de entorno](#variables-de-entorno)
+- [Comandos disponibles](#comandos-disponibles)
+- [Tests](#tests)
+- [Troubleshooting](#troubleshooting)
+- [Documentación adicional](#documentación-adicional)
 
 ## Requisitos previos
 
-- [Node.js](https://nodejs.org/) v24.15.0 (recomendado con `nvm`)
-- [pnpm](https://pnpm.io/) v10+
-- [Git](https://git-scm.com/)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (para PostgreSQL local en `localhost:5435`)
-- [MetaMask](https://metamask.io/) (extensión de navegador, para interactuar con la DApp)
+- **Node.js 24.15.0** (recomendado con [`nvm`](https://github.com/nvm-sh/nvm))
+- **pnpm 10.33.0** (via [`corepack`](https://pnpm.io/installation#using-corepack))
+- **Docker Desktop** corriendo (PostgreSQL en `localhost:5435`)
+- **Foundry** para Anvil, motor blockchain por defecto. Instalar desde Git Bash:
+  ```bash
+  curl -L https://foundry.paradigm.xyz | bash && foundryup
+  anvil --version   # verificar
+  ```
+  Si no puedes usar Foundry en tu entorno, puedes forzar Hardhat con `pnpm dev:hardhat` (ver _Motor blockchain_ más abajo).
 
 Si usas nvm:
-
 ```bash
 nvm install
 nvm use
 ```
 
-Si no tienes pnpm instalado:
-
+Si no tienes pnpm:
 ```bash
 corepack enable
 corepack prepare pnpm@10.33.0 --activate
@@ -32,231 +52,246 @@ cd CryptoCampus
 pnpm install
 ```
 
-Esto instalará las dependencias de todos los paquetes del monorepo (`packages/hardhat`, `packages/nextjs`, etc.) gracias a [pnpm workspaces](https://pnpm.io/workspaces).
+Esto instalará las dependencias de todos los paquetes del monorepo (`packages/hardhat`, `packages/nextjs`) gracias a [pnpm workspaces](https://pnpm.io/workspaces).
 
-## Quick start (flujo recomendado)
+Crea el archivo `packages/nextjs/.env` (ver [_Variables de entorno_](#variables-de-entorno)).
 
-1. Inicia **Docker Desktop** (puede quedarse minimizado).
-2. Arranca todo el entorno:
+## Quick start
 
 ```bash
 pnpm dev
 ```
 
-3. Abre la DApp en `http://localhost:3000`.
-
-> [!WARNING]
-> **Docker debe estar corriendo.** Si `docker compose` no está disponible, el comando `pnpm dev` fallará. Asegúrate de tener Docker Desktop abierto antes de ejecutar el comando.
+Abre la DApp en `http://localhost:3000`.
 
 > [!NOTE]
-> El comando `pnpm dev` levanta automáticamente la base de datos, compila y despliega los contratos, y arranca el frontend. La primera ejecución puede tardar un poco.
+> Un único comando: levanta PostgreSQL, arranca el nodo blockchain, despliega contratos si hace falta, ejecuta los seeds y arranca Next.js.
+>
+> En el **primer arranque** descargará artefactos y ejecutará todos los seeds (tarda algo más). En arranques sucesivos con Anvil persistente, los contratos ya están desplegados y los seeds detectan todo como existente → arranque rápido.
 
-Si quieres resetear la BD en local:
+> [!WARNING]
+> **Docker debe estar corriendo.** Si `docker compose` no está disponible, el comando `pnpm dev` fallará. Asegúrate de tener Docker Desktop abierto antes.
 
-```bash
-pnpm run db:reset
-```
+### Credenciales semilla (tras seed)
+
+Los scripts de seed crean automáticamente cuentas de demostración con contraseña `password123`:
+
+| Rol | Email |
+|---|---|
+| Admin | `admin@ucm.es` |
+| Profesor | cualquiera de los creados en `seed-academic.mjs` |
+| Bibliotecario | `librarian@ucm.es` |
+| Alumno | cualquiera de los creados en `seed-academic.mjs` |
+
+## Modelo custodial — no necesitas MetaMask
+
+CryptoCampus es una **dApp custodial**: las wallets se generan en el servidor y se guardan cifradas (AES-256-GCM con `SESSION_SECRET`). Los usuarios se registran y entran con **email + contraseña** convencionales; nunca ven ni gestionan su clave privada. Internamente, el backend firma las transacciones de blockchain por ellos.
+
+Por eso **no hace falta instalar MetaMask ni configurar una red**. El único motor Ethereum que participa es el nodo local (Anvil o Hardhat) que levanta `pnpm dev`.
+
+## Motor blockchain: Anvil vs Hardhat
+
+Por defecto `pnpm dev` arranca **Anvil** (de Foundry) con estado persistente en `.anvil-state.json`. Al reiniciar conserva contratos, balances y cualquier cambio on-chain. Auto-guarda cada 30 s.
+
+Para usar **Hardhat node** (volátil — pierde el estado al parar):
+- **Atajo cross-platform**: `pnpm dev:hardhat`
+- **Por flag**: `node scripts/dev.mjs --hardhat`
+- **Por env var** (Git Bash / Linux / macOS): `BLOCKCHAIN_NODE=hardhat pnpm dev`
+
+Al cambiar de motor ejecuta `pnpm reset:all` para evitar divergencia entre el estado on-chain y Prisma.
+
+## Flujos típicos
+
+| Escenario | Comando |
+|---|---|
+| Día a día (estado persistido con Anvil) | `pnpm dev` |
+| Primer arranque o reinstalación | `pnpm install && pnpm dev:fresh` |
+| He tocado un contrato `.sol` | `pnpm compile && pnpm dev:fresh` |
+| He tocado `schema.prisma` con cambio destructivo | `pnpm dev:fresh` |
+| Compañero clonó el repo | `pnpm install && pnpm dev` |
+| Re-ejecutar seeds sin reiniciar | `pnpm db:seed` |
 
 ## Estructura del proyecto
 
 ```
 CryptoCampus/
-├── package.json              # Raíz del monorepo
-├── pnpm-workspace.yaml       # Configuración de workspaces
+├── package.json                   Workspace root — scripts globales
+├── pnpm-workspace.yaml            Configuración del monorepo
+├── docker-compose.yaml            PostgreSQL para desarrollo
+├── scripts/
+│   ├── dev.mjs                    Orquestador de arranque
+│   ├── seed.mjs                   Lanzador de todos los seeds
+│   └── reset-chain.mjs            Borra estado on-chain local
+│
 └── packages/
-    ├── hardhat/              # Smart contracts (Solidity + Hardhat v3)
-    │   ├── contracts/        # Contratos Solidity
-    │   ├── test/             # Tests (Node.js + Forge/Foundry)
-    │   └── ignition/         # Módulos de despliegue (Hardhat Ignition)
-    └── nextjs/               # Frontend (Next.js) — en desarrollo
-        ├── TODO
+    ├── hardhat/                   Capa blockchain
+    │   ├── contracts/             8 contratos Solidity (+ Example.sol, guía de estilo)
+    │   ├── test/                  Tests (TypeScript + Foundry)
+    │   └── ignition/modules/      Despliegue declarativo (CampusModule.ts)
+    │
+    └── nextjs/                    Capa web (full-stack)
+        ├── prisma/schema.prisma   27 modelos de base de datos
+        ├── scripts/               10 scripts idempotentes (seeds + resync + cleanup)
+        └── src/
+            ├── actions/           8 módulos de Server Actions
+            ├── app/               App Router (121 pages + 110 API routes)
+            ├── components/
+            │   ├── ui/            Atoms (36)
+            │   ├── shared/        Molecules (49)
+            │   ├── forms/         Form molecules (13)
+            │   ├── dashboard/     Organisms (13)
+            │   └── layout/        Layout (Header, Sidebar, ...)
+            ├── hooks/             useAuthUser, useForm, usePaginatedList, useToast, useTheme
+            ├── lib/               viem, prisma, crypto, session, shopRewards, ...
+            └── contexts/          CartContext, OnboardingContext, ThemeContext, ToastContext
 ```
 
-## Smart Contracts (Hardhat)
+## Módulos funcionales
 
-### Dependencias principales
+CryptoCampus integra cinco módulos independientes pero interconectados a través del sistema de tokens:
 
-| Paquete | Uso |
+| Módulo | Qué hace | Token usado |
+|---|---|---|
+| **Biblioteca** | Catálogo de libros, juegos de mesa y videojuegos. Sistema de reservas, recogida y devolución. Cola FIFO cuando el ítem está agotado. | `LibraryToken` (LIB) — 1 LIB por préstamo activo |
+| **Tienda** | Catálogo con productos, variantes por color, carrito, compras en lote (batches) y devoluciones con recibos. | `ShopToken` (SHPT) |
+| **Insignias académicas** | Profesores crean tareas con premios; alumnos reciben insignias soulbound (no transferibles) al ganar. Las insignias se canjean por recompensas definidas por el profesor. | `BadgeSystem` (1155 soulbound) |
+| **Impresión** | Créditos por alumno, simulador de impresión con opciones (color/B&N, dúplex, páginas/hoja). Admin/bibliotecario con créditos ilimitados. | `Printer` — 1 crédito = 1 página |
+| **Salas de estudio** | Reserva por franja horaria. Máx 4 h consecutivas, 1 reserva por día por alumno. Códigos QR para confirmar llegada. | `RoomBooking` |
+
+Cada módulo da **recompensas automáticas en SHPT** al usarlo (ver sección de recompensas).
+
+## Roles del sistema
+
+| Rol | Ruta base | Qué puede hacer |
+|---|---|---|
+| **Estudiante** (`STUDENT`) | `/student/*` | Ver y usar todos los módulos: pedir préstamos, comprar, ganar insignias, imprimir, reservar salas |
+| **Profesor** (`PROFESSOR`) | `/professor/*` | Crear tareas con premios en sus asignaturas, aprobar entregas y otorgar insignias, crear recompensas, gestionar solicitudes de uso |
+| **Bibliotecario** (`LIBRARIAN`) | `/librarian/*` | Gestionar catálogo de biblioteca, aprobar reservas y recogidas, confirmar devoluciones, gestionar salas e impresoras |
+| **Admin** (`ADMIN`) | `/admin/*` | Todo lo anterior + gestión de usuarios, asignaturas y grupos, productos de tienda, visualización global de stats y transacciones |
+
+El admin tiene acceso a todas las vistas de todos los roles y puede ejecutar cualquier acción. El middleware (`proxy.ts`) garantiza que un usuario solo acceda a las rutas de su rol.
+
+## Sistema de recompensas automáticas
+
+Cada vez que un usuario completa una acción "premiable", el backend mintea automáticamente **ShopTokens (SHPT)** a su wallet sin intervención manual. Helper central en [`packages/nextjs/src/lib/shopRewards.ts`](packages/nextjs/src/lib/shopRewards.ts).
+
+| Acción | Cantidad (SHPT) |
 |---|---|
-| [Hardhat v3](https://hardhat.org/) | Entorno de desarrollo Solidity |
-| [Viem](https://viem.sh/) | Cliente TypeScript para interactuar con contratos |
-| [OpenZeppelin Contracts](https://docs.openzeppelin.com/contracts/) | Librería estándar de contratos seguros (ERC-20, ERC-721, AccessControl, etc.) |
-| [Hardhat Ignition](https://hardhat.org/ignition) | Sistema declarativo de despliegue |
-| [Forge Std](https://github.com/foundry-rs/forge-std) | Librería de utilidades para tests en Solidity |
+| Devolver préstamo a tiempo | 2 |
+| Devolver préstamo antes del plazo | 3 |
+| Reservar una sala | 1 |
+| Recibir una insignia académica | 5 (por cada badge) |
+| Trabajo de impresión | páginas ÷ 10 |
+| Bonus primer uso del módulo (library/rooms/printing/badges/shop) | 2 cada uno, una sola vez |
 
-### Compilar contratos
+La recompensa se persiste en `ShopTokenReward` (auditoría) y se pinta en toast en el cliente. Ver [`shopRewardsMeta.ts`](packages/nextjs/src/lib/shopRewardsMeta.ts) para el catálogo completo.
 
-```bash
-pnpm compile
-```
+## Variables de entorno
 
-### Ejecutar tests
-
-```bash
-pnpm test
-```
-
-### Desplegar en red local
-
-Hardhat v3 usa redes **EDR simuladas** (in-process); no necesitas levantar un nodo aparte.
-
-```bash
-cd packages/hardhat
-pnpm hardhat ignition deploy ignition/modules/Counter.ts --network hardhatMainnet
-```
-
-> [!TIP]
-> **Para desarrollo local, se puede usar `pnpm dev` desde la raíz**, que automáticamente:
-> - Arranca el nodo de Hardhat
-> - Despliega los contratos
-> - Configura la BD
-> 
-> No necesitas ejecutar `hardhat node` manualmente ni usar el flag `--network hardhatMainnet` desde `packages/hardhat`.
-
-## DApp Frontend (Next.js)
-
-### Dependencias principales
-
-| Paquete | Uso |
-|---|---|
-| [Next.js 16](https://nextjs.org/) | Framework React con App Router y SSR |
-| [React 19](https://react.dev/) | Librería de interfaz de usuario |
-| [wagmi](https://wagmi.sh/) | Hooks de React para interactuar con contratos Ethereum |
-| [Viem](https://viem.sh/) | Cliente TypeScript para Ethereum (usado internamente por wagmi) |
-| [RainbowKit](https://www.rainbowkit.com/) | Componente de conexión de wallets (MetaMask, WalletConnect, etc.) |
-| [TanStack React Query](https://tanstack.com/query) | Caché y gestión de estado asíncrono (requerido por wagmi) |
-| [Tailwind CSS 4](https://tailwindcss.com/) | Framework de utilidades CSS |
-
-### Arrancar solo el frontend
-
-```bash
-pnpm dev:next
-```
-
-> **Nota:** El frontend necesita que el nodo de Hardhat esté corriendo y el contrato desplegado. Usa `pnpm dev` desde la raíz para arrancar todo automáticamente (ver sección _Desarrollo_).
-
-### Build de producción
-
-```bash
-pnpm build
-pnpm start
-```
-
-### Variables de entorno
-
-El frontend necesita un archivo `packages/nextjs/.env` con:
+El frontend necesita un archivo `packages/nextjs/.env`:
 
 ```env
 DATABASE_URL="postgresql://root:root@localhost:5435/cryptocampusdb?schema=public"
-SESSION_SECRET="tu-secreto-local"
+SESSION_SECRET="tu-secreto-local-de-al-menos-32-caracteres"
 ```
-
-`DATABASE_URL` se usa en Prisma y `SESSION_SECRET` para cifrado de claves privadas/sesiones.
 
 > [!IMPORTANT]
-> - **`DATABASE_URL`**: Debe coincidir exactamente con la configuración de `docker-compose.yaml` (usuario: `root`, contraseña: `root`, puerto: `5435`, BD: `cryptocampusdb`)
-> - **`SESSION_SECRET`**: Cualquier string aleatorio de al menos 32 caracteres.
-> - Este archivo **NO se debe subir** al repositorio (está en `.gitignore`).
-
-## Desarrollo — Arrancar todo con un solo comando
-
-```bash
-pnpm dev
-```
-
-Este comando ejecuta el script [`scripts/dev.mjs`](scripts/dev.mjs), que automáticamente:
-
-1. Levanta PostgreSQL con Docker Compose (`docker compose up -d db`)
-2. Arranca un **nodo local de Hardhat** en `http://127.0.0.1:8545`
-3. Limpia deployments anteriores para evitar conflictos
-4. **Despliega los contratos** del campus con Hardhat Ignition
-5. Resincroniza usuarios existentes con blockchain
-6. Ejecuta seed del admin por defecto (idempotente)
-7. Limpia archivos de impresión expirados
-8. Arranca **Next.js** en `http://localhost:3000`
-
-> [!NOTE]
-> Para detener todos los procesos: `Ctrl + C`.
-
-> [!WARNING]
-> Si Docker no está corriendo, `pnpm dev` abortará con un mensaje de error.
-
-## Configuración de MetaMask
-
-Para interactuar con la DApp en desarrollo necesitas [MetaMask](https://metamask.io/) (extensión del navegador).
-
-### 1. Instalar MetaMask
-
-Descarga e instala la extensión desde [metamask.io/download](https://metamask.io/download/) para tu navegador (Chrome, Firefox, Brave, Edge).
-
-### 2. Añadir la red local de Hardhat
-
-Abre MetaMask → **Configuración** → **Redes** → **Añadir red manualmente** con estos datos:
-
-| Campo | Valor |
-|---|---|
-| Nombre de la red | `Hardhat Local` |
-| URL de RPC | `http://127.0.0.1:8545` |
-| ID de cadena | `31337` |
-| Símbolo de moneda | `ETH` |
-
-### 3. Importar una cuenta con fondos
-
-El nodo de Hardhat genera cuentas de prueba con 10 000 ETH cada una. Para importar una en MetaMask:
-
-1. Busca en la terminal la lista de cuentas que aparece al arrancar el nodo (Account #0, #1, etc.)
-2. Copia la **clave privada** de cualquiera de ellas
-3. En MetaMask → **Importar cuenta** → Pega la clave privada
-
-> ⚠️ **Nunca uses estas claves privadas en redes reales.** Son solo para desarrollo local.
-
-### 4. Conectar a la DApp
-
-1. Abre `http://localhost:3000` en tu navegador
-2. Haz clic en **"Connect Wallet"** (botón de RainbowKit)
-3. Selecciona **MetaMask** y aprueba la conexión
-4. Asegúrate de estar en la red **Hardhat Local** (chain ID 31337)
+> - `DATABASE_URL` debe coincidir con `docker-compose.yaml` (usuario `root`, contraseña `root`, puerto `5435`, BD `cryptocampusdb`).
+> - `SESSION_SECRET` se usa tanto para cifrar las cookies como para cifrar las claves privadas de los usuarios. Cualquier string aleatorio de **≥32 caracteres**.
+> - Este archivo **no se sube al repositorio** (está en `.gitignore`).
 
 ## Comandos disponibles
 
-> [!TIP]
-> Ejecuta todos los comandos **desde la raíz del proyecto** (`CryptoCampus/`). No es necesario entrar en `packages/hardhat` o `packages/nextjs`.
+> Ejecuta todos los comandos **desde la raíz del proyecto**. No hace falta entrar en `packages/hardhat` ni `packages/nextjs`.
 
-### 🚀 Desarrollo principal
-
-| Comando | Descripción |
-|---|---|
-| `pnpm dev` | Arranca todo: PostgreSQL + nodo Hardhat + deploy contratos + Next.js (recomendado) |
-| `pnpm dev:next` | Arranca solo el frontend Next.js (requiere que Hardhat ya esté corriendo) |
-
-### 🗄️ Base de datos (PostgreSQL + Prisma)
+### Arranque
 
 | Comando | Descripción |
 |---|---|
-| `pnpm run db:up` | Levanta el contenedor PostgreSQL en Docker (`docker compose up -d db`) |
-| `pnpm run db:down` | Detiene y elimina el contenedor PostgreSQL |
-| `pnpm run db:logs` | Muestra logs en vivo del contenedor PostgreSQL |
-| `pnpm run db:push` | Sincroniza el esquema Prisma con BD (sin eliminar datos) |
-| `pnpm run db:reset` | **Reinicia BD completamente** - elimina datos y sincroniza esquema (`prisma db push --force-reset`) |
-| `pnpm run db:generate` | Regenera el cliente Prisma (ejecutar si cambias `schema.prisma`) |
+| `pnpm dev` | Stack completo con **Anvil por defecto** (estado persistente) |
+| `pnpm dev:hardhat` | Igual pero fuerza **Hardhat node** (volátil) |
+| `pnpm dev:fresh` | `pnpm dev` empezando de cero: resetea BD + borra estado blockchain |
+| `pnpm dev:next` | Solo Next.js (requiere que el nodo ya esté arriba) |
+| `pnpm db:seed` | Re-ejecuta todos los seeds (idempotentes) sin reiniciar |
+
+### Reset
+
+| Comando | Descripción |
+|---|---|
+| `pnpm reset:chain` | Borra `.anvil-state.json` + `ignition/deployments/`. Próximo `pnpm dev` redesplegará contratos. **No toca BD.** |
+| `pnpm db:reset` | Wipea BD y resincroniza schema Prisma. **No toca blockchain.** |
+| `pnpm reset:all` | `reset:chain` + `db:reset`. Deja el entorno listo para poblar de nuevo. |
+
+### Base de datos (PostgreSQL + Prisma)
+
+| Comando | Descripción |
+|---|---|
+| `pnpm run db:up` / `db:down` | Levanta / detiene el contenedor PostgreSQL |
+| `pnpm run db:logs` | Logs en vivo del contenedor |
+| `pnpm run db:push` | Sincroniza el schema Prisma con la BD (sin eliminar datos) |
+| `pnpm run db:generate` | Regenera el cliente Prisma (tras editar `schema.prisma`) |
 | `pnpm run db:studio` | Abre [Prisma Studio](https://www.prisma.io/studio) en `http://localhost:5555` |
 
 > [!WARNING]
-> **`pnpm run db:reset` elimina TODOS los datos de la BD.** Úsalo solo en desarrollo local cuando necesites empezar desde cero. Si solo quieres aplicar cambios al esquema sin perder datos, usa `pnpm run db:push`.
+> `pnpm run db:reset` / `pnpm dev:fresh` borran **todos** los datos de la BD. Úsalos solo en local cuando necesites empezar desde cero.
 
-### 🔗 Smart Contracts (Hardhat)
-
-| Comando | Descripción |
-|---|---|
-| `pnpm compile` | Compila todos los contratos Solidity (`hardhat compile`) |
-| `pnpm test` | Ejecuta los tests de contratos (Foundry + Hardhat) |
-| `pnpm deploy` | Despliega contratos en red local via Hardhat Ignition |
-
-### 🎨 Frontend (Next.js)
+### Smart Contracts
 
 | Comando | Descripción |
 |---|---|
-| `pnpm build` | Genera build optimizado de producción |
-| `pnpm start` | Sirve el build de producción en `http://localhost:3000` |
-| `pnpm lint` | Ejecuta ESLint para validar código (`packages/nextjs`) |
+| `pnpm compile` | Compila todos los contratos Solidity |
+| `pnpm test` | Tests de contratos (TypeScript + Foundry) |
+| `pnpm deploy` | Despliega los contratos desde cero con Ignition (útil para debugging) |
 
+### Frontend
+
+| Comando | Descripción |
+|---|---|
+| `pnpm build` | Build optimizado de producción |
+| `pnpm start` | Sirve el build en `http://localhost:3000` |
+| `pnpm lint` | ESLint sobre `packages/nextjs/src` |
+
+## Tests
+
+El proyecto incluye dos conjuntos de tests para los contratos:
+
+- **Tests TypeScript** (`node:test`): instancian contratos frescos por suite, usan `viem` para llamadas y `assert` para comprobaciones.
+- **Tests Solidity** (Foundry/forge-std): invariantes y casos edge escritos directamente en Solidity (`vm.prank`, `vm.expectRevert`, etc.).
+
+Ambos se ejecutan con `pnpm test`. Cubren los 8 contratos de producción + tests de integración cross-contract.
+
+> No hay tests E2E ni de componentes para la parte Next.js — la validación del frontend se hace a través de `tsc` (type-check) + `next build` (validación de rutas/SSR) + pruebas manuales.
+
+## Troubleshooting
+
+**`pnpm dev` falla con "docker compose no encontrado"**
+Docker Desktop no está corriendo. Ábrelo y espera a que el icono de la bandeja diga "Docker is running".
+
+**`anvil: command not found`**
+No tienes Foundry instalado. Instálalo con `curl -L https://foundry.paradigm.xyz | bash && foundryup` (Git Bash en Windows) o ejecuta `pnpm dev:hardhat` para usar Hardhat en su lugar.
+
+**La DApp arranca pero muestra "No autenticado" al loguear**
+La BD está vacía o no tiene el admin semilla. Ejecuta `pnpm db:seed` o `pnpm dev:fresh` para repoblar.
+
+**Transacciones on-chain fallan con "insufficient funds"**
+Tu estado de Anvil está desincronizado con Prisma (p. ej. reinstalaste dependencias sin `pnpm reset:all`). Ejecuta `pnpm reset:all` y luego `pnpm dev`.
+
+**Cambié un contrato y `pnpm dev` no lo recoge**
+Los contratos ya desplegados no se redespliegan automáticamente. Ejecuta `pnpm compile && pnpm dev:fresh` para forzar redeploy.
+
+**Puerto 5435 ocupado al arrancar Docker**
+Otra instancia de PostgreSQL está corriendo. Para la local con `pnpm run db:down` y luego `pnpm dev`.
+
+**Quiero ver los datos de la BD**
+Abre [Prisma Studio](https://www.prisma.io/studio) con `pnpm run db:studio` → `http://localhost:5555`.
+
+**Error de tipado en el cliente Prisma tras cambiar el schema**
+Has editado `schema.prisma` pero no has regenerado el cliente. Ejecuta `pnpm run db:generate`.
+
+## Documentación adicional
+
+- [TFG-DOCUMENTACION-TECNICA.md](./TFG-DOCUMENTACION-TECNICA.md) — Explicación técnica orientada a la memoria del TFG: contratos, doble ledger, Atomic Design, Server Actions, testing, recompensas.
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — Referencia arquitectónica exhaustiva: estructura de carpetas detallada, flujos de datos end-to-end, convenciones de código, tabla de rutas API.
+- [CLAUDE.md](./CLAUDE.md) — Guía interna para trabajar con Claude Code en este proyecto (comandos, convenciones, detalles operacionales).
+- [packages/nextjs/RUTAS.md](./packages/nextjs/RUTAS.md) — Tabla exhaustiva de rutas de páginas por rol.
+- [packages/nextjs/API_ACCESS_AUDIT.md](./packages/nextjs/API_ACCESS_AUDIT.md) — Auditoría de control de acceso en endpoints.
