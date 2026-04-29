@@ -207,8 +207,8 @@ export default function StudentDashboard() {
 
           {/* Insignias */}
           <Card className="overflow-hidden p-0">
-            <ActionRow href="/student/badges" icon={icons.badge} title="Insignias" description="Tareas y logros" stat={`${badgeSummary?.availableAssignments ?? "—"} tareas`} />
-            <ActionRow href="/student/badges/rewards" icon={icons.reward} title="Recompensas" description="Canjear con insignias" stat={badgeSummary?.pendingRedemptions ? `${badgeSummary.pendingRedemptions} pendientes` : ""} isLast />
+            <ActionRow href="/student/badges" icon={icons.badge} title="Insignias" description="Tareas y logros" stat={`${val(badgeSummary?.earnedBadges)} obtenidas`} />
+            <ActionRow href="/student/badges/requests" icon={icons.pending} title="Mis solicitudes" description="Estado de tus canjes" stat={badgeSummary?.pendingRedemptions ? `${badgeSummary.pendingRedemptions} pendientes` : ""} isLast />
           </Card>
         </div>
       </section>

@@ -19,6 +19,7 @@ import { CategoryFilter } from "@/components/ui/CategoryFilter";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
 import { ProductCard } from "@/components/shared/ProductCard";
+import { ConfirmModal } from "@/components/shared/ConfirmModal";
 
 interface ProductVariant {
   id: string;
@@ -58,6 +59,10 @@ export default function AdminProductsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
+  // Confirmación de toggle
+  const [pendingToggle, setPendingToggle] = useState<{ variantId: string; groupName: string; currentlyActive: boolean } | null>(null);
+  const [submittingToggle, setSubmittingToggle] = useState(false);
+
   // Cargar productos (admin ve todos, activos + inactivos)
   const loadProducts = useCallback(async () => {
     try {
@@ -82,13 +87,24 @@ export default function AdminProductsPage() {
     loadProducts();
   }, [loadProducts]);
 
-  // Toggle activo/inactivo — optimistic update
-  async function handleToggleActive(variantId: string, currentlyActive: boolean) {
-    // Buscar el grupo que contiene esta variante
+  // Pide confirmación; abre el modal sin tocar nada todavía.
+  function requestToggleActive(variantId: string, currentlyActive: boolean) {
     const targetGroup = products.find((p) => p.variants.some((v) => v.id === variantId));
     if (!targetGroup) return;
+    setPendingToggle({ variantId, groupName: targetGroup.name, currentlyActive });
+  }
 
-    // Optimistic update
+  // Tras confirmar el modal: ejecuta el toggle con optimistic update.
+  async function confirmToggle() {
+    if (!pendingToggle) return;
+    const { variantId, currentlyActive } = pendingToggle;
+    const targetGroup = products.find((p) => p.variants.some((v) => v.id === variantId));
+    if (!targetGroup) {
+      setPendingToggle(null);
+      return;
+    }
+
+    setSubmittingToggle(true);
     setProducts((prev) =>
       prev.map((p) => p.groupKey === targetGroup.groupKey ? { ...p, active: !currentlyActive } : p),
     );
@@ -105,12 +121,15 @@ export default function AdminProductsPage() {
         currentlyActive ? "Grupo desactivado" : "Grupo reactivado",
         "success",
       );
+      setPendingToggle(null);
     } catch (err) {
       // Revertir
       setProducts((prev) =>
         prev.map((p) => p.groupKey === targetGroup.groupKey ? { ...p, active: currentlyActive } : p),
       );
       addToast(err instanceof Error ? err.message : "Error", "danger");
+    } finally {
+      setSubmittingToggle(false);
     }
   }
 
@@ -220,11 +239,25 @@ export default function AdminProductsPage() {
               adminMode
               active={product.active}
               onEdit={handleEdit}
-              onToggleActive={handleToggleActive}
+              onToggleActive={requestToggleActive}
             />
           ))}
         </div>
       )}
+
+      <ConfirmModal
+        open={pendingToggle !== null}
+        onClose={() => { if (!submittingToggle) setPendingToggle(null); }}
+        onConfirm={confirmToggle}
+        title={pendingToggle?.currentlyActive ? "Desactivar producto" : "Reactivar producto"}
+        description={
+          pendingToggle?.currentlyActive
+            ? `"${pendingToggle.groupName}" y todas sus variantes dejarán de estar disponibles en la tienda. ¿Quieres continuar?`
+            : `"${pendingToggle?.groupName}" y todas sus variantes volverán a estar disponibles en la tienda. ¿Quieres continuar?`
+        }
+        confirmLabel={pendingToggle?.currentlyActive ? "Desactivar" : "Reactivar"}
+        loading={submittingToggle}
+      />
     </div>
   );
 }

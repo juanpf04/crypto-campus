@@ -57,11 +57,23 @@ export default function StudentBadgesPage() {
             {subjects.length > 0 && ` · ${subjects.length} asignatura${subjects.length !== 1 ? "s" : ""}`}
           </p>
         </div>
-        <Link href="/student/badges/requests">
-          <Button variant="secondary">
-            <span className="flex items-center gap-2">{icons.pending} Mis solicitudes</span>
-          </Button>
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/student/badges/assignments">
+            <Button variant="secondary">
+              <span className="flex items-center gap-2">{icons.task} Mis tareas</span>
+            </Button>
+          </Link>
+          <Link href="/student/badges/rewards">
+            <Button variant="secondary">
+              <span className="flex items-center gap-2">{icons.reward} Mis recompensas</span>
+            </Button>
+          </Link>
+          <Link href="/student/badges/requests">
+            <Button variant="secondary">
+              <span className="flex items-center gap-2">{icons.pending} Mis solicitudes</span>
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {subjects.length === 0 ? (

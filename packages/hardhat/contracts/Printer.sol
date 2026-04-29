@@ -31,8 +31,8 @@ contract Printer is Pausable {
 
     // ── Events ──────────────────────────────────────────────────────────
 
-    /// @notice Se emite cuando un admin fija creditos para un estudiante
-    event CreditsSet(address indexed student, uint256 credits);
+    /// @notice Se emite cuando un admin fija creditos para un estudiante o profesor
+    event CreditsSet(address indexed user, uint256 credits);
 
     /// @notice Se emite cuando se ejecuta una impresion
     event PrintJobExecuted(address indexed user, uint256 pages, uint256 remainingCredits);
@@ -40,7 +40,7 @@ contract Printer is Pausable {
     // ── Errors ──────────────────────────────────────────────────────────
 
     error NotAdmin();
-    error NotStudent(address user);
+    error NotStudentOrProfessor(address user);
     error NotRegistered(address user);
     error InsufficientCredits(uint256 available, uint256 requested);
     error ExceedsMaxPages(uint256 requested, uint256 max);
@@ -64,17 +64,19 @@ contract Printer is Pausable {
 
     // ── External functions ──────────────────────────────────────────────
 
-    /// @notice Establece directamente los creditos de un estudiante
-    /// @param student Direccion del estudiante
+    /// @notice Establece directamente los creditos de un estudiante o profesor
+    /// @param user Direccion del estudiante o profesor
     /// @param credits Nueva cantidad de creditos
-    function setCredits(address student, uint256 credits) external onlyAdmin whenNotPaused {
-        if (student == address(0)) revert ZeroAddress();
-        if (!campusRoles.isStudent(student)) revert NotStudent(student);
+    function setCredits(address user, uint256 credits) external onlyAdmin whenNotPaused {
+        if (user == address(0)) revert ZeroAddress();
+        if (!campusRoles.isStudent(user) && !campusRoles.isProfessor(user)) {
+            revert NotStudentOrProfessor(user);
+        }
 
-        _credits[student] = credits;
-        _modified[student] = true;
+        _credits[user] = credits;
+        _modified[user] = true;
 
-        emit CreditsSet(student, credits);
+        emit CreditsSet(user, credits);
     }
 
     /// @notice Ejecuta una impresion en nombre de un usuario

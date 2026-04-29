@@ -12,6 +12,7 @@
  */
 
 import { Card } from "@/components/ui/Card";
+import { formatCredits } from "@/lib/formatters";
 
 interface PrintCostSummaryProps {
   /** Páginas del documento seleccionado (o del rango) */
@@ -69,13 +70,13 @@ export function PrintCostSummary({ pages, copies, pagesPerSheet, availableCredit
         {/* Créditos disponibles */}
         <div className="flex justify-between text-text-muted">
           <span>Disponibles</span>
-          <span>{availableCredits}</span>
+          <span>{formatCredits(availableCredits)}</span>
         </div>
 
         {/* Restante después de imprimir */}
         <div className={`flex justify-between font-medium ${hasEnough ? "text-success" : "text-danger"}`}>
           <span>Restante</span>
-          <span>{remaining}</span>
+          <span>{formatCredits(remaining)}</span>
         </div>
       </div>
 

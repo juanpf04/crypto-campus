@@ -302,7 +302,6 @@ export function OrderBatchDetailView({
             : `¿Seguro que quieres devolver ${selectedSummary.returnCount} artículo${selectedSummary.returnCount !== 1 ? "s" : ""}? Se te reembolsarán ${selectedSummary.returnRefund} ShopTokens.`
         }
         confirmLabel={isAdmin ? "Procesar devolución" : "Confirmar devolución"}
-        variant="danger"
       />
     </>
   );

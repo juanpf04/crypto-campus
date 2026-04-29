@@ -30,6 +30,7 @@
   --card: #FFFFFF;
   --border: #E2E8F0;
   --border-hover: #CBD5E1;
+  --border-swatch: #E2E8F0;
 
   --text: #0B2233;
   --text-muted: #64748B;
@@ -149,6 +150,7 @@
   --color-card: var(--card);
   --color-border-default: var(--border);
   --color-border-hover: var(--border-hover);
+  --color-border-swatch: var(--border-swatch);
 
   --color-text: var(--text);
   --color-text-muted: var(--text-muted);

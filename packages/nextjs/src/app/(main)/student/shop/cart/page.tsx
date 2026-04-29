@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { SkeletonPage } from "@/components/ui/Skeleton";
 import { PurchaseConfirmModal, type PurchaseItem } from "@/components/shared/PurchaseConfirmModal";
+import { ConfirmModal } from "@/components/shared/ConfirmModal";
 import { CartItemList, type CartItemListItem } from "@/components/dashboard/CartItemList";
 import { CartSummary } from "@/components/dashboard/CartSummary";
 import { useToast } from "@/hooks/useToast";
@@ -43,6 +44,8 @@ export default function StudentCartPage() {
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
+  const [clearOpen, setClearOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   const loadCart = useCallback(async () => {
     try {
@@ -143,15 +146,22 @@ export default function StudentCartPage() {
     addToast("Producto eliminado del carrito", "success");
   }
 
-  async function clearCart() {
-    const res = await fetch("/api/shop/cart?clear=1", { method: "DELETE" });
-    const body = await res.json();
-    if (!res.ok) {
-      addToast(body.error ?? "No se pudo vaciar el carrito", "danger");
-      return;
+  async function confirmClearCart() {
+    setClearing(true);
+    try {
+      const res = await fetch("/api/shop/cart?clear=1", { method: "DELETE" });
+      const body = await res.json();
+      if (!res.ok) {
+        addToast(body.error ?? "No se pudo vaciar el carrito", "danger");
+        return;
+      }
+      setCart(body);
+      setItemCount(0);
+      addToast("Carrito vaciado", "success");
+      setClearOpen(false);
+    } finally {
+      setClearing(false);
     }
-    setCart(body);
-    addToast("Carrito vaciado", "success");
   }
 
   async function handleConfirmCheckout() {
@@ -207,7 +217,7 @@ export default function StudentCartPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-text">Mi carrito</h1>
         {!isEmpty && (
-          <Button variant="danger" size="sm" onClick={clearCart}>
+          <Button variant="danger" size="sm" onClick={() => setClearOpen(true)}>
             Vaciar carrito
           </Button>
         )}
@@ -249,6 +259,16 @@ export default function StudentCartPage() {
         items={purchaseItems}
         balance={balance}
         loading={checkingOut}
+      />
+
+      <ConfirmModal
+        open={clearOpen}
+        onClose={() => { if (!clearing) setClearOpen(false); }}
+        onConfirm={confirmClearCart}
+        title="Vaciar carrito"
+        description="Se eliminarán todos los productos del carrito. Tendrás que volver a añadirlos si quieres comprarlos."
+        confirmLabel="Vaciar"
+        loading={clearing}
       />
     </div>
   );

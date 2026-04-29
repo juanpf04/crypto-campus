@@ -19,6 +19,7 @@ import { InactiveAlert } from "@/components/shared/InactiveAlert";
 import { ProductAdminHeader } from "@/components/dashboard/ProductAdminHeader";
 import { VariantDetailCard } from "@/components/dashboard/VariantDetailCard";
 import { VariantGrid } from "@/components/dashboard/VariantGrid";
+import { ConfirmModal } from "@/components/shared/ConfirmModal";
 
 interface ProductVariant {
   id: string;
@@ -56,7 +57,15 @@ export default function AdminProductDetailPage() {
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
 
+  // Confirmación de toggle: del grupo entero o de una variante individual
+  const [pendingToggle, setPendingToggle] = useState<
+    | { kind: "group"; currentlyActive: boolean }
+    | { kind: "variant"; variantId: string; variantName: string; currentlyActive: boolean }
+    | null
+  >(null);
+
   // El [id] puede ser un groupKey o un variant prisma ID.
+  // No depende de selectedVariantId para evitar refetches en cada click de variante.
   const loadGroup = useCallback(async () => {
     if (!id) return;
     setLoading(true);
@@ -67,9 +76,6 @@ export default function AdminProductDetailPage() {
         const data = await groupRes.json();
         if (data.variants) {
           setGroup(data);
-          if (!selectedVariantId || !data.variants.some((v: ProductVariant) => v.id === selectedVariantId)) {
-            setSelectedVariantId(data.variants[0]?.id ?? "");
-          }
           return;
         }
       }
@@ -82,6 +88,7 @@ export default function AdminProductDetailPage() {
           if (groupBySlug.ok) {
             const data = await groupBySlug.json();
             setGroup(data);
+            // El id de la URL es un variant; lo preseleccionamos.
             setSelectedVariantId(id);
             return;
           }
@@ -111,72 +118,102 @@ export default function AdminProductDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, addToast, selectedVariantId]);
+  }, [id, addToast]);
 
   useEffect(() => {
     loadGroup();
   }, [loadGroup]);
+
+  // Sincroniza la selección cuando el grupo carga: si no hay variante seleccionada
+  // (o ya no existe en el grupo), cae a la primera. La condición evita el bucle
+  // porque tras el setState, la nueva selección sí es válida y el if no entra.
+  useEffect(() => {
+    if (!group) return;
+    if (!selectedVariantId || !group.variants.some((v) => v.id === selectedVariantId)) {
+      setSelectedVariantId(group.variants[0]?.id ?? "");
+    }
+  }, [group, selectedVariantId]);
 
   const selectedVariant = useMemo(() => {
     if (!group) return null;
     return group.variants.find((v) => v.id === selectedVariantId) ?? group.variants[0];
   }, [group, selectedVariantId]);
 
-  const handleToggleGroup = useCallback(async () => {
+  // Pide confirmación para togglear el grupo entero (afecta todas las variantes)
+  const requestToggleGroup = useCallback(() => {
     if (!group) return;
-    const newActive = !group.active;
-    setToggling("group");
+    setPendingToggle({ kind: "group", currentlyActive: group.active });
+  }, [group]);
 
-    try {
-      const res = await fetch(`/api/shop/products/groups/${group.groupKey}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ active: newActive }),
-      });
-      if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.error ?? "Error");
+  // Pide confirmación para togglear una variante individual
+  const requestToggleVariant = useCallback((variantId: string, currentActive: boolean) => {
+    if (!group) return;
+    const variant = group.variants.find((v) => v.id === variantId);
+    if (!variant) return;
+    setPendingToggle({
+      kind: "variant",
+      variantId,
+      variantName: variant.variantLabel || variant.color || variant.name,
+      currentlyActive: currentActive,
+    });
+  }, [group]);
+
+  // Tras confirmar, ejecuta el PATCH apropiado
+  const confirmToggle = useCallback(async () => {
+    if (!pendingToggle || !group) return;
+
+    if (pendingToggle.kind === "group") {
+      const newActive = !pendingToggle.currentlyActive;
+      setToggling("group");
+      try {
+        const res = await fetch(`/api/shop/products/groups/${group.groupKey}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ active: newActive }),
+        });
+        if (!res.ok) {
+          const body = await res.json();
+          throw new Error(body.error ?? "Error");
+        }
+        await loadGroup();
+        addToast(
+          newActive
+            ? `${group.name} reactivado (todas las variantes)`
+            : `${group.name} desactivado (todas las variantes)`,
+          "success",
+        );
+        setPendingToggle(null);
+      } catch (err) {
+        addToast(err instanceof Error ? err.message : "Error", "danger");
+      } finally {
+        setToggling(null);
       }
-
-      await loadGroup();
-      addToast(
-        newActive
-          ? `${group.name} reactivado (todas las variantes)`
-          : `${group.name} desactivado (todas las variantes)`,
-        "success",
-      );
-    } catch (err) {
-      addToast(err instanceof Error ? err.message : "Error", "danger");
-    } finally {
-      setToggling(null);
-    }
-  }, [group, loadGroup, addToast]);
-
-  const handleToggleVariant = useCallback(async (variantId: string, currentActive: boolean) => {
-    setToggling(variantId);
-
-    try {
-      const res = await fetch(`/api/shop/products/variants/${variantId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ active: !currentActive }),
-      });
-      if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.error ?? "Error");
+    } else {
+      const { variantId, currentlyActive } = pendingToggle;
+      setToggling(variantId);
+      try {
+        const res = await fetch(`/api/shop/products/variants/${variantId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ active: !currentlyActive }),
+        });
+        if (!res.ok) {
+          const body = await res.json();
+          throw new Error(body.error ?? "Error");
+        }
+        await loadGroup();
+        addToast(
+          currentlyActive ? "Variante desactivada" : "Variante reactivada",
+          "success",
+        );
+        setPendingToggle(null);
+      } catch (err) {
+        addToast(err instanceof Error ? err.message : "Error", "danger");
+      } finally {
+        setToggling(null);
       }
-
-      await loadGroup();
-      addToast(
-        currentActive ? "Variante desactivada" : "Variante reactivada",
-        "success",
-      );
-    } catch (err) {
-      addToast(err instanceof Error ? err.message : "Error", "danger");
-    } finally {
-      setToggling(null);
     }
-  }, [loadGroup, addToast]);
+  }, [pendingToggle, group, loadGroup, addToast]);
 
   if (loading) return <SkeletonPage />;
 
@@ -197,7 +234,7 @@ export default function AdminProductDetailPage() {
         <InactiveAlert
           resourceName={group.name}
           actionLabel="Reactivar grupo"
-          onAction={handleToggleGroup}
+          onAction={requestToggleGroup}
           loading={toggling === "group"}
         />
       )}
@@ -245,7 +282,7 @@ export default function AdminProductDetailPage() {
             totalVariants={group.variants.length}
             toggling={toggling === "group"}
             onEdit={() => router.push(`/admin/shop/products/${group.groupKey}/edit-group`)}
-            onToggleActive={handleToggleGroup}
+            onToggleActive={requestToggleGroup}
           />
 
           <VariantDetailCard
@@ -258,7 +295,7 @@ export default function AdminProductDetailPage() {
             active={selectedVariant.active}
             toggling={toggling === selectedVariant.id}
             onEdit={() => router.push(`/admin/shop/products/variants/${selectedVariant.id}/edit?from=detail&group=${group.groupKey}`)}
-            onToggleActive={() => handleToggleVariant(selectedVariant.id, selectedVariant.active)}
+            onToggleActive={() => requestToggleVariant(selectedVariant.id, selectedVariant.active)}
           />
         </div>
       </div>
@@ -270,8 +307,32 @@ export default function AdminProductDetailPage() {
         toggling={toggling}
         onSelect={setSelectedVariantId}
         onEditVariant={(variantId) => router.push(`/admin/shop/products/variants/${variantId}/edit?from=detail&group=${group.groupKey}`)}
-        onToggleVariant={handleToggleVariant}
+        onToggleVariant={requestToggleVariant}
         onAddVariant={() => router.push(`/admin/shop/products/${group.groupKey}/add-variant`)}
+      />
+
+      <ConfirmModal
+        open={pendingToggle !== null}
+        onClose={() => { if (toggling === null) setPendingToggle(null); }}
+        onConfirm={confirmToggle}
+        title={
+          pendingToggle?.kind === "group"
+            ? (pendingToggle.currentlyActive ? "Desactivar producto" : "Reactivar producto")
+            : (pendingToggle?.currentlyActive ? "Desactivar variante" : "Reactivar variante")
+        }
+        description={
+          pendingToggle?.kind === "group"
+            ? (pendingToggle.currentlyActive
+                ? `"${group.name}" y sus ${group.variants.length} variante${group.variants.length !== 1 ? "s" : ""} dejarán de estar disponibles en la tienda. ¿Quieres continuar?`
+                : `"${group.name}" y todas sus variantes volverán a estar disponibles en la tienda. ¿Quieres continuar?`)
+            : pendingToggle?.kind === "variant"
+              ? (pendingToggle.currentlyActive
+                  ? `La variante "${pendingToggle.variantName}" dejará de estar disponible para nuevas compras. ¿Quieres continuar?`
+                  : `La variante "${pendingToggle.variantName}" volverá a estar disponible para compras. ¿Quieres continuar?`)
+              : ""
+        }
+        confirmLabel={pendingToggle?.currentlyActive ? "Desactivar" : "Reactivar"}
+        loading={toggling !== null}
       />
     </div>
   );

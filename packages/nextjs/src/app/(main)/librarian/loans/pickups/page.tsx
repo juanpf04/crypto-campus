@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
+import { ConfirmModal } from "@/components/shared/ConfirmModal";
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "@/components/ui/Table";
@@ -32,6 +33,9 @@ export default function LibrarianPendingPickupsPage() {
     onError: () => addToast("Error al cargar reservas", "danger"),
   });
 
+  const [pendingExpire, setPendingExpire] = useState<string | null>(null);
+  const [submittingExpire, setSubmittingExpire] = useState(false);
+
   async function handleAction(id: string, action: "pickup" | "expire") {
     setProcessing(id);
     try {
@@ -47,6 +51,17 @@ export default function LibrarianPendingPickupsPage() {
       addToast(err instanceof Error ? err.message : "Error", "danger");
     } finally {
       setProcessing(null);
+    }
+  }
+
+  async function confirmExpire() {
+    if (!pendingExpire) return;
+    setSubmittingExpire(true);
+    try {
+      await handleAction(pendingExpire, "expire");
+      setPendingExpire(null);
+    } finally {
+      setSubmittingExpire(false);
     }
   }
 
@@ -101,7 +116,7 @@ export default function LibrarianPendingPickupsPage() {
                             Confirmar recogida
                           </Button>
                           {isExpired(req.reservationDate) && (
-                            <Button size="sm" variant="danger" onClick={() => handleAction(req.id, "expire")} disabled={processing === req.id}>
+                            <Button size="sm" variant="danger" onClick={() => setPendingExpire(req.id)} disabled={processing === req.id}>
                               Expirar reserva
                             </Button>
                           )}
@@ -116,6 +131,16 @@ export default function LibrarianPendingPickupsPage() {
           <Pagination offset={list.offset} limit={list.limit} total={list.total} onChange={list.setOffset} />
         </>
       )}
+
+      <ConfirmModal
+        open={pendingExpire !== null}
+        onClose={() => { if (!submittingExpire) setPendingExpire(null); }}
+        onConfirm={confirmExpire}
+        title="Expirar reserva"
+        description="La reserva quedará marcada como expirada y el ítem volverá a estar disponible. Esta acción no se puede deshacer."
+        confirmLabel="Expirar"
+        loading={submittingExpire}
+      />
     </div>
   );
 }

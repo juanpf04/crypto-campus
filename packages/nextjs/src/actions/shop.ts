@@ -1163,18 +1163,66 @@ async function mintShopTokensInternal(userId: string, amount: number) {
 }
 
 /**
- * Mintea ShopTokens a un usuario (admin).
+ * Asigna un balance absoluto de ShopTokens a un usuario (admin).
+ * Mintea o quema la diferencia respecto al balance actual para alcanzar el target.
  * Acceso: solo admin.
+ *
+ * @param userId ID del usuario.
+ * @param amount Balance objetivo (entero ≥ 0).
+ * @returns txHash, address y balance final.
  */
 export async function mintShopTokens(userId: string, amount: number) {
 	const session = await getSession();
 	ensureRole(session, ["ADMIN"]);
 
 	try {
-		return await mintShopTokensInternal(userId, amount);
+		if (!Number.isInteger(amount) || amount < 0) {
+			throw new Error("La cantidad debe ser un entero no negativo");
+		}
+
+		const address = await getUserAddressById(userId);
+		const currentBalance = await readShopBalance(address);
+		const current = Number(currentBalance);
+
+		let txHash: `0x${string}` | null = null;
+
+		if (amount > current) {
+			const toMint = amount - current;
+			txHash = await adminWalletClient.writeContract({
+				address: CONTRACT_ADDRESSES.shopToken as `0x${string}`,
+				abi: SHOP_TOKEN_ABI,
+				functionName: "mint",
+				args: [address, BigInt(toMint)],
+			});
+			const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+			if (receipt.status !== "success") {
+				throw new Error("La transacción de mint fue revertida");
+			}
+		} else if (amount < current) {
+			const toBurn = current - amount;
+			txHash = await adminWalletClient.writeContract({
+				address: CONTRACT_ADDRESSES.shopToken as `0x${string}`,
+				abi: SHOP_TOKEN_ABI,
+				functionName: "burn",
+				args: [address, BigInt(toBurn)],
+			});
+			const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+			if (receipt.status !== "success") {
+				throw new Error("La transacción de burn fue revertida");
+			}
+		}
+
+		const updatedBalance = await readShopBalance(address);
+
+		return {
+			txHash,
+			userId,
+			userAddress: address,
+			balance: Number(updatedBalance),
+		};
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		throw new Error(`Error al mintear tokens: ${error instanceof Error ? error.message : "desconocido"}`);
+		throw new Error(`Error al asignar tokens: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
 

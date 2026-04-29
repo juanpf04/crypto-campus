@@ -1,11 +1,13 @@
 /**
  * resync-users.mjs
  *
- * Después de un deploy limpio de Hardhat, los usuarios de Prisma
- * ya no existen on-chain. Este script los re-registra:
- *   1. Fondea cada wallet con ETH (gas)
- *   2. Registra cada usuario en CampusRoles con su rol
- *   3. Mintea tokens iniciales (LibraryToken + ShopToken)
+ * Sincroniza los usuarios de Prisma con la blockchain. Idempotente:
+ * para cada usuario consulta CampusRoles.isRegistered(address) y solo
+ * fondea/registra/mintea si no está ya registrado on-chain.
+ *
+ *   1. Fondea cada wallet nueva con ETH (gas)
+ *   2. Registra el usuario en CampusRoles con su rol
+ *   3. Mintea tokens iniciales (LibraryToken + ShopToken) a estudiantes/profesores
  *
  * Se ejecuta automáticamente desde dev.mjs tras el deploy de contratos.
  *
@@ -139,6 +141,10 @@ async function main() {
 
     log(`Resincronizando ${users.length} usuario(s) con la blockchain...`);
 
+    let registered = 0;
+    let alreadySynced = 0;
+    let failed = 0;
+
     for (const user of users) {
       try {
         // 1. Descifrar clave privada
@@ -147,18 +153,32 @@ async function main() {
 
         // Verificar que la address coincide
         if (account.address.toLowerCase() !== user.address.toLowerCase()) {
-          log(yellow(`⚠ Address mismatch para ${user.email} — saltando`));
+          log(yellow(`  ⚠ Address mismatch para ${user.email} — saltando`));
+          failed += 1;
           continue;
         }
 
-        // 2. Fondear wallet con ETH
+        // 2. ¿Ya está registrado on-chain? Si sí, no hacemos nada (idempotencia).
+        const isRegistered = await publicClient.readContract({
+          address: ADDRESSES.campusRoles,
+          abi: CAMPUS_ABI,
+          functionName: "isRegistered",
+          args: [account.address],
+        });
+
+        if (isRegistered) {
+          alreadySynced += 1;
+          continue;
+        }
+
+        // 3. Fondear wallet con ETH
         const fundHash = await adminWalletClient.sendTransaction({
           to: account.address,
           value: parseEther("10"),
         });
         await publicClient.waitForTransactionReceipt({ hash: fundHash });
 
-        // 3. Registrar en CampusRoles
+        // 4. Registrar en CampusRoles
         const role = ROLE_MAP[user.role] || ROLE_MAP.STUDENT;
         const regHash = await adminWalletClient.writeContract({
           address: ADDRESSES.campusRoles,
@@ -168,7 +188,7 @@ async function main() {
         });
         await publicClient.waitForTransactionReceipt({ hash: regHash });
 
-        // 4. Mintear tokens (solo a estudiantes y profesores, no a admin ni bibliotecario)
+        // 5. Mintear tokens iniciales (solo a estudiantes y profesores)
         if (user.role === "STUDENT" || user.role === "PROFESSOR") {
           const mintLibHash = await adminWalletClient.writeContract({
             address: ADDRESSES.libraryToken,
@@ -187,13 +207,16 @@ async function main() {
           await publicClient.waitForTransactionReceipt({ hash: mintShopHash });
         }
 
-        log(green(`  ✓ ${user.email} (${user.role})`));
+        registered += 1;
+        log(green(`  ✓ ${user.email} (${user.role}) — registrado, +10 ETH${user.role === "STUDENT" || user.role === "PROFESSOR" ? ", +10 LIB, +100 SHOP" : ""}`));
       } catch (err) {
+        failed += 1;
         log(yellow(`  ✗ ${user.email}: ${err.message}`));
       }
     }
 
-    log(green("Resincronización completada."));
+    const summary = `Resincronización: ${registered} nuevo(s) · ${alreadySynced} ya sincronizado(s)${failed > 0 ? ` · ${failed} fallo(s)` : ""}.`;
+    log(failed > 0 ? yellow(summary) : green(summary));
   } finally {
     await prisma.$disconnect();
   }

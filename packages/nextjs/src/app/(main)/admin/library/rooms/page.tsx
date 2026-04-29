@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { usePaginatedList } from "@/hooks/usePaginatedList";
@@ -10,6 +11,8 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { ConfirmModal } from "@/components/shared/ConfirmModal";
+import { InfoModal } from "@/components/shared/InfoModal";
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "@/components/ui/Table";
@@ -18,6 +21,7 @@ const PAGE_SIZE = 20;
 
 interface Room {
   id: string; roomId: number; name: string; location: string | null; capacity: number; active: boolean;
+  activeBookingCount: number;
 }
 
 export default function AdminRoomsPage() {
@@ -31,14 +35,42 @@ export default function AdminRoomsPage() {
     onError: () => addToast("Error", "danger"),
   });
 
-  async function handleDelete(id: string) {
-    if (!confirm("¿Desactivar esta sala?")) return;
+  const [pending, setPending] = useState<{ id: string; name: string; currentlyActive: boolean } | null>(null);
+  const [blocked, setBlocked] = useState<{ name: string; count: number } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  function requestToggle(room: Room) {
+    if (room.active && room.activeBookingCount > 0) {
+      setBlocked({ name: room.name, count: room.activeBookingCount });
+      return;
+    }
+    setPending({ id: room.id, name: room.name, currentlyActive: room.active });
+  }
+
+  async function confirmToggleActive() {
+    if (!pending) return;
+    const { id: roomId, currentlyActive } = pending;
+    setSubmitting(true);
     try {
-      const res = await fetch(`/api/rooms/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
-      addToast("Sala desactivada", "success");
+      if (currentlyActive) {
+        const res = await fetch(`/api/rooms/${roomId}`, { method: "DELETE" });
+        if (!res.ok) throw new Error("Error al desactivar sala");
+      } else {
+        const res = await fetch(`/api/rooms/${roomId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ active: true }),
+        });
+        if (!res.ok) throw new Error("Error al reactivar sala");
+      }
+      addToast(`Sala ${currentlyActive ? "desactivada" : "reactivada"}`, "success");
       list.refresh();
-    } catch { addToast("Error", "danger"); }
+      setPending(null);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : "Error", "danger");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   if (list.loading && list.items.length === 0) return <SkeletonTable columns={5} rows={6} />;
@@ -77,7 +109,13 @@ export default function AdminRoomsPage() {
                       <TableCell>
                         <div className="flex gap-1">
                           <Button size="sm" variant="secondary" onClick={() => router.push(`/admin/library/rooms/${room.id}/edit`)}>Editar</Button>
-                          {room.active && <Button size="sm" variant="danger" onClick={() => handleDelete(room.id)}>Desactivar</Button>}
+                          <Button
+                            size="sm"
+                            variant={room.active ? "danger" : "success"}
+                            onClick={() => requestToggle(room)}
+                          >
+                            {room.active ? "Desactivar" : "Reactivar"}
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -89,6 +127,31 @@ export default function AdminRoomsPage() {
           <Pagination offset={list.offset} limit={list.limit} total={list.total} onChange={list.setOffset} />
         </>
       )}
+
+      <ConfirmModal
+        open={pending !== null}
+        onClose={() => { if (!submitting) setPending(null); }}
+        onConfirm={confirmToggleActive}
+        title={pending?.currentlyActive ? "Desactivar sala" : "Reactivar sala"}
+        description={
+          pending?.currentlyActive
+            ? `"${pending.name}" dejará de estar disponible para nuevas reservas. ¿Quieres continuar?`
+            : `"${pending?.name}" volverá a estar disponible para reservas. ¿Quieres continuar?`
+        }
+        confirmLabel={pending?.currentlyActive ? "Desactivar" : "Reactivar"}
+        loading={submitting}
+      />
+
+      <InfoModal
+        open={blocked !== null}
+        onClose={() => setBlocked(null)}
+        title="No se puede desactivar"
+        description={
+          blocked
+            ? `"${blocked.name}" tiene ${blocked.count} reserva${blocked.count !== 1 ? "s" : ""} activa${blocked.count !== 1 ? "s" : ""} para hoy y no se puede desactivar hasta que se cancelen o terminen.`
+            : ""
+        }
+      />
     </div>
   );
 }

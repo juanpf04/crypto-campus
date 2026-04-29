@@ -306,15 +306,39 @@ export async function listItems(filters?: {
 		];
 	}
 
-	const [items, total] = await Promise.all([
+	const [rawItems, total] = await Promise.all([
 		prisma.libraryItem.findMany({
 			where,
 			orderBy: { createdAt: "desc" },
+			include: {
+				_count: {
+					select: {
+						loans: {
+							where: {
+								status: {
+									in: [
+										"QUEUED" as LoanStatus,
+										"RESERVED" as LoanStatus,
+										"PICKED_UP" as LoanStatus,
+									],
+								},
+							},
+						},
+					},
+				},
+			},
 			...(filters?.limit ? { take: filters.limit } : {}),
 			...(filters?.offset ? { skip: filters.offset } : {}),
 		}),
 		prisma.libraryItem.count({ where }),
 	]);
+
+	// Aplanar `_count.loans` en `activeLoanCount` para no exponer el shape interno
+	// de Prisma a los consumidores.
+	const items = rawItems.map(({ _count, ...rest }) => ({
+		...rest,
+		activeLoanCount: _count.loans,
+	}));
 
 	return { items, total };
 }
@@ -423,6 +447,25 @@ export async function requestLoan(itemId: string) {
 		});
 		if (existingLoan) throw new Error("Ya tienes un préstamo activo o pendiente de este ítem");
 
+		// Pre-flight: cada préstamo bloquea 1 LibraryToken como depósito.
+		// Validamos el balance antes de mandar la tx para devolver un mensaje claro
+		// al estudiante en vez del revert críptico de InsufficientDeposit.
+		const studentUser = await prisma.user.findUnique({
+			where: { id: session.userId! },
+			select: { address: true },
+		});
+		if (studentUser) {
+			const balance = await publicClient.readContract({
+				address: CONTRACT_ADDRESSES.libraryToken as `0x${string}`,
+				abi: LIBRARY_TOKEN_ABI,
+				functionName: "balanceOf",
+				args: [studentUser.address as `0x${string}`],
+			}) as bigint;
+			if (balance < BigInt(1)) {
+				throw new Error("No tienes Tokens de Préstamo suficientes. Pide al admin que te asigne tokens.");
+			}
+		}
+
 		const nextLoanId = await publicClient.readContract({
 			address: CONTRACT_ADDRESSES.libraryManager as `0x${string}`,
 			abi: LIBRARY_MANAGER_ABI,
@@ -490,7 +533,21 @@ export async function requestLoan(itemId: string) {
 
 		return { success: true, loan, queued: !isReserved, rewards };
 	} catch (error) {
-		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (error instanceof Error) {
+			// Mensajes de validación que ya son human-readable: dejarlos pasar tal cual.
+			if (
+				error.message === "No autenticado" ||
+				error.message === "No autorizado" ||
+				error.message.includes("Tokens de Préstamo") ||
+				error.message.includes("préstamo activo") ||
+				error.message.includes("Ítem no encontrado")
+			) throw error;
+
+			// Decodificar revert del contrato para mejor mensaje al usuario.
+			if (error.message.includes("InsufficientDeposit")) {
+				throw new Error("No tienes Tokens de Préstamo suficientes. Pide al admin que te asigne tokens.");
+			}
+		}
 		throw new Error(`Error al solicitar préstamo: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -958,6 +1015,15 @@ export async function getLibraryStats() {
  * Mintea LibraryTokens a un estudiante.
  * Acceso: ADMIN.
  */
+/**
+ * Asigna un balance absoluto de LibraryTokens al estudiante.
+ * Mintea o quema la diferencia respecto al balance actual para alcanzar el target.
+ * Acceso: ADMIN.
+ *
+ * @param userId ID del estudiante.
+ * @param amount Balance objetivo (entero ≥ 0).
+ * @returns Balance final tras la operación.
+ */
 export async function mintLibraryTokens(userId: string, amount: number) {
 	const session = await getSession();
 	ensureRole(session, ["ADMIN"]);
@@ -973,7 +1039,7 @@ export async function mintLibraryTokens(userId: string, amount: number) {
 		});
 		if (!user) throw new Error("Usuario no encontrado");
 
-		// Leer balance actual
+		// Leer balance actual y calcular delta
 		const currentBalance = await publicClient.readContract({
 			address: CONTRACT_ADDRESSES.libraryToken as `0x${string}`,
 			abi: LIBRARY_TOKEN_ABI,
@@ -984,7 +1050,6 @@ export async function mintLibraryTokens(userId: string, amount: number) {
 		const current = Number(currentBalance);
 
 		if (amount > current) {
-			// Mintear la diferencia
 			const toMint = amount - current;
 			const hash = await adminWalletClient.writeContract({
 				address: CONTRACT_ADDRESSES.libraryToken as `0x${string}`,
@@ -997,7 +1062,6 @@ export async function mintLibraryTokens(userId: string, amount: number) {
 				throw new Error("La transacción de mint fue revertida");
 			}
 		} else if (amount < current) {
-			// Quemar la diferencia
 			const toBurn = current - amount;
 			const hash = await adminWalletClient.writeContract({
 				address: CONTRACT_ADDRESSES.libraryToken as `0x${string}`,

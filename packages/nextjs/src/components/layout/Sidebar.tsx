@@ -60,6 +60,12 @@ function getNavGroups(role: UserRole) {
             { href: `${base}/pending-reviews`, icon: icons.alert, label: "Tareas por revisar" },
           ],
         },
+        {
+          title: "Servicios",
+          items: [
+            { href: `${base}/printing`, icon: icons.print, label: "Impresión" },
+          ],
+        },
       ];
 
     case "LIBRARIAN":

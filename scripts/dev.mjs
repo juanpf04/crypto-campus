@@ -17,6 +17,8 @@
  *   --hardhat | --anvil  Fuerza motor blockchain (default: anvil)
  *   --fresh              Resetea BD + estado blockchain antes de arrancar
  *                        (equivalente a 'reset:all' pero Postgres ya estará arriba)
+ *   --skip-seed          Salta resync de usuarios y todos los seeds (arranca solo
+ *                        Postgres + nodo + Next.js, asumiendo que la BD ya está OK)
  *
  * Uso: node scripts/dev.mjs (o pnpm dev)
  */
@@ -30,6 +32,19 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
 const HARDHAT_DIR = resolve(ROOT, "packages/hardhat");
 const NEXTJS_DIR = resolve(ROOT, "packages/nextjs");
+
+// DEP0190 (Node 24) avisa cuando se combina `args` array + `shell: true`.
+// Para evitarlo y mantener compatibilidad con .cmd/.bat de Windows usamos
+// shell:true pero pasamos el comando completo como string (sin args). Quote
+// asegura que rutas con espacios se preserven.
+function quote(arg) {
+	if (arg === "") return '""';
+	if (/^[A-Za-z0-9_./:=-]+$/.test(arg)) return arg;
+	return `"${arg.replace(/(["\\$`])/g, "\\$1")}"`;
+}
+function buildCmd(command, args) {
+	return [command, ...args.map(quote)].join(" ");
+}
 
 // Motor blockchain — "anvil" (default, estado persistente) o "hardhat"
 // (volátil). Se elige por flag CLI (--hardhat/--anvil) o env var
@@ -50,16 +65,15 @@ const BLOCKCHAIN_NODE = resolveBlockchainNode();
 const ANVIL_STATE_FILE = resolve(ROOT, ".anvil-state.json");
 const DEPLOYMENTS_DIR = resolve(HARDHAT_DIR, "ignition/deployments");
 
-// Flag opcional para resetear BD + blockchain local antes de arrancar. Es
-// equivalente a `pnpm reset:all` pero se ejecuta DESPUÉS de levantar Postgres
-// (evita errores la primera vez que Postgres aún no está arriba).
 const FRESH = process.argv.includes("--fresh");
+const SKIP_SEED = process.argv.includes("--skip-seed");
 
 // Colores para la consola
 const cyan = (s) => `\x1b[36m${s}\x1b[0m`;
 const green = (s) => `\x1b[32m${s}\x1b[0m`;
 const yellow = (s) => `\x1b[33m${s}\x1b[0m`;
 const red = (s) => `\x1b[31m${s}\x1b[0m`;
+const dim = (s) => `\x1b[2m${s}\x1b[0m`;
 
 function log(msg) {
 	console.log(`${cyan("[dev]")} ${msg}`);
@@ -69,9 +83,57 @@ function sleep(ms) {
 	return new Promise((r) => setTimeout(r, ms));
 }
 
-function run(command, args, { cwd, prefix = "[cmd]", allowFailure = false } = {}) {
+// ── Step runner: numerado + timing + resumen final ──────────────────────────
+
+let stepIdx = 0;
+let totalSteps = 0;
+const stepResults = [];
+
+async function step(label, fn, { fatal = true } = {}) {
+	stepIdx += 1;
+	const start = Date.now();
+	console.log(`${cyan(`▶ ${stepIdx}/${totalSteps}`)} ${label}`);
+	try {
+		const detail = await fn();
+		const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+		// Solo muestra el sufijo si la función retornó un string informativo.
+		// runNodeScript resuelve con { code } y no debe ensuciar el resumen.
+		const detailSuffix = typeof detail === "string" && detail ? ` — ${detail}` : "";
+		console.log(`${green(`✓ ${stepIdx}/${totalSteps}`)} ${label} (${elapsed}s)${detailSuffix}`);
+		stepResults.push({ idx: stepIdx, label, ok: true, time: parseFloat(elapsed) });
+		return detail;
+	} catch (err) {
+		const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+		const reason = (err?.message || "error").split("\n")[0];
+		console.log(`${red(`✗ ${stepIdx}/${totalSteps}`)} ${label} (${elapsed}s) — ${reason}`);
+		stepResults.push({ idx: stepIdx, label, ok: false, time: parseFloat(elapsed), error: err });
+		if (fatal) {
+			printSummary();
+			process.exit(1);
+		}
+		return null;
+	}
+}
+
+function printSummary() {
+	const ok = stepResults.filter((s) => s.ok).length;
+	const failed = stepResults.filter((s) => !s.ok);
+	const totalTime = stepResults.reduce((sum, s) => sum + s.time, 0).toFixed(1);
+	console.log("");
+	if (failed.length === 0) {
+		console.log(green(`═══ Bootstrap completo: ${ok}/${totalSteps} OK · ${totalTime}s`));
+	} else {
+		const failedLabels = failed.map((f) => f.label).join(", ");
+		console.log(yellow(`═══ Bootstrap: ${ok}/${totalSteps} OK · ${failed.length} fallo(s): ${failedLabels} · ${totalTime}s`));
+	}
+	console.log("");
+}
+
+// ── Helpers de spawn (sin shell: true para evitar DEP0190) ──────────────────
+
+function run(command, args, { cwd, prefix = "[cmd]", allowFailure = false, quiet = false } = {}) {
 	return new Promise((resolvePromise, rejectPromise) => {
-		const child = spawn(command, args, {
+		const child = spawn(buildCmd(command, args), {
 			cwd,
 			stdio: ["ignore", "pipe", "pipe"],
 			shell: true,
@@ -83,6 +145,7 @@ function run(command, args, { cwd, prefix = "[cmd]", allowFailure = false } = {}
 		child.stdout.on("data", (data) => {
 			const msg = data.toString();
 			stdout += msg;
+			if (quiet) return;
 			const trimmed = msg.trim();
 			if (trimmed) console.log(`${cyan(prefix)} ${trimmed}`);
 		});
@@ -90,14 +153,26 @@ function run(command, args, { cwd, prefix = "[cmd]", allowFailure = false } = {}
 		child.stderr.on("data", (data) => {
 			const msg = data.toString();
 			stderr += msg;
+			if (quiet) return;
 			const trimmed = msg.trim();
 			if (trimmed) console.log(`${yellow(prefix)} ${trimmed}`);
+		});
+
+		child.on("error", (err) => {
+			rejectPromise(new Error(`${command} no se pudo ejecutar: ${err.message}`));
 		});
 
 		child.on("close", (code) => {
 			if (code === 0 || allowFailure) {
 				resolvePromise({ code, stdout, stderr });
 				return;
+			}
+			// Si íbamos en silent y peta, sacamos lo bufferado para que el error sea diagnosticable.
+			if (quiet) {
+				const stdoutTrim = stdout.trim();
+				const stderrTrim = stderr.trim();
+				if (stdoutTrim) console.log(`${cyan(prefix)} ${stdoutTrim}`);
+				if (stderrTrim) console.log(`${yellow(prefix)} ${stderrTrim}`);
 			}
 			const details = (stderr || stdout).trim();
 			const detailSuffix = details ? `\n${details}` : "";
@@ -106,53 +181,11 @@ function run(command, args, { cwd, prefix = "[cmd]", allowFailure = false } = {}
 	});
 }
 
-async function ensureDatabase() {
-	log("Levantando PostgreSQL con Docker Compose...");
-	try {
-		await run("docker", ["compose", "up", "-d", "db"], {
-			cwd: ROOT,
-			prefix: "[db]",
-		});
-		log(green("Base de datos lista en localhost:5435"));
-	} catch (error) {
-		const message = String(error?.message || "");
-		const hasNameConflict =
-			message.includes("postgres_cryptocampus") &&
-			(message.includes("already in use") || message.includes("Conflict"));
-
-		if (hasNameConflict) {
-			log(yellow("Detectado conflicto de nombre de contenedor. Reintentando automaticamente..."));
-			try {
-				await run("docker", ["rm", "-f", "postgres_cryptocampus"], {
-					cwd: ROOT,
-					prefix: "[db-fix]",
-				});
-				await run("docker", ["compose", "up", "-d", "db"], {
-					cwd: ROOT,
-					prefix: "[db]",
-				});
-				log(green("Base de datos lista en localhost:5435"));
-				return;
-			} catch {
-				// Si falla la recuperacion automatica, cae al mensaje de error general.
-			}
-		}
-
-		console.error(
-			red(
-				"No se pudo iniciar la base de datos. Asegura que Docker Desktop este iniciado y vuelve a ejecutar 'pnpm dev'."
-			)
-		);
-		process.exit(1);
-	}
-}
-
-function runNodeScript(scriptPath, { cwd, prefix, allowFailure = false, nonCriticalMessage } = {}) {
+function runNodeScript(scriptPath, { cwd, prefix, allowFailure = false } = {}) {
 	return new Promise((resolvePromise, rejectPromise) => {
 		const child = spawn(process.execPath, [scriptPath], {
 			cwd,
 			stdio: ["ignore", "pipe", "pipe"],
-			shell: true,
 		});
 
 		child.stdout.on("data", (data) => {
@@ -165,10 +198,13 @@ function runNodeScript(scriptPath, { cwd, prefix, allowFailure = false, nonCriti
 			if (msg) console.log(`${yellow(prefix)} ${msg}`);
 		});
 
+		child.on("error", (err) => {
+			rejectPromise(new Error(`${scriptPath} no se pudo ejecutar: ${err.message}`));
+		});
+
 		child.on("close", (code) => {
 			if (code === 0 || allowFailure) {
-				if (code !== 0 && nonCriticalMessage) log(yellow(nonCriticalMessage));
-				resolvePromise();
+				resolvePromise({ code });
 				return;
 			}
 			rejectPromise(new Error(`${scriptPath} falló con código ${code}`));
@@ -176,53 +212,62 @@ function runNodeScript(scriptPath, { cwd, prefix, allowFailure = false, nonCriti
 	});
 }
 
-async function ensurePrismaClient() {
-	log("Generando Prisma Client...");
+// ── Acciones individuales ───────────────────────────────────────────────────
+
+async function ensureDatabase() {
 	try {
-		await run("pnpm", ["run", "db:generate"], {
-			cwd: NEXTJS_DIR,
-			prefix: "[prisma]",
-		});
-		log(green("Prisma Client generado"));
-	} catch {
-		console.error(
-			red(
-				"No se pudo generar Prisma Client. Ejecuta 'pnpm db:generate' y vuelve a intentar 'pnpm dev'."
-			)
+		await run("docker", ["compose", "up", "-d", "db"], { cwd: ROOT, prefix: "[db]" });
+	} catch (error) {
+		const message = String(error?.message || "");
+		const hasNameConflict =
+			message.includes("postgres_cryptocampus") &&
+			(message.includes("already in use") || message.includes("Conflict"));
+
+		if (hasNameConflict) {
+			log(yellow("Detectado conflicto de nombre de contenedor. Reintentando automáticamente..."));
+			await run("docker", ["rm", "-f", "postgres_cryptocampus"], { cwd: ROOT, prefix: "[db-fix]" });
+			await run("docker", ["compose", "up", "-d", "db"], { cwd: ROOT, prefix: "[db]" });
+			return "Postgres en localhost:5435 (recuperado tras conflicto)";
+		}
+		throw new Error(
+			"No se pudo iniciar la base de datos. Asegura que Docker Desktop esté iniciado."
 		);
-		process.exit(1);
 	}
+	return "Postgres en localhost:5435";
+}
+
+async function ensurePrismaClient() {
+	await run("pnpm", ["run", "db:generate"], { cwd: NEXTJS_DIR, prefix: "[prisma]", quiet: true });
+}
+
+async function resetFreshState() {
+	const removed = [];
+	if (existsSync(ANVIL_STATE_FILE)) {
+		rmSync(ANVIL_STATE_FILE, { force: true });
+		removed.push(".anvil-state.json");
+	}
+	if (existsSync(DEPLOYMENTS_DIR)) {
+		rmSync(DEPLOYMENTS_DIR, { recursive: true, force: true });
+		removed.push("ignition/deployments");
+	}
+	await run("pnpm", ["run", "db:reset"], { cwd: NEXTJS_DIR, prefix: "[db:reset]" });
+	return `BD reseteada · borrados: ${removed.join(", ") || "(nada blockchain)"}`;
 }
 
 async function ensureDatabaseSchema() {
-	log("Aplicando esquema Prisma en la base de datos...");
-	try {
-		await run("pnpm", ["run", "db:push"], {
-			cwd: NEXTJS_DIR,
-			prefix: "[prisma]",
-		});
-		log(green("Esquema Prisma sincronizado"));
-	} catch {
-		console.error(
-			red(
-				"No se pudo aplicar el esquema Prisma. Ejecuta 'pnpm db:push' y vuelve a intentar 'pnpm dev'."
-			)
-		);
-		process.exit(1);
-	}
+	await run("pnpm", ["run", "db:push"], { cwd: NEXTJS_DIR, prefix: "[prisma]", quiet: true });
 }
 
 // ── Nodo blockchain ─────────────────────────────────────────────────────────
 
 function startAnvil() {
-	log(`Arrancando Anvil${existsSync(ANVIL_STATE_FILE) ? " (cargando estado previo)" : " (estado nuevo)"}...`);
 	const args = [
 		"--port", "8545",
 		"--chain-id", "31337",
 		"--state", ANVIL_STATE_FILE,
 		"--state-interval", "30",
 	];
-	const child = spawn("anvil", args, {
+	const child = spawn(buildCmd("anvil", args), {
 		cwd: ROOT,
 		stdio: ["ignore", "pipe", "pipe"],
 		shell: true,
@@ -235,8 +280,7 @@ function startAnvil() {
 }
 
 function startHardhatNode() {
-	log("Arrancando nodo de Hardhat...");
-	const child = spawn("pnpm", ["exec", "hardhat", "node"], {
+	const child = spawn(buildCmd("pnpm", ["exec", "hardhat", "node"]), {
 		cwd: HARDHAT_DIR,
 		stdio: ["ignore", "pipe", "pipe"],
 		shell: true,
@@ -264,8 +308,14 @@ function waitForNodeReady(childProcess, label) {
 			if (!ready && readyPattern.test(msg)) {
 				ready = true;
 				clearTimeout(timeout);
-				log(green(`${label === "anvil" ? "Anvil" : "Nodo de Hardhat"} listo en http://127.0.0.1:8545`));
 				resolvePromise();
+			}
+		});
+
+		childProcess.on("error", (err) => {
+			if (!ready) {
+				clearTimeout(timeout);
+				rejectPromise(new Error(`${label} no se pudo ejecutar: ${err.message}`));
 			}
 		});
 
@@ -299,10 +349,6 @@ function readDeployedAddresses() {
 	return null;
 }
 
-/**
- * Comprueba si hay bytecode en la dirección del contrato CampusRoles.
- * Si sí, los contratos están desplegados y saltamos el redeploy.
- */
 async function contractsDeployed(addresses) {
 	const campusRolesEntry = Object.entries(addresses).find(([k]) => k.includes("CampusRoles"));
 	if (!campusRolesEntry) return false;
@@ -327,12 +373,10 @@ async function contractsDeployed(addresses) {
 }
 
 async function deployContracts() {
-	log("Desplegando contratos CampusModule...");
 	await new Promise((resolvePromise, rejectPromise) => {
 		let output = "";
 		const deploy = spawn(
-			"pnpm",
-			["exec", "hardhat", "ignition", "deploy", "ignition/modules/CampusModule.ts", "--network", "localhost"],
+			buildCmd("pnpm", ["exec", "hardhat", "ignition", "deploy", "ignition/modules/CampusModule.ts", "--network", "localhost"]),
 			{
 				cwd: HARDHAT_DIR,
 				stdio: ["ignore", "pipe", "pipe"],
@@ -349,6 +393,10 @@ async function deployContracts() {
 			if (msg) console.log(`${yellow("[deploy]")} ${msg}`);
 		});
 
+		deploy.on("error", (err) => {
+			rejectPromise(new Error(`Deploy no se pudo ejecutar: ${err.message}`));
+		});
+
 		deploy.on("close", (code) => {
 			if (code === 0) resolvePromise();
 			else rejectPromise(new Error(`Deploy falló con código ${code}\n${output}`));
@@ -360,106 +408,89 @@ async function deployContracts() {
 // Flujo principal
 // ──────────────────────────────────────────────────────────────────────────────
 
-await ensureDatabase();
-await ensurePrismaClient();
+// Calcular total de steps según flags
+totalSteps = 5; // postgres + prisma-gen + schema + node + (deploy o "ya desplegados")
+if (FRESH) totalSteps += 1; // reset
+if (!SKIP_SEED) totalSteps += 2; // resync + seed-completo (admin va dentro de seed)
 
-// Si se pidió --fresh, resetear blockchain local y BD. Postgres ya está
-// arriba (ensureDatabase), así que prisma db push --force-reset no falla.
+const flags = [
+	BLOCKCHAIN_NODE === "anvil" ? "anvil (persistente)" : "hardhat (volátil)",
+	FRESH ? "fresh" : null,
+	SKIP_SEED ? "skip-seed" : null,
+].filter(Boolean).join(" · ");
+log(dim(`Modo: ${flags}`));
+console.log("");
+
+// 1. Postgres
+await step("PostgreSQL", ensureDatabase);
+
+// 2. Prisma generate
+await step("Prisma generate", ensurePrismaClient);
+
+// 3. (opcional) Reset si --fresh
 if (FRESH) {
-	log(yellow("Flag --fresh: reseteando blockchain local y BD..."));
-	if (existsSync(ANVIL_STATE_FILE)) {
-		rmSync(ANVIL_STATE_FILE, { force: true });
-		log("  - Eliminado .anvil-state.json");
-	}
-	if (existsSync(DEPLOYMENTS_DIR)) {
-		rmSync(DEPLOYMENTS_DIR, { recursive: true, force: true });
-		log("  - Eliminados deployments de Ignition");
-	}
-	try {
-		await run("pnpm", ["run", "db:reset"], {
-			cwd: NEXTJS_DIR,
-			prefix: "[db:reset]",
-		});
-		log(green("BD reseteada"));
-	} catch {
-		console.error(red("No se pudo resetear la BD. Revisa que Postgres esté accesible."));
-		process.exit(1);
-	}
+	await step("Reset BD + blockchain", resetFreshState);
 }
 
-await ensureDatabaseSchema();
+// 4. Schema sync
+await step("Schema Prisma sync", ensureDatabaseSchema);
 
-// 1. Arrancar el nodo blockchain
-const useAnvil = BLOCKCHAIN_NODE === "anvil";
-log(green(`Motor blockchain: ${useAnvil ? "Anvil (persistente)" : "Hardhat (volátil)"}`));
-const nodeProcess = useAnvil ? startAnvil() : startHardhatNode();
-await waitForNodeReady(nodeProcess, BLOCKCHAIN_NODE);
-await sleep(500);
+// 5. Blockchain node
+let nodeProcess;
+await step(`Blockchain node (${BLOCKCHAIN_NODE})`, async () => {
+	nodeProcess = BLOCKCHAIN_NODE === "anvil" ? startAnvil() : startHardhatNode();
+	await waitForNodeReady(nodeProcess, BLOCKCHAIN_NODE);
+	await sleep(500);
+	return `http://127.0.0.1:8545`;
+});
 
-// 2. Detectar si contratos ya están desplegados
-let addresses = readDeployedAddresses();
-let needsDeploy = true;
-if (addresses) {
-	log("Verificando si los contratos ya están desplegados...");
-	if (await contractsDeployed(addresses)) {
-		log(green("Contratos ya desplegados, saltando deploy"));
-		needsDeploy = false;
-	} else {
-		log(yellow("Addresses guardadas pero sin bytecode en la cadena. Limpio y redesplegamos."));
-		rmSync(DEPLOYMENTS_DIR, { recursive: true, force: true });
+// 6. Deploy (o detectar si ya está)
+await step("Contratos desplegados", async () => {
+	let addresses = readDeployedAddresses();
+	let needsDeploy = true;
+
+	if (addresses) {
+		if (await contractsDeployed(addresses)) {
+			needsDeploy = false;
+		} else {
+			rmSync(DEPLOYMENTS_DIR, { recursive: true, force: true });
+		}
 	}
+
+	if (needsDeploy) {
+		await deployContracts();
+		addresses = readDeployedAddresses();
+		if (!addresses) {
+			throw new Error("No se obtuvieron las direcciones tras el deploy");
+		}
+		return `desplegados ${Object.keys(addresses).length} contratos`;
+	}
+	return "ya desplegados, saltando";
+});
+
+// 7-8. Resync + Seeds (saltable con --skip-seed)
+// El admin se crea como primer sub-seed dentro del master seed (`seed.mjs`),
+// no necesita un step separado.
+if (!SKIP_SEED) {
+	await step("Resync usuarios", () => runNodeScript("scripts/resync-users.mjs", {
+		cwd: NEXTJS_DIR,
+		prefix: "[resync]",
+		allowFailure: true,
+	}), { fatal: false });
+
+	await step("Seeds completos", () => runNodeScript("scripts/seed.mjs", {
+		cwd: ROOT,
+		prefix: "[seed]",
+		allowFailure: true,
+	}), { fatal: false });
 }
 
-// 3. Deploy si hace falta
-if (needsDeploy) {
-	await deployContracts();
-	addresses = readDeployedAddresses();
-	if (!addresses) {
-		console.error(red("No se pudieron obtener las direcciones de los contratos tras el deploy."));
-		nodeProcess.kill();
-		process.exit(1);
-	}
-	log(green("Contratos desplegados:"));
-	for (const [key, addr] of Object.entries(addresses)) {
-		const name = key.split("#")[1] || key;
-		console.log(`  ${cyan(name)}: ${addr}`);
-	}
-}
+// Resumen antes de arrancar Next.js
+printSummary();
 
-// 4. Resincronizar usuarios de Prisma con la blockchain (idempotente)
-log("Resincronizando usuarios existentes con la blockchain...");
-await runNodeScript("scripts/resync-users.mjs", {
-	cwd: NEXTJS_DIR,
-	prefix: "[resync]",
-	allowFailure: true,
-	nonCriticalMessage: "Resync terminó con errores (no crítico, continuando...)",
-});
-
-// 5. Bootstrap del admin primero y explícito — garantiza que SIEMPRE existe
-//    un admin aunque el seed completo falle por cualquier motivo.
-log("Asegurando que existe un admin en la BD...");
-await runNodeScript("scripts/seed-admin.mjs", {
-	cwd: NEXTJS_DIR,
-	prefix: "[admin]",
-	allowFailure: true,
-	nonCriticalMessage: "Bootstrap del admin terminó con errores (no crítico, continuando...)",
-});
-
-// 6. Seed completo (idempotente): académico + productos + biblioteca + salas +
-//    impresoras + insignias + cleanup. En arranques sucesivos con Anvil
-//    persistente, los seeds detectan que los datos ya existen y saltan rápido.
-//    seed-admin se re-ejecuta aquí como no-op (admin ya existe), coste mínimo.
-log("Ejecutando seeds (idempotentes)...");
-await runNodeScript("scripts/seed.mjs", {
-	cwd: ROOT,
-	prefix: "[seed]",
-	allowFailure: true,
-	nonCriticalMessage: "Seed terminó con errores (continuando al arranque de Next.js...)",
-});
-
-// 7. Arrancar Next.js
+// 10. Arrancar Next.js
 log("Arrancando Next.js...");
-const nextDev = spawn("pnpm", ["exec", "next", "dev"], {
+const nextDev = spawn(buildCmd("pnpm", ["exec", "next", "dev"]), {
 	cwd: NEXTJS_DIR,
 	stdio: ["ignore", "pipe", "pipe"],
 	shell: true,
@@ -477,8 +508,8 @@ nextDev.stderr.on("data", (data) => {
 
 function cleanup() {
 	log("Cerrando procesos...");
-	nodeProcess.kill();
-	nextDev.kill();
+	if (nodeProcess) nodeProcess.kill();
+	if (nextDev) nextDev.kill();
 	process.exit(0);
 }
 

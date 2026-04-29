@@ -9,10 +9,16 @@ interface ConfirmModalProps {
   title: string;
   description: string;
   confirmLabel?: string;
-  variant?: "danger" | "primary";
   loading?: boolean;
 }
 
+/**
+ * Modal genérico de confirmación.
+ *
+ * Convención cromática (consistente en toda la app):
+ * - Botón "Cancelar" → rojo (`danger`).
+ * - Botón de confirmación → azul (`primary`).
+ */
 export function ConfirmModal({
   open,
   onClose,
@@ -20,17 +26,16 @@ export function ConfirmModal({
   title,
   description,
   confirmLabel = "Confirmar",
-  variant = "danger",
   loading,
 }: ConfirmModalProps) {
   return (
     <Modal open={open} onClose={onClose} title={title}>
       <p className="text-sm text-text-muted mb-6">{description}</p>
       <div className="flex justify-end gap-3">
-        <Button variant="ghost" onClick={onClose} disabled={loading}>
+        <Button variant="danger" onClick={onClose} disabled={loading}>
           Cancelar
         </Button>
-        <Button variant={variant} onClick={onConfirm} loading={loading}>
+        <Button variant="primary" onClick={onConfirm} loading={loading}>
           {confirmLabel}
         </Button>
       </div>

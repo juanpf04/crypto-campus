@@ -1,235 +1,239 @@
 "use client";
 
 /**
- * Inventario de recompensas de los alumnos (admin).
+ * Inventario global de recompensas canjeadas (admin).
  *
- * Filtros obligatorios: asignatura + profesor. Una vez seleccionados ambos,
- * se resuelve el offering concreto (si hay más de un grupo, se muestra un
- * tercer selector para elegirlo). Luego se muestra el inventario por alumno.
+ * Por defecto lista TODOS los canjes del sistema (alumnos con al menos un
+ * canje). Filtros opcionales y combinables: alumno (search), asignatura,
+ * profesor y grupo. Todos client-side sobre el dataset cargado, así el
+ * filtrado es instantáneo.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { useToast } from "@/hooks/useToast";
 import { BackLink } from "@/components/ui/BackLink";
 import { Card } from "@/components/ui/Card";
 import { CategoryFilter } from "@/components/ui/CategoryFilter";
-import { SkeletonPage, SkeletonTable } from "@/components/ui/Skeleton";
+import { SearchInput } from "@/components/ui/SearchInput";
+import { SkeletonPage } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
 import {
   StudentRewardsInventoryTable,
+  type InventoryRewardEntry,
   type InventoryStudentRow,
 } from "@/components/dashboard/StudentRewardsInventoryTable";
 
-interface Offering {
-  id: string;
-  group: string;
-  academicYear: string;
-  subject: { id?: string; name: string; code: string };
-  professor: { id: string; name: string };
-}
-
-interface Professor {
-  id: string;
-  name: string;
-}
-
 interface InventoryResponse {
-  offering: {
-    id: string;
-    subjectName: string;
-    subjectCode: string;
-    group: string;
-    academicYear: string;
-  };
   students: InventoryStudentRow[];
 }
 
 export default function AdminRewardsInventoryPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const subjectCode = searchParams.get("subject");
-  const professorId = searchParams.get("professor");
-  const offeringId = searchParams.get("offering");
   const { addToast } = useToast();
 
-  const [offerings, setOfferings] = useState<Offering[]>([]);
-  const [professors, setProfessors] = useState<Professor[]>([]);
-  const [loadingLists, setLoadingLists] = useState(true);
-  const [inventory, setInventory] = useState<InventoryResponse | null>(null);
-  const [loadingInventory, setLoadingInventory] = useState(false);
+  const [data, setData] = useState<InventoryResponse | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Carga inicial: todas las offerings + todos los profesores
+  const [search, setSearch] = useState("");
+  const [subjectCode, setSubjectCode] = useState<string | null>(null);
+  const [professorId, setProfessorId] = useState<string | null>(null);
+  const [offeringId, setOfferingId] = useState<string | null>(null);
+
   useEffect(() => {
     async function load() {
       try {
-        const [offsRes, profsRes] = await Promise.all([
-          fetch("/api/badges/subject-offerings"),
-          fetch("/api/badges/professors"),
-        ]);
-        if (offsRes.ok) setOfferings(await offsRes.json());
-        if (profsRes.ok) setProfessors(await profsRes.json());
-      } catch {
-        addToast("Error al cargar filtros", "danger");
+        const res = await fetch("/api/badges/rewards-inventory");
+        if (!res.ok) throw new Error((await res.json()).error ?? "Error");
+        setData(await res.json());
+      } catch (err) {
+        addToast(err instanceof Error ? err.message : "Error al cargar inventario", "danger");
       } finally {
-        setLoadingLists(false);
+        setLoading(false);
       }
     }
     load();
   }, [addToast]);
 
-  // Cargar inventario cuando el offering quede determinado
-  const loadInventory = useCallback(async () => {
-    if (!offeringId) {
-      setInventory(null);
-      return;
-    }
-    setLoadingInventory(true);
-    try {
-      const res = await fetch(`/api/badges/offerings/${offeringId}/rewards-inventory`);
-      if (!res.ok) throw new Error((await res.json()).error ?? "Error");
-      setInventory(await res.json());
-    } catch (err) {
-      addToast(err instanceof Error ? err.message : "Error al cargar inventario", "danger");
-      setInventory(null);
-    } finally {
-      setLoadingInventory(false);
-    }
-  }, [offeringId, addToast]);
+  // Catálogos de filtros — derivados de las recompensas presentes en la respuesta
+  // (solo se ofrecen valores que realmente filtran algo).
+  const allRewards = useMemo<InventoryRewardEntry[]>(() => {
+    if (!data) return [];
+    return data.students.flatMap((s) => s.rewards);
+  }, [data]);
 
-  useEffect(() => {
-    loadInventory();
-  }, [loadInventory]);
-
-  // Opciones únicas de asignatura (por código) y profesor
   const subjectOptions = useMemo(() => {
-    const seen = new Set<string>();
-    const items: { value: string; label: string }[] = [];
-    for (const o of offerings) {
-      if (seen.has(o.subject.code)) continue;
-      seen.add(o.subject.code);
-      items.push({ value: o.subject.code, label: `${o.subject.code} · ${o.subject.name}` });
+    const seen = new Map<string, string>();
+    for (const r of allRewards) {
+      if (r.subjectCode && r.subjectName && !seen.has(r.subjectCode)) {
+        seen.set(r.subjectCode, r.subjectName);
+      }
     }
-    return items.sort((a, b) => a.label.localeCompare(b.label));
-  }, [offerings]);
+    return [...seen.entries()]
+      .map(([code, name]) => ({ value: code, label: `${code} · ${name}` }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [allRewards]);
 
-  const professorOptions = useMemo(
-    () => professors.map((p) => ({ value: p.id, label: p.name })).sort((a, b) => a.label.localeCompare(b.label)),
-    [professors],
-  );
+  const professorOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const r of allRewards) {
+      if (r.professorId && r.professorName && !seen.has(r.professorId)) {
+        seen.set(r.professorId, r.professorName);
+      }
+    }
+    return [...seen.entries()]
+      .map(([id, name]) => ({ value: id, label: name }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [allRewards]);
 
-  // Offerings que coinciden con los dos filtros. Si hay >1, el admin debe elegir grupo.
-  const candidateOfferings = useMemo(() => {
-    if (!subjectCode || !professorId) return [];
-    return offerings.filter(
-      (o) => o.subject.code === subjectCode && o.professor.id === professorId,
-    );
-  }, [offerings, subjectCode, professorId]);
+  // Grupo solo se ofrece cuando los filtros de arriba reducen a algo concreto;
+  // si no, ofrecer todos los grupos sería ruidoso.
+  const offeringOptions = useMemo(() => {
+    if (!subjectCode && !professorId) return [];
+    const matching = allRewards.filter((r) => {
+      if (subjectCode && r.subjectCode !== subjectCode) return false;
+      if (professorId && r.professorId !== professorId) return false;
+      return true;
+    });
+    const seen = new Map<string, { group: string; year: string }>();
+    for (const r of matching) {
+      if (r.offeringId && r.group && !seen.has(r.offeringId)) {
+        seen.set(r.offeringId, { group: r.group, year: r.academicYear ?? "" });
+      }
+    }
+    return [...seen.entries()]
+      .map(([id, info]) => ({ value: id, label: `${info.group} · ${info.year}` }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [allRewards, subjectCode, professorId]);
 
-  // Auto-seleccionar offering si solo hay uno y aún no está en la query
+  // Si cambian filtros y el offering elegido ya no aplica, limpiarlo.
   useEffect(() => {
-    if (!subjectCode || !professorId) return;
-    if (candidateOfferings.length === 1 && !offeringId) {
-      setQuery({ offering: candidateOfferings[0].id });
+    if (offeringId && !offeringOptions.some((o) => o.value === offeringId)) {
+      setOfferingId(null);
     }
-    // Si el offeringId actual no está dentro de los candidatos (filtros cambiados), limpiar
-    if (offeringId && !candidateOfferings.some((o) => o.id === offeringId)) {
-      setQuery({ offering: null });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candidateOfferings, offeringId]);
+  }, [offeringOptions, offeringId]);
 
-  function setQuery(next: Partial<Record<"subject" | "professor" | "offering", string | null>>) {
-    const params = new URLSearchParams(searchParams.toString());
-    for (const [key, val] of Object.entries(next)) {
-      if (val === null || val === undefined) params.delete(key);
-      else params.set(key, val);
-    }
-    const qs = params.toString();
-    router.replace(qs ? `?${qs}` : "/admin/rewards/inventory");
-  }
+  // Filtrado de alumnos + recompensas
+  const filteredStudents = useMemo<InventoryStudentRow[]>(() => {
+    if (!data) return [];
+    const q = search.trim().toLowerCase();
 
-  if (loadingLists) return <SkeletonPage />;
+    return data.students
+      .filter((s) => {
+        if (!q) return true;
+        return s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q);
+      })
+      .map((s) => {
+        const rewards = s.rewards.filter((r) => {
+          if (subjectCode && r.subjectCode !== subjectCode) return false;
+          if (professorId && r.professorId !== professorId) return false;
+          if (offeringId && r.offeringId !== offeringId) return false;
+          return true;
+        });
+        // Recalcular totales sobre el subconjunto filtrado.
+        let totalRedemptions = 0;
+        let totalAvailable = 0;
+        let totalPending = 0;
+        for (const r of rewards) {
+          totalRedemptions += r.redemptions;
+          totalAvailable += r.available;
+          totalPending += r.pending;
+        }
+        return { ...s, rewards, totalRedemptions, totalAvailable, totalPending };
+      })
+      .filter((s) => s.rewards.length > 0);
+  }, [data, search, subjectCode, professorId, offeringId]);
 
-  const subjectSelected = Boolean(subjectCode);
-  const professorSelected = Boolean(professorId);
-  const needsDisambiguation = candidateOfferings.length > 1 && !offeringId;
+  const hasActiveFilter =
+    Boolean(search.trim()) || subjectCode !== null || professorId !== null || offeringId !== null;
+
+  if (loading) return <SkeletonPage />;
 
   return (
     <div className="space-y-6">
       <BackLink href="/admin/rewards" label="Volver a recompensas" />
 
       <div>
-        <h1 className="text-2xl font-bold text-text">Inventario de recompensas por alumno</h1>
+        <h1 className="text-2xl font-bold text-text">Inventario de recompensas</h1>
         <p className="text-text-muted mt-1">
-          Elige asignatura y profesor para ver qué recompensas tiene cada alumno del grupo.
+          Todas las recompensas canjeadas por los alumnos. Filtra por alumno, asignatura, profesor o grupo.
         </p>
       </div>
 
       <div className="space-y-3">
-        <div>
-          <p className="text-xs font-medium text-text-muted mb-1.5 uppercase tracking-wide">Asignatura</p>
-          <CategoryFilter
-            categories={subjectOptions}
-            selected={subjectCode}
-            onSelect={(val) => setQuery({ subject: val, offering: null })}
-          />
-        </div>
-        <div>
-          <p className="text-xs font-medium text-text-muted mb-1.5 uppercase tracking-wide">Profesor</p>
-          <CategoryFilter
-            categories={professorOptions}
-            selected={professorId}
-            onSelect={(val) => setQuery({ professor: val, offering: null })}
-          />
-        </div>
+        <SearchInput
+          placeholder="Buscar alumno por nombre o email..."
+          onSearch={setSearch}
+        />
 
-        {needsDisambiguation && (
+        {subjectOptions.length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-text-muted mb-1.5 uppercase tracking-wide">
+              Asignatura
+            </p>
+            <CategoryFilter
+              categories={subjectOptions}
+              selected={subjectCode}
+              onSelect={setSubjectCode}
+              showAll
+              allLabel="Todas"
+            />
+          </div>
+        )}
+
+        {professorOptions.length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-text-muted mb-1.5 uppercase tracking-wide">
+              Profesor
+            </p>
+            <CategoryFilter
+              categories={professorOptions}
+              selected={professorId}
+              onSelect={setProfessorId}
+              showAll
+              allLabel="Todos"
+            />
+          </div>
+        )}
+
+        {offeringOptions.length > 1 && (
           <div>
             <p className="text-xs font-medium text-text-muted mb-1.5 uppercase tracking-wide">
               Grupo · curso
             </p>
             <CategoryFilter
-              categories={candidateOfferings.map((o) => ({
-                value: o.id,
-                label: `${o.group} · ${o.academicYear}`,
-              }))}
+              categories={offeringOptions}
               selected={offeringId}
-              onSelect={(val) => setQuery({ offering: val })}
+              onSelect={setOfferingId}
+              showAll
+              allLabel="Todos"
             />
           </div>
         )}
       </div>
 
-      {!subjectSelected || !professorSelected ? (
+      {data === null || data.students.length === 0 ? (
         <Card className="py-12 text-center">
           <p className="text-text-muted">
-            Selecciona una asignatura y un profesor para continuar.
+            Aún no hay recompensas canjeadas en el sistema.
           </p>
         </Card>
-      ) : candidateOfferings.length === 0 ? (
-        <Card className="py-12 text-center">
-          <p className="text-text-muted">
-            Esta combinación de asignatura y profesor no corresponde a ningún grupo.
-          </p>
-        </Card>
-      ) : needsDisambiguation ? (
-        <Card className="py-12 text-center">
-          <p className="text-text-muted">
-            Hay varios grupos que coinciden. Elige uno arriba.
-          </p>
-        </Card>
-      ) : loadingInventory ? (
-        <SkeletonTable columns={6} rows={6} />
-      ) : inventory ? (
+      ) : filteredStudents.length === 0 ? (
+        <EmptyState
+          title={hasActiveFilter ? "Sin resultados" : "Sin canjes"}
+          description={
+            hasActiveFilter
+              ? "Ningún alumno coincide con los filtros aplicados."
+              : "Aún no hay recompensas canjeadas."
+          }
+        />
+      ) : (
         <>
           <p className="text-sm text-text-muted">
-            {inventory.offering.subjectName} · {inventory.offering.subjectCode} ·{" "}
-            {inventory.offering.group} · {inventory.offering.academicYear} ·{" "}
-            {inventory.students.length} alumno{inventory.students.length !== 1 ? "s" : ""}
+            {filteredStudents.length} alumno{filteredStudents.length !== 1 ? "s" : ""} con canjes
+            {hasActiveFilter ? " (filtrados)" : ""}
           </p>
-          <StudentRewardsInventoryTable students={inventory.students} />
+          <StudentRewardsInventoryTable students={filteredStudents} />
         </>
-      ) : null}
+      )}
     </div>
   );
 }

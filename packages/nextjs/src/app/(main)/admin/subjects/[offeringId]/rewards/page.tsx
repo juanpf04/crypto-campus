@@ -188,7 +188,6 @@ export default function AdminOfferingRewardsPage() {
             : ""
         }
         confirmLabel="Desactivar"
-        variant="danger"
         loading={deactivating !== null}
       />
     </div>

@@ -114,9 +114,20 @@ export function SubjectExpandableRow({
           <TableCell colSpan={columnCount} className="bg-bg/40 p-0">
             <div className="px-4 py-3">
               {subject.offerings.length === 0 ? (
-                <p className="text-sm text-text-muted italic">
-                  Sin grupos creados para esta asignatura.
-                </p>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm text-text-muted italic">
+                    Esta asignatura aún no tiene grupos creados.
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={() => router.push(`/admin/subjects/catalog/${subject.id}/offerings/new`)}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      {icons.plus}
+                      Crear grupo
+                    </span>
+                  </Button>
+                </div>
               ) : (
                 <Table className="bg-card">
                   <TableHeader>

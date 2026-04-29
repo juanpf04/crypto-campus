@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
+import { ConfirmModal } from "@/components/shared/ConfirmModal";
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "@/components/ui/Table";
@@ -32,6 +33,9 @@ export default function LibrarianPendingReturnsPage() {
     onError: () => addToast("Error al cargar préstamos", "danger"),
   });
 
+  const [pendingForceReturn, setPendingForceReturn] = useState<string | null>(null);
+  const [submittingForce, setSubmittingForce] = useState(false);
+
   async function handleAction(id: string, action: "return" | "force-return") {
     setProcessing(id);
     try {
@@ -47,6 +51,17 @@ export default function LibrarianPendingReturnsPage() {
       addToast(err instanceof Error ? err.message : "Error", "danger");
     } finally {
       setProcessing(null);
+    }
+  }
+
+  async function confirmForceReturn() {
+    if (!pendingForceReturn) return;
+    setSubmittingForce(true);
+    try {
+      await handleAction(pendingForceReturn, "force-return");
+      setPendingForceReturn(null);
+    } finally {
+      setSubmittingForce(false);
     }
   }
 
@@ -100,7 +115,7 @@ export default function LibrarianPendingReturnsPage() {
                             Confirmar devolución
                           </Button>
                           {isOverdue(loan.dueDate) && (
-                            <Button size="sm" variant="danger" onClick={() => handleAction(loan.id, "force-return")} disabled={processing === loan.id}>
+                            <Button size="sm" variant="danger" onClick={() => setPendingForceReturn(loan.id)} disabled={processing === loan.id}>
                               Forzar devolución
                             </Button>
                           )}
@@ -115,6 +130,16 @@ export default function LibrarianPendingReturnsPage() {
           <Pagination offset={list.offset} limit={list.limit} total={list.total} onChange={list.setOffset} />
         </>
       )}
+
+      <ConfirmModal
+        open={pendingForceReturn !== null}
+        onClose={() => { if (!submittingForce) setPendingForceReturn(null); }}
+        onConfirm={confirmForceReturn}
+        title="Forzar devolución"
+        description="Marcarás el préstamo como devuelto en nombre del estudiante. Esta acción no se puede deshacer."
+        confirmLabel="Forzar devolución"
+        loading={submittingForce}
+      />
     </div>
   );
 }

@@ -72,7 +72,7 @@ export function ColorDot({ color, selected = false, onClick, label, size = "sm" 
         sizeClass,
         selected
           ? "border-text ring-2 ring-offset-1 ring-primary"
-          : "border-border-default hover:border-text/50",
+          : "border-border-swatch hover:border-text/50",
       )}
       style={{ backgroundColor: hex }}
     />

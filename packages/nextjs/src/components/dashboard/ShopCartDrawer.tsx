@@ -23,6 +23,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { icons } from "@/components/ui/icons";
 import { ProductImage } from "@/components/shared/ProductImage";
 import { PurchaseConfirmModal, type PurchaseItem } from "@/components/shared/PurchaseConfirmModal";
+import { ConfirmModal } from "@/components/shared/ConfirmModal";
 import { useToast } from "@/hooks/useToast";
 import { useCart } from "@/contexts/CartContext";
 
@@ -127,15 +128,24 @@ export function ShopCartDrawer({ open, onClose, onCartChange }: ShopCartDrawerPr
     addToast("Producto eliminado del carrito", "success");
   }
 
-  async function clearCart() {
-    const res = await fetch("/api/shop/cart?clear=1", { method: "DELETE" });
-    const body = await res.json();
-    if (!res.ok) {
-      addToast(body.error ?? "No se pudo vaciar", "danger");
-      return;
+  const [clearOpen, setClearOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
+
+  async function confirmClearCart() {
+    setClearing(true);
+    try {
+      const res = await fetch("/api/shop/cart?clear=1", { method: "DELETE" });
+      const body = await res.json();
+      if (!res.ok) {
+        addToast(body.error ?? "No se pudo vaciar", "danger");
+        return;
+      }
+      notifyChange(body);
+      addToast("Carrito vaciado", "success");
+      setClearOpen(false);
+    } finally {
+      setClearing(false);
     }
-    notifyChange(body);
-    addToast("Carrito vaciado", "success");
   }
 
   function handleConfirmCheckout() {
@@ -243,7 +253,7 @@ export function ShopCartDrawer({ open, onClose, onCartChange }: ShopCartDrawerPr
             <div className="flex justify-end">
               <button
                 type="button"
-                onClick={clearCart}
+                onClick={() => setClearOpen(true)}
                 className="text-xs text-danger hover:text-danger-hover transition-colors cursor-pointer underline"
               >
                 Vaciar carrito
@@ -303,6 +313,16 @@ export function ShopCartDrawer({ open, onClose, onCartChange }: ShopCartDrawerPr
           </div>
         )}
       </Drawer>
+
+      <ConfirmModal
+        open={clearOpen}
+        onClose={() => { if (!clearing) setClearOpen(false); }}
+        onConfirm={confirmClearCart}
+        title="Vaciar carrito"
+        description="Se eliminarán todos los productos del carrito. Tendrás que volver a añadirlos si quieres comprarlos."
+        confirmLabel="Vaciar"
+        loading={clearing}
+      />
 
       <PurchaseConfirmModal
         open={confirmOpen}

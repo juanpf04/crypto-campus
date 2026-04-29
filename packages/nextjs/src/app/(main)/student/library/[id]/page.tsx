@@ -40,15 +40,20 @@ export default function StudentItemDetailPage() {
   const { addToast } = useToast();
 
   const [item, setItem] = useState<ItemDetail | null>(null);
+  const [balance, setBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [requesting, setRequesting] = useState(false);
 
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`/api/library/items/${id}`);
-        if (!res.ok) throw new Error();
-        setItem(await res.json());
+        const [itemRes, balanceData] = await Promise.all([
+          fetch(`/api/library/items/${id}`),
+          fetch("/api/library/balance").then((r) => r.json()).catch(() => ({ balance: 0 })),
+        ]);
+        if (!itemRes.ok) throw new Error();
+        setItem(await itemRes.json());
+        setBalance(balanceData.balance ?? 0);
       } catch {
         addToast("Error al cargar el ítem", "danger");
         router.push("/student/library");
@@ -61,6 +66,11 @@ export default function StudentItemDetailPage() {
 
   async function handleRequestLoan() {
     if (!item) return;
+    // Pre-flight: cada préstamo requiere 1 Token como depósito.
+    if ((balance ?? 0) < 1) {
+      addToast("Necesitas al menos 1 Token de Préstamo para solicitar. Pide al admin que te asigne tokens.", "danger");
+      return;
+    }
     setRequesting(true);
     try {
       const res = await fetch("/api/library/loans", {
@@ -156,15 +166,25 @@ export default function StudentItemDetailPage() {
               className="w-full"
               onClick={handleRequestLoan}
               loading={requesting}
+              disabled={(balance ?? 0) < 1}
+              title={(balance ?? 0) < 1 ? "Necesitas Tokens de Préstamo para solicitar" : undefined}
             >
-              {item.availableCopies > 0 ? "Reservar" : "Unirse a la cola"}
+              {(balance ?? 0) < 1
+                ? "Sin tokens disponibles"
+                : item.availableCopies > 0 ? "Reservar" : "Unirse a la cola"}
             </Button>
 
             <p className="text-xs text-text-muted text-center">
-              {item.availableCopies > 0
-                ? "Se reservará una copia (recogida en 3 días)"
-                : "Entrarás en la lista de espera"}
-              {" · "}1 Token de Préstamo como depósito
+              {(balance ?? 0) < 1
+                ? `Necesitas al menos 1 Token de Préstamo. Tienes ${balance ?? 0}.`
+                : (
+                  <>
+                    {item.availableCopies > 0
+                      ? "Se reservará una copia (recogida en 3 días)"
+                      : "Entrarás en la lista de espera"}
+                    {" · "}1 Token de Préstamo como depósito
+                  </>
+                )}
             </p>
           </Card>
         </div>

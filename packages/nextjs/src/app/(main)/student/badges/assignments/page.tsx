@@ -1,9 +1,14 @@
 "use client";
 
 /**
- * Lista de tareas (assignments) del alumno en UNA asignatura concreta.
- * Requiere el query param `?subject=<subjectOfferingId>`.
- * Si falta, redirige a /student/badges.
+ * Lista de tareas (assignments) del alumno.
+ *
+ * - Sin `?subject=...` → muestra TODAS las tareas del alumno, en todas sus
+ *   asignaturas. Útil para no tener que acordarse de qué asignatura es cada
+ *   tarea pendiente de entregar.
+ * - Con `?subject=<offeringId>` → solo las tareas de esa asignatura.
+ *
+ * El filtro de arriba permite alternar entre "Todas" y cada asignatura.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -60,13 +65,6 @@ export default function StudentAssignmentsPage() {
   const [loading, setLoading] = useState(true);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
 
-  // Redirige si falta el filtro
-  useEffect(() => {
-    if (!subjectParam) {
-      router.replace("/student/badges");
-    }
-  }, [subjectParam, router]);
-
   const load = useCallback(async () => {
     try {
       const [subjectsRes, assignmentsRes] = await Promise.all([
@@ -85,11 +83,16 @@ export default function StudentAssignmentsPage() {
   useEffect(() => { load(); }, [load]);
 
   const filtered = useMemo(() => {
-    if (!subjectParam) return [];
+    if (!subjectParam) {
+      // Vista global: solo las que faltan por completar (abiertas y no entregadas)
+      return assignments.filter((a) => a.status === "OPEN" && !a.hasSubmitted);
+    }
     return assignments.filter((a) => a.subjectBadge.subjectOfferingId === subjectParam);
   }, [assignments, subjectParam]);
 
-  const currentSubject = subjects.find((s) => s.subjectOfferingId === subjectParam);
+  const currentSubject = subjectParam
+    ? subjects.find((s) => s.subjectOfferingId === subjectParam) ?? null
+    : null;
 
   const subjectOptions = useMemo(
     () =>
@@ -116,21 +119,29 @@ export default function StudentAssignmentsPage() {
   }
 
   function handleSubjectChange(offeringId: string | null) {
-    if (!offeringId) return;
-    router.replace(`/student/badges/assignments?subject=${offeringId}`);
+    if (offeringId) {
+      router.replace(`/student/badges/assignments?subject=${offeringId}`);
+    } else {
+      router.replace("/student/badges/assignments");
+    }
   }
 
-  if (!subjectParam || loading) return <SkeletonPage />;
+  if (loading) return <SkeletonPage />;
 
   return (
     <div className="space-y-6">
       <BackLink href="/student/badges" label="Volver a insignias" />
 
       <div>
-        <h1 className="text-2xl font-bold text-text">Tareas</h1>
-        {currentSubject && (
+        <h1 className="text-2xl font-bold text-text">Mis tareas</h1>
+        {currentSubject ? (
           <p className="text-text-muted mt-1">
             {currentSubject.subjectName} · {currentSubject.subjectCode} · {currentSubject.group} · {currentSubject.academicYear}
+          </p>
+        ) : (
+          <p className="text-text-muted mt-1">
+            {filtered.length} pendiente{filtered.length !== 1 ? "s" : ""} de entregar
+            {subjects.length > 0 && ` en ${subjects.length} asignatura${subjects.length !== 1 ? "s" : ""}`}
           </p>
         )}
       </div>
@@ -140,14 +151,19 @@ export default function StudentAssignmentsPage() {
           categories={subjectOptions}
           selected={subjectParam}
           onSelect={handleSubjectChange}
-          showAll={false}
+          showAll
+          allLabel="Todas"
         />
       )}
 
       {filtered.length === 0 ? (
         <EmptyState
-          title="Sin tareas"
-          description="Tu profesor aún no ha publicado tareas en esta asignatura."
+          title={currentSubject ? "Sin tareas" : "Nada pendiente"}
+          description={
+            currentSubject
+              ? "Tu profesor aún no ha publicado tareas en esta asignatura."
+              : "No tienes tareas pendientes de entregar. ¡Buen trabajo!"
+          }
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

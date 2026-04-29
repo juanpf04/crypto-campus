@@ -48,9 +48,9 @@ interface UseRequestsTableProps {
 
 export function UseRequestsTable({ requests, showSubjectColumn, onReload }: UseRequestsTableProps) {
   const { addToast } = useToast();
-  const [processing, setProcessing] = useState<string | null>(null);
+  const [processing, setProcessing] = useState<number | null>(null);
 
-  async function handleAction(requestId: string, endpoint: "approve" | "reject") {
+  async function handleAction(requestId: number, endpoint: "approve" | "reject") {
     setProcessing(requestId);
     try {
       const res = await fetch(`/api/badges/use-requests/${requestId}/${endpoint}`, {
@@ -122,16 +122,16 @@ export function UseRequestsTable({ requests, showSubjectColumn, onReload }: UseR
                     <div className="inline-flex gap-2">
                       <Button
                         size="sm"
-                        onClick={() => handleAction(req.id, "approve")}
-                        loading={processing === req.id}
+                        onClick={() => handleAction(req.requestId, "approve")}
+                        loading={processing === req.requestId}
                       >
                         Aprobar
                       </Button>
                       <Button
                         size="sm"
                         variant="danger"
-                        onClick={() => handleAction(req.id, "reject")}
-                        disabled={processing === req.id}
+                        onClick={() => handleAction(req.requestId, "reject")}
+                        disabled={processing === req.requestId}
                       >
                         Rechazar
                       </Button>

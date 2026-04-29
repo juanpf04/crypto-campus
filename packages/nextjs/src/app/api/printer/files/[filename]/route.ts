@@ -2,8 +2,9 @@
  * GET /api/printer/files/[filename]
  * Sirve un archivo subido para impresión desde la carpeta de uploads.
  *
- * Acceso: Usuarios autenticados (el archivo debe pertenecer al usuario,
- * o el usuario debe ser ADMIN para ver archivos de otros).
+ * Acceso: Usuarios autenticados. El archivo debe pertenecer al usuario,
+ * o el usuario debe ser ADMIN o LIBRARIAN (operadores del módulo de
+ * impresión) para ver archivos de otros.
  *
  * Los archivos se conservan 24 horas tras la impresión.
  * Si el archivo no existe o ha expirado, devuelve 404.
@@ -59,8 +60,10 @@ export async function GET(
     const log = await prisma.printLog.findFirst({ where: { filePath: { contains: filename } } });
     if (log) {
       const user = await prisma.user.findUnique({ where: { id: session.userId } });
-      if (log.userId !== session.userId && user?.role !== "ADMIN") {
-        return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+      const isOwner = log.userId === session.userId;
+      const isOperator = user?.role === "ADMIN" || user?.role === "LIBRARIAN";
+      if (!isOwner && !isOperator) {
+        return NextResponse.json({ error: "No autorizado" }, { status: 403 });
       }
     }
   } finally {

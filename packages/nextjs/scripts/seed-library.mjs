@@ -1,9 +1,13 @@
 /**
  * seed-library.mjs — Carga el catálogo inicial de la biblioteca.
  *
- * Idempotente: si ya existen ítems en la BD, no hace nada.
+ * Idempotente:
+ *   - Si Prisma ya tiene N ítems (N === JSON.length), salta sin tocar nada.
+ *   - Si tanto Prisma como blockchain están vacíos, crea todo (write a chain + Prisma).
+ *   - Si solo uno de los dos lados tiene datos, avisa de estado inconsistente
+ *     y pide `pnpm reset:all` — no intenta rehidratar.
  *
- * Pasos por cada ítem del JSON:
+ * Pasos por cada ítem del JSON (cuando hay que crear):
  * 1. Llama a LibraryManager.addBook(copies) → obtiene tokenId on-chain
  * 2. Crea el registro en Prisma (LibraryItem) con metadatos completos
  *
@@ -28,6 +32,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const cyan = (s) => `\x1b[36m${s}\x1b[0m`;
 const green = (s) => `\x1b[32m${s}\x1b[0m`;
 const yellow = (s) => `\x1b[33m${s}\x1b[0m`;
+const red = (s) => `\x1b[31m${s}\x1b[0m`;
 
 function log(msg) {
   console.log(`${cyan("[seed-library]")} ${msg}`);
@@ -96,13 +101,37 @@ async function main() {
       readFileSync(resolve(__dirname, "../prisma/seed-library.json"), "utf-8")
     );
 
-    log(`Sincronizando ${itemsJson.length} ítem(s) de biblioteca...`);
+    const expected = itemsJson.length;
+    const actual = await prisma.libraryItem.count();
 
-    // 1. Limpiar ítems y préstamos anteriores (blockchain se reinicia con cada pnpm dev)
-    const deletedLoans = await prisma.loan.deleteMany({});
-    const deletedItems = await prisma.libraryItem.deleteMany({});
-    if (deletedItems.count > 0) {
-      log(yellow(`  ⚠ Limpiados ${deletedItems.count} ítem(s) y ${deletedLoans.count} préstamo(s) huérfanos`));
+    // ── Detección de estado y bifurcación de idempotencia ──
+    if (actual === expected) {
+      log(green(`Ya sincronizado (${actual} ítems). Saltando.`));
+      return;
+    }
+
+    let nextBookId;
+    try {
+      const next = await publicClient.readContract({
+        address: LIBRARY_MANAGER_ADDRESS,
+        abi: LIBRARY_MANAGER_ABI,
+        functionName: "nextBookId",
+      });
+      nextBookId = Number(next);
+    } catch {
+      log(red("  ✗ No se pudo leer nextBookId on-chain. ¿Está el nodo arriba?"));
+      return;
+    }
+
+    const chainVirgin = nextBookId === 1;
+
+    if (actual === 0 && chainVirgin) {
+      log(`Sincronizando ${expected} ítem(s) de biblioteca desde cero...`);
+      // continúa al bloque de creación abajo
+    } else {
+      log(red(`  ✗ Estado inconsistente: Prisma tiene ${actual} ítem(s), blockchain ${nextBookId - 1}.`));
+      log(red(`    Esperado: ambos vacíos o ambos con ${expected}. Ejecuta 'pnpm reset:all' y vuelve a intentar.`));
+      return;
     }
 
     // 2. Crear ítems on-chain + Prisma

@@ -259,7 +259,6 @@ export default function AdminAssignmentDetailPage() {
         title="Cerrar entregas"
         description="Los alumnos ya no podrán marcar como entregada. Aún podrás otorgar premios."
         confirmLabel="Cerrar entregas"
-        variant="primary"
         loading={acting}
       />
       <ConfirmModal
@@ -269,7 +268,6 @@ export default function AdminAssignmentDetailPage() {
         title="Cerrar tarea definitivamente"
         description="Una vez cerrada no se podrán otorgar más premios. Esta acción no se puede deshacer."
         confirmLabel="Cerrar tarea"
-        variant="danger"
         loading={acting}
       />
     </div>

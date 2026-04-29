@@ -301,7 +301,7 @@ export function PrintJobForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} noValidate className="space-y-6">
       {/* ── 1. Zona de archivo / Preview ── */}
       <div className="space-y-2">
         <label className="text-sm font-medium text-text">Archivo a imprimir</label>

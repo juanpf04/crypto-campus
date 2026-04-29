@@ -227,6 +227,11 @@ export async function removeRoom(roomPrismaId: string) {
 
 /**
  * Lista todas las salas.
+ *
+ * Cada sala incluye `activeBookingCount`: número de reservas no canceladas
+ * con fecha desde hoy en adelante. Como las reservas solo pueden ser para
+ * el mismo día, en la práctica esto cuenta las reservas activas de hoy.
+ * Se usa para bloquear desactivación si la sala tiene reservas pendientes.
  */
 export async function listRooms(activeOnly = true, limit?: number, offset?: number) {
 	const session = await getSession();
@@ -234,15 +239,37 @@ export async function listRooms(activeOnly = true, limit?: number, offset?: numb
 
 	const where = activeOnly ? { active: true } : {};
 
-	const [items, total] = await Promise.all([
+	const startOfToday = new Date();
+	startOfToday.setHours(0, 0, 0, 0);
+
+	const [rawItems, total] = await Promise.all([
 		prisma.room.findMany({
 			where,
 			orderBy: { name: "asc" },
+			include: {
+				_count: {
+					select: {
+						bookings: {
+							where: {
+								cancelled: false,
+								date: { gte: startOfToday },
+							},
+						},
+					},
+				},
+			},
 			...(limit ? { take: limit } : {}),
 			...(offset ? { skip: offset } : {}),
 		}),
 		prisma.room.count({ where }),
 	]);
+
+	// Aplanar `_count.bookings` en `activeBookingCount` para no exponer el
+	// shape interno de Prisma a los consumidores.
+	const items = rawItems.map(({ _count, ...rest }) => ({
+		...rest,
+		activeBookingCount: _count.bookings,
+	}));
 
 	return { items, total };
 }

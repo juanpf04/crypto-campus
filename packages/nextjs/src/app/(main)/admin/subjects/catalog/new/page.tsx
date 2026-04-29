@@ -23,12 +23,12 @@ export default function AdminNewSubjectPage() {
     }
 
     addToast("Asignatura creada", "success");
-    router.push("/admin/subjects");
+    router.push("/admin/subjects/catalog");
   }
 
   return (
     <div className="space-y-6">
-      <BackLink href="/admin/subjects" label="Volver a asignaturas" />
+      <BackLink href="/admin/subjects/catalog" label="Volver al catálogo" />
       <h1 className="text-2xl font-bold text-text">Crear asignatura</h1>
       <Card className="max-w-2xl mx-auto p-6">
         <SubjectForm onSubmit={handleSubmit} />

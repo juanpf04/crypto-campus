@@ -11,10 +11,26 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { FilterPills } from "@/components/ui/FilterPills";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { ConfirmModal } from "@/components/shared/ConfirmModal";
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "@/components/ui/Table";
 import { LOAN_STATUS_OPTIONS, type LoanStatusFilter } from "@/lib/library-constants";
+
+type DestructiveAction = "expire" | "force-return";
+
+const ACTION_COPY: Record<DestructiveAction, { title: string; description: string; confirmLabel: string }> = {
+  expire: {
+    title: "Expirar reserva",
+    description: "La reserva quedará marcada como expirada y el ítem volverá a estar disponible. Esta acción no se puede deshacer.",
+    confirmLabel: "Expirar",
+  },
+  "force-return": {
+    title: "Forzar devolución",
+    description: "Marcarás el préstamo como devuelto en nombre del estudiante. Esta acción no se puede deshacer.",
+    confirmLabel: "Forzar devolución",
+  },
+};
 
 const PAGE_SIZE = 20;
 const RESERVATION_TIMEOUT_MS = 3 * 24 * 60 * 60 * 1000;
@@ -38,7 +54,13 @@ export default function AdminLoansPage() {
     onError: () => addToast("Error al cargar préstamos", "danger"),
   });
 
+  const [pendingDestructive, setPendingDestructive] = useState<{ loanId: string; action: DestructiveAction } | null>(null);
+  const [submittingDestructive, setSubmittingDestructive] = useState(false);
+  // Bloquea doble-click en acciones positivas (pickup/return) que no van por modal
+  const [processing, setProcessing] = useState<string | null>(null);
+
   async function handleAction(loanId: string, action: string) {
+    setProcessing(loanId);
     try {
       const res = await fetch(`/api/library/loans/${loanId}/${action}`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
@@ -47,6 +69,18 @@ export default function AdminLoansPage() {
       addToast("Acción realizada", "success");
       list.refresh();
     } catch (err) { addToast(err instanceof Error ? err.message : "Error", "danger"); }
+    finally { setProcessing(null); }
+  }
+
+  async function confirmDestructive() {
+    if (!pendingDestructive) return;
+    setSubmittingDestructive(true);
+    try {
+      await handleAction(pendingDestructive.loanId, pendingDestructive.action);
+      setPendingDestructive(null);
+    } finally {
+      setSubmittingDestructive(false);
+    }
   }
 
   function isReservationExpired(loan: Loan) {
@@ -91,14 +125,14 @@ export default function AdminLoansPage() {
                       <TableCell>
                         <div className="flex gap-1">
                           {loan.status === "RESERVED" && <>
-                            <Button size="sm" onClick={() => handleAction(loan.id, "pickup")}>Confirmar recogida</Button>
+                            <Button size="sm" onClick={() => handleAction(loan.id, "pickup")} loading={processing === loan.id} disabled={processing !== null && processing !== loan.id}>Confirmar recogida</Button>
                             {isReservationExpired(loan) &&
-                              <Button size="sm" variant="danger" onClick={() => handleAction(loan.id, "expire")}>Expirar</Button>}
+                              <Button size="sm" variant="danger" onClick={() => setPendingDestructive({ loanId: loan.id, action: "expire" })} disabled={processing !== null}>Expirar</Button>}
                           </>}
                           {loan.status === "PICKED_UP" && <>
-                            <Button size="sm" onClick={() => handleAction(loan.id, "return")}>Confirmar devolución</Button>
+                            <Button size="sm" onClick={() => handleAction(loan.id, "return")} loading={processing === loan.id} disabled={processing !== null && processing !== loan.id}>Confirmar devolución</Button>
                             {isOverdue(loan) &&
-                              <Button size="sm" variant="danger" onClick={() => handleAction(loan.id, "force-return")}>Forzar devolución</Button>}
+                              <Button size="sm" variant="danger" onClick={() => setPendingDestructive({ loanId: loan.id, action: "force-return" })} disabled={processing !== null}>Forzar devolución</Button>}
                           </>}
                         </div>
                       </TableCell>
@@ -111,6 +145,16 @@ export default function AdminLoansPage() {
           <Pagination offset={list.offset} limit={list.limit} total={list.total} onChange={list.setOffset} />
         </>
       )}
+
+      <ConfirmModal
+        open={pendingDestructive !== null}
+        onClose={() => { if (!submittingDestructive) setPendingDestructive(null); }}
+        onConfirm={confirmDestructive}
+        title={pendingDestructive ? ACTION_COPY[pendingDestructive.action].title : ""}
+        description={pendingDestructive ? ACTION_COPY[pendingDestructive.action].description : ""}
+        confirmLabel={pendingDestructive ? ACTION_COPY[pendingDestructive.action].confirmLabel : "Confirmar"}
+        loading={submittingDestructive}
+      />
     </div>
   );
 }

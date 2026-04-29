@@ -15,7 +15,7 @@ interface TableRootProps {
 
 export function Table({ children, className }: TableRootProps) {
   return (
-    <div className={cn("overflow-x-auto rounded-lg border border-border-default", className)}>
+    <div className={cn("overflow-x-auto rounded-lg border border-border-default bg-card", className)}>
       <table className="w-full text-sm">{children}</table>
     </div>
   );

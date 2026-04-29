@@ -62,7 +62,7 @@ export function BookingModal({
         </p>
 
         <div className="flex gap-3 justify-end">
-          <Button variant="ghost" onClick={onClose} disabled={loading}>
+          <Button variant="danger" onClick={onClose} disabled={loading}>
             Cancelar
           </Button>
           <Button onClick={onConfirm} loading={loading}>

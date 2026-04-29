@@ -191,7 +191,6 @@ export default function ProfessorOfferingRewardsPage() {
             : ""
         }
         confirmLabel="Desactivar"
-        variant="danger"
         loading={deactivating !== null}
       />
     </div>

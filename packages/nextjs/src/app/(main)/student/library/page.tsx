@@ -73,6 +73,11 @@ export default function StudentLibraryPage() {
   useEffect(() => { loadData(); }, [loadData]);
 
   async function handleRequestLoan(itemId: string) {
+    // Pre-flight: cada préstamo requiere 1 Token como depósito.
+    if ((balance ?? 0) < 1) {
+      addToast("Necesitas al menos 1 Token de Préstamo para solicitar. Pide al admin que te asigne tokens.", "danger");
+      return;
+    }
     setRequesting(itemId);
     try {
       const res = await fetch("/api/library/loans", {
@@ -213,6 +218,7 @@ export default function StudentLibraryPage() {
                 totalCopies={item.totalCopies}
                 onRequestLoan={() => handleRequestLoan(item.id)}
                 requesting={requesting === item.id}
+                hasTokens={(balance ?? 0) >= 1}
               />
             ))}
           </div>

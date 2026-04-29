@@ -55,7 +55,7 @@ export function VariantDetailCard({
           <p className="text-xs text-text-muted">Color</p>
           <div className="flex items-center gap-2 mt-1">
             <span
-              className="inline-block h-4 w-4 rounded-full border border-border-default"
+              className="inline-block h-4 w-4 rounded-full border border-border-swatch"
               style={{ backgroundColor: colorToHex(color || "default") }}
             />
             <span className="text-sm font-medium text-text">{color || "—"}</span>
@@ -78,7 +78,7 @@ export function VariantDetailCard({
       </div>
 
       <div className="flex gap-3">
-        <Button variant="outline" size="sm" className="flex-1" onClick={onEdit}>
+        <Button variant="secondary" size="sm" className="flex-1" onClick={onEdit}>
           Editar variante
         </Button>
         <Button

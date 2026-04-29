@@ -53,6 +53,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
               className,
             )}
             {...props}
+            aria-invalid={error ? "true" : undefined}
           >
             {placeholder && (
               <option value="" disabled>

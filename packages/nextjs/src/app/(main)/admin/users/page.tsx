@@ -152,7 +152,7 @@ export default function UsersListPage() {
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Link href={`/admin/users/${user.id}/edit`}>
-                          <Button size="sm" variant="ghost">Editar</Button>
+                          <Button size="sm" variant="secondary">Editar</Button>
                         </Link>
                         {user.active ? (
                           <Button
@@ -167,7 +167,7 @@ export default function UsersListPage() {
                         ) : (
                           <Button
                             size="sm"
-                            variant="primary"
+                            variant="success"
                             onClick={() => setConfirmTarget(user)}
                           >
                             Reactivar
@@ -194,7 +194,6 @@ export default function UsersListPage() {
             : `¿Reactivar a ${confirmTarget?.name}? Recuperará acceso al login.`
         }
         confirmLabel={confirmTarget?.active ? "Desactivar" : "Reactivar"}
-        variant={confirmTarget?.active ? "danger" : "primary"}
         loading={confirmLoading}
       />
     </div>

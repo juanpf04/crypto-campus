@@ -1,7 +1,7 @@
 /**
  * seed-printers.mjs — Carga las impresoras por defecto.
  *
- * Idempotente: limpia y recrea impresoras en cada arranque.
+ * Idempotente: hace upsert por id, sin borrar nada.
  * Las impresoras son solo Prisma (no tienen registro on-chain).
  *
  * Uso: node scripts/seed-printers.mjs
@@ -59,9 +59,20 @@ async function main() {
       readFileSync(resolve(__dirname, "../prisma/seed-printers.json"), "utf-8")
     );
 
-    log(`Sincronizando ${printersJson.length} impresora(s)...`);
+    // Idempotencia global: si ya hay tantas impresoras como esperamos, salir limpio.
+    const expected = printersJson.length;
+    const actual = await prisma.printer.count();
+    if (actual >= expected) {
+      log(green(`Ya sincronizado (${expected} impresoras). Saltando.`));
+      return;
+    }
 
+    log(`Sincronizando ${expected} impresora(s)...`);
+
+    let created = 0;
+    let existing = 0;
     for (const printer of printersJson) {
+      const existed = await prisma.printer.findUnique({ where: { id: printer.id } });
       const data = {
         location: printer.location,
         active: true,
@@ -72,9 +83,11 @@ async function main() {
         update: data,
         create: { id: printer.id, ...data },
       });
+      if (existed) existing++;
+      else created++;
     }
 
-    log(green(`Sync completado. ${printersJson.length} impresora(s) sincronizadas.`));
+    log(green(`Impresoras: ${created} nueva(s) · ${existing} ya existente(s)`));
   } finally {
     await prisma.$disconnect();
   }

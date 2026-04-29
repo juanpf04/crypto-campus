@@ -256,6 +256,37 @@ async function main() {
   try {
     const data = JSON.parse(readFileSync(resolve(__dirname, "../prisma/seed-academic.json"), "utf-8"));
 
+    // Idempotencia global: si todo está ya seedeado, salir con una sola línea.
+    // Si algo está parcial (raro: borraron a mano alguna fila), caemos al flujo
+    // por entidad que ya tiene su propia idempotencia con upsert/findUnique.
+    const [profCount, stuCount, subjCount, offCount, enrCount, sbCount, rwCount] = await Promise.all([
+      prisma.user.count({ where: { role: "PROFESSOR" } }),
+      prisma.user.count({ where: { role: "STUDENT" } }),
+      prisma.subject.count(),
+      prisma.subjectOffering.count(),
+      prisma.enrollment.count(),
+      prisma.subjectBadge.count(),
+      prisma.reward.count(),
+    ]);
+    const expectedRewards = data.offerings.length * REWARD_TEMPLATES.length;
+    const fullySeeded =
+      profCount >= data.professors.length &&
+      stuCount >= data.students.length &&
+      subjCount >= data.subjects.length &&
+      offCount >= data.offerings.length &&
+      enrCount >= data.enrollments.length &&
+      sbCount >= data.offerings.length &&
+      rwCount >= expectedRewards;
+
+    if (fullySeeded) {
+      log(green(
+        `Ya sincronizado (${data.professors.length} profes, ${data.students.length} alumnos, ` +
+        `${data.subjects.length} asignaturas, ${data.offerings.length} ofertas, ` +
+        `${data.enrollments.length} matrículas). Saltando.`,
+      ));
+      return;
+    }
+
     // 1. Crear profesores
     log("Creando profesores...");
     const professorMap = {};
@@ -275,19 +306,31 @@ async function main() {
     // 3. Crear asignaturas
     log("Creando asignaturas...");
     const subjectMap = {};
+    let subjectsCreated = 0;
+    let subjectsExisting = 0;
     for (const subj of data.subjects) {
+      const existed = await prisma.subject.findUnique({ where: { code: subj.code } });
       const subject = await prisma.subject.upsert({
         where: { code: subj.code },
         update: { name: subj.name },
         create: { code: subj.code, name: subj.name },
       });
       subjectMap[subj.code] = subject.id;
-      log(green(`  + ${subj.code} — ${subj.name}`));
+      if (existed) {
+        subjectsExisting++;
+        log(`  ✓ ${subj.code} — ya existe. Saltando.`);
+      } else {
+        subjectsCreated++;
+        log(green(`  + ${subj.code} — ${subj.name}`));
+      }
     }
+    log(green(`  Asignaturas: ${subjectsCreated} nueva(s) · ${subjectsExisting} ya existente(s)`));
 
     // 4. Crear ofertas
     log("Creando ofertas...");
     const offeringMap = {};
+    let offeringsCreated = 0;
+    let offeringsExisting = 0;
     for (const off of data.offerings) {
       const subjectId = subjectMap[off.subjectCode];
       const professorId = professorMap[off.professorEmail];
@@ -296,6 +339,13 @@ async function main() {
         continue;
       }
 
+      const existed = await prisma.subjectOffering.findUnique({
+        where: {
+          subjectId_professorId_group_academicYear: {
+            subjectId, professorId, group: off.group, academicYear: off.academicYear,
+          },
+        },
+      });
       const offering = await prisma.subjectOffering.upsert({
         where: {
           subjectId_professorId_group_academicYear: {
@@ -306,25 +356,36 @@ async function main() {
         create: { subjectId, professorId, group: off.group, academicYear: off.academicYear },
       });
       offeringMap[`${off.subjectCode}-${off.group}`] = offering.id;
-      log(green(`  + ${off.subjectCode} ${off.group} (${off.academicYear})`));
+      if (existed) {
+        offeringsExisting++;
+      } else {
+        offeringsCreated++;
+        log(green(`  + ${off.subjectCode} ${off.group} (${off.academicYear})`));
+      }
     }
+    log(green(`  Ofertas: ${offeringsCreated} nueva(s) · ${offeringsExisting} ya existente(s)`));
 
     // 5. Crear matrículas
     log("Creando matrículas...");
-    let enrollCount = 0;
+    let enrollCreated = 0;
+    let enrollExisting = 0;
     for (const enr of data.enrollments) {
       const userId = studentMap[enr.studentEmail];
       const offeringId = offeringMap[`${enr.subjectCode}-${enr.group}`];
       if (!userId || !offeringId) continue;
 
+      const existed = await prisma.enrollment.findUnique({
+        where: { userId_subjectOfferingId: { userId, subjectOfferingId: offeringId } },
+      });
       await prisma.enrollment.upsert({
         where: { userId_subjectOfferingId: { userId, subjectOfferingId: offeringId } },
         update: {},
         create: { userId, subjectOfferingId: offeringId },
       });
-      enrollCount++;
+      if (existed) enrollExisting++;
+      else enrollCreated++;
     }
-    log(green(`  + ${enrollCount} matrícula(s) creadas`));
+    log(green(`  Matrículas: ${enrollCreated} nueva(s) · ${enrollExisting} ya existente(s)`));
 
     // 6. Crear SubjectBadge (on-chain) + recompensas demo por cada oferta
     log("Creando SubjectBadges y recompensas demo...");

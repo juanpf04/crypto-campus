@@ -242,7 +242,6 @@ export function PrizeAwardSection({
         title="Algunos alumnos no han entregado"
         description="Has seleccionado alumnos que no marcaron la tarea como entregada. ¿Quieres otorgarles el premio igualmente?"
         confirmLabel="Sí, otorgar"
-        variant="primary"
         loading={submitting}
       />
     </Card>

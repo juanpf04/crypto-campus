@@ -31,6 +31,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
             className,
           )}
           {...props}
+          aria-invalid={error ? "true" : undefined}
         />
         {error && <p className="text-sm text-danger">{error}</p>}
       </div>

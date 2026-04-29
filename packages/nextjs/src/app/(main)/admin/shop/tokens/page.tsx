@@ -4,8 +4,8 @@
  * Gestión de ShopTokens (admin).
  *
  * Lista todos los estudiantes/profesores con su balance actual.
- * Permite añadir tokens con un modal.
- * Mismo patrón que admin/printing/credits.
+ * Permite modificar el balance absoluto con un modal (mismo patrón que
+ * admin/printing/credits y admin/library/tokens).
  */
 
 import { useEffect, useState } from "react";
@@ -38,10 +38,10 @@ export default function AdminShopTokensPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
-  // Modal de minteo
+  // Modal de modificar balance
   const [editingUser, setEditingUser] = useState<UserWithBalance | null>(null);
-  const [mintAmount, setMintAmount] = useState("");
-  const [minting, setMinting] = useState(false);
+  const [newAmount, setNewAmount] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -82,15 +82,20 @@ export default function AdminShopTokensPage() {
       u.email.toLowerCase().includes(search.toLowerCase()),
   );
 
-  async function handleMint() {
+  function openEdit(user: UserWithBalance) {
+    setEditingUser(user);
+    setNewAmount(String(user.balance ?? 0));
+  }
+
+  async function handleSave() {
     if (!editingUser) return;
-    const amount = parseInt(mintAmount, 10);
-    if (isNaN(amount) || amount <= 0) {
-      addToast("La cantidad debe ser un entero positivo", "danger");
+    const amount = parseInt(newAmount, 10);
+    if (isNaN(amount) || amount < 0) {
+      addToast("La cantidad debe ser un entero no negativo", "danger");
       return;
     }
 
-    setMinting(true);
+    setSaving(true);
     try {
       const res = await fetch("/api/shop/tokens", {
         method: "POST",
@@ -98,21 +103,20 @@ export default function AdminShopTokensPage() {
         body: JSON.stringify({ userId: editingUser.id, amount }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Error al mintear tokens");
+      if (!res.ok) throw new Error(data.error ?? "Error al asignar tokens");
 
-      // Actualizar balance local
+      const updatedBalance = data.balance ?? amount;
       setUsers((prev) =>
         prev.map((u) =>
-          u.id === editingUser.id ? { ...u, balance: data.balance } : u,
+          u.id === editingUser.id ? { ...u, balance: updatedBalance } : u,
         ),
       );
-      addToast(`${amount} ShopTokens asignados a ${editingUser.name}`, "success");
+      addToast(`Balance de ${editingUser.name} actualizado a ${updatedBalance} ShopTokens`, "success");
       setEditingUser(null);
-      setMintAmount("");
     } catch (err) {
       addToast(err instanceof Error ? err.message : "Error", "danger");
     } finally {
-      setMinting(false);
+      setSaving(false);
     }
   }
 
@@ -167,14 +171,8 @@ export default function AdminShopTokensPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        setEditingUser(user);
-                        setMintAmount("");
-                      }}
-                    >
-                      Añadir
+                    <Button size="sm" onClick={() => openEdit(user)}>
+                      Modificar
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -184,30 +182,30 @@ export default function AdminShopTokensPage() {
         </Card>
       )}
 
-      {/* Modal de minteo de tokens */}
+      {/* Modal de modificar balance */}
       <Modal
         open={!!editingUser}
         onClose={() => setEditingUser(null)}
-        title={`Añadir ShopTokens a ${editingUser?.name ?? ""}`}
+        title={`ShopTokens de ${editingUser?.name ?? ""}`}
       >
         <div className="space-y-4">
           <p className="text-sm text-text-muted">
-            Balance actual: <strong>{editingUser?.balance ?? "—"} ShopTokens</strong>.
-            Los tokens se añaden al balance existente.
+            Introduce la nueva cantidad de ShopTokens para este usuario.
+            Puedes poner 0 para quitarle todos los tokens.
           </p>
           <Input
-            label="Cantidad a añadir"
+            label="Nuevos tokens"
             type="number"
-            min="1"
-            value={mintAmount}
-            onChange={(e) => setMintAmount(e.currentTarget.value)}
+            min="0"
+            value={newAmount}
+            onChange={(e) => setNewAmount(e.currentTarget.value)}
           />
           <div className="flex justify-end gap-3">
-            <Button variant="ghost" onClick={() => setEditingUser(null)} disabled={minting}>
+            <Button variant="danger" onClick={() => setEditingUser(null)} disabled={saving}>
               Cancelar
             </Button>
-            <Button onClick={handleMint} loading={minting}>
-              Añadir tokens
+            <Button onClick={handleSave} loading={saving}>
+              Guardar
             </Button>
           </div>
         </div>

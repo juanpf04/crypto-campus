@@ -1,11 +1,14 @@
 "use client";
 
 /**
- * Recompensas de UNA asignatura concreta.
- * Requiere `?subject=<subjectOfferingId>`. Muestra:
- *   - Card superior con desglose de insignias del alumno en esa asignatura
- *   - Sección "Disponibles": catálogo de recompensas canjeables
- *   - Sección "Mis recompensas": canjeadas agregadas con contadores y selector
+ * Recompensas del alumno.
+ *
+ * - Sin `?subject=...` → vista global: todas las recompensas que el alumno
+ *   puede canjear y todas las que ya canjeó (de todas sus asignaturas), con
+ *   filtro opcional. No muestra el desglose de insignias (eso es por
+ *   asignatura concreta).
+ * - Con `?subject=<offeringId>` → vista por asignatura: añade el desglose
+ *   superior con las insignias del alumno en ese grupo.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -31,6 +34,7 @@ interface EnrolledSubject {
   subjectCode: string;
   group: string;
   academicYear: string;
+  totalBadges?: number;
 }
 
 interface PrizeEntry {
@@ -67,7 +71,15 @@ interface Reward {
   badgeCost: number;
   supply: number;
   category: RewardCategory;
-  subjectBadge: { id: string };
+  subjectBadge: {
+    id: string;
+    subjectOffering?: {
+      id: string;
+      group: string;
+      academicYear: string;
+      subject: { name: string; code: string };
+    };
+  };
   _count: { redemptions: number };
 }
 
@@ -81,6 +93,10 @@ interface MyReward {
   pending: number;
   approved: number;
   available: number;
+  subjectName?: string;
+  subjectCode?: string;
+  group?: string;
+  subjectOfferingId?: string;
 }
 
 const BREAKDOWN_PREVIEW = 3;
@@ -99,26 +115,31 @@ export default function StudentRewardsPage() {
   const [redeemingId, setRedeemingId] = useState<string | null>(null);
   const [requestingId, setRequestingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!subjectParam) {
-      router.replace("/student/badges");
-    }
-  }, [subjectParam, router]);
-
   const loadData = useCallback(async () => {
-    if (!subjectParam) return;
     setLoading(true);
     try {
-      const [subjectsRes, breakdownRes, rewardsRes, myRewardsRes] = await Promise.all([
+      const subjectQs = subjectParam ? `?subject=${subjectParam}` : "";
+      const fetches: Promise<Response>[] = [
         fetch("/api/badges/my/subjects"),
-        fetch(`/api/badges/my/subjects/${subjectParam}/breakdown`),
-        fetch(`/api/badges/rewards/available?subject=${subjectParam}`),
-        fetch(`/api/badges/my/rewards?subject=${subjectParam}`),
-      ]);
+        fetch(`/api/badges/rewards/available${subjectQs}`),
+        fetch(`/api/badges/my/rewards${subjectQs}`),
+      ];
+      // El breakdown solo aplica con asignatura concreta.
+      if (subjectParam) {
+        fetches.push(fetch(`/api/badges/my/subjects/${subjectParam}/breakdown`));
+      }
+
+      const results = await Promise.all(fetches);
+      const [subjectsRes, rewardsRes, myRewardsRes, breakdownRes] = results;
+
       if (subjectsRes.ok) setSubjects(await subjectsRes.json());
-      if (breakdownRes.ok) setBreakdown(await breakdownRes.json());
       if (rewardsRes.ok) setRewards(await rewardsRes.json());
       if (myRewardsRes.ok) setMyRewards(await myRewardsRes.json());
+      if (subjectParam && breakdownRes && breakdownRes.ok) {
+        setBreakdown(await breakdownRes.json());
+      } else {
+        setBreakdown(null);
+      }
     } catch {
       addToast("Error al cargar recompensas", "danger");
     } finally {
@@ -138,8 +159,11 @@ export default function StudentRewardsPage() {
   );
 
   function handleSubjectChange(offeringId: string | null) {
-    if (!offeringId) return;
-    router.replace(`/student/badges/rewards?subject=${offeringId}`);
+    if (offeringId) {
+      router.replace(`/student/badges/rewards?subject=${offeringId}`);
+    } else {
+      router.replace("/student/badges/rewards");
+    }
   }
 
   async function handleRedeem(rewardId: string) {
@@ -184,19 +208,25 @@ export default function StudentRewardsPage() {
     }
   }
 
-  if (!subjectParam || loading) return <SkeletonPage />;
+  if (loading) return <SkeletonPage />;
 
-  const currentSubject = subjects.find((s) => s.subjectOfferingId === subjectParam);
+  const currentSubject = subjectParam
+    ? subjects.find((s) => s.subjectOfferingId === subjectParam) ?? null
+    : null;
 
   return (
     <div className="space-y-6">
       <BackLink href="/student/badges" label="Volver a insignias" />
 
       <div>
-        <h1 className="text-2xl font-bold text-text">Recompensas</h1>
-        {currentSubject && (
+        <h1 className="text-2xl font-bold text-text">Mis recompensas</h1>
+        {currentSubject ? (
           <p className="text-text-muted mt-1">
             {currentSubject.subjectName} · {currentSubject.subjectCode} · {currentSubject.group} · {currentSubject.academicYear}
+          </p>
+        ) : (
+          <p className="text-text-muted mt-1">
+            Recompensas de todas tus asignaturas. Filtra para ver una concreta.
           </p>
         )}
       </div>
@@ -206,11 +236,12 @@ export default function StudentRewardsPage() {
           categories={subjectOptions}
           selected={subjectParam}
           onSelect={handleSubjectChange}
-          showAll={false}
+          showAll
+          allLabel="Todas"
         />
       )}
 
-      {/* Card superior: insignias del alumno en esta asignatura */}
+      {/* Card superior con desglose: solo cuando hay asignatura concreta */}
       {breakdown && (
         <SubjectBadgesBreakdownCard
           totalBadges={breakdown.totalBadges}
@@ -221,39 +252,48 @@ export default function StudentRewardsPage() {
         />
       )}
 
-      {/* Disponibles */}
-      <section className="space-y-4">
-        <SectionTitle icon={icons.reward}>Disponibles</SectionTitle>
-        {rewards.length === 0 ? (
-          <EmptyState
-            title="Sin recompensas"
-            description="Tu profesor aún no ha publicado recompensas canjeables en esta asignatura."
-          />
-        ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {rewards.map((r) => (
-              <RewardCard
-                key={r.id}
-                name={r.name}
-                description={r.description}
-                badgeCost={r.badgeCost}
-                supply={r.supply}
-                redemptionCount={r._count.redemptions}
-                category={r.category}
-                studentBadgeCount={breakdown?.totalBadges ?? 0}
-                onRedeem={() => handleRedeem(r.id)}
-                redeeming={redeemingId === r.id}
-              />
-            ))}
-          </div>
-        )}
-      </section>
+      {/* Disponibles — solo en vista por asignatura concreta. La vista global
+          se centra en lo que ya has canjeado para que puedas solicitar uso. */}
+      {currentSubject && (
+        <section className="space-y-4">
+          <SectionTitle icon={icons.reward}>Disponibles</SectionTitle>
+          {rewards.length === 0 ? (
+            <EmptyState
+              title="Sin recompensas"
+              description="Tu profesor aún no ha publicado recompensas canjeables en esta asignatura."
+            />
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {rewards.map((r) => (
+                <RewardCard
+                  key={r.id}
+                  name={r.name}
+                  description={r.description}
+                  badgeCost={r.badgeCost}
+                  supply={r.supply}
+                  redemptionCount={r._count.redemptions}
+                  category={r.category}
+                  studentBadgeCount={breakdown?.totalBadges ?? 0}
+                  onRedeem={() => handleRedeem(r.id)}
+                  redeeming={redeemingId === r.id}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
-      {/* Mis recompensas */}
+      {/* Mis recompensas canjeadas */}
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <SectionTitle icon={icons.history}>Mis recompensas</SectionTitle>
-          <Link href={`/student/badges/requests?subject=${subjectParam}`}>
+          <SectionTitle icon={icons.history}>Recompensas canjeadas</SectionTitle>
+          <Link
+            href={
+              subjectParam
+                ? `/student/badges/requests?subject=${subjectParam}`
+                : "/student/badges/requests"
+            }
+          >
             <Button variant="secondary" size="sm">
               <span className="flex items-center gap-2">
                 {icons.pending} Mis solicitudes
@@ -268,7 +308,7 @@ export default function StudentRewardsPage() {
             description="Cuando canjees insignias por recompensas, aparecerán aquí con su estado."
           />
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
             {myRewards.map((mr) => (
               <MyRewardCard
                 key={mr.rewardId}
@@ -281,6 +321,11 @@ export default function StudentRewardsPage() {
                 approved={mr.approved}
                 onRequestUse={(q) => handleRequestUse(mr.rewardId, q)}
                 processing={requestingId === mr.rewardId}
+                subjectName={
+                  !currentSubject && mr.subjectCode && mr.group
+                    ? `${mr.subjectCode} · ${mr.group}`
+                    : undefined
+                }
               />
             ))}
           </div>

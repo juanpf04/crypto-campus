@@ -27,7 +27,7 @@
  * Solo es segura para desarrollo local. En producción se usaría otra cosa.
  */
 
-import { createWalletClient, createPublicClient, http } from "viem";
+import { createWalletClient, createPublicClient, http, nonceManager } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { hardhat } from "viem/chains";
 
@@ -35,8 +35,12 @@ import { hardhat } from "viem/chains";
 const HARDHAT_ACCOUNT_0_KEY =
   "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" as const;
 
-/** Cuenta admin: tiene permisos de admin en los contratos y fondos ilimitados */
-export const adminAccount = privateKeyToAccount(HARDHAT_ACCOUNT_0_KEY);
+/**
+ * Cuenta admin: tiene permisos de admin en los contratos y fondos ilimitados.
+ * `nonceManager` serializa la asignación de nonce para evitar "nonce too low"
+ * cuando se disparan varias txs en paralelo (p. ej. otorgar premio a N alumnos).
+ */
+export const adminAccount = privateKeyToAccount(HARDHAT_ACCOUNT_0_KEY, { nonceManager });
 
 /** Cliente de escritura: envía transacciones firmadas por el admin */
 export const adminWalletClient = createWalletClient({

@@ -5,6 +5,8 @@
  *
  * Cada variante tiene su propio nombre independiente.
  * Campos: Nombre, Color, Etiqueta (opcional), Stock, Imagen.
+ *
+ * Validación inline: errores por campo vía la prop `error` del Input.
  */
 
 import { useState, useCallback } from "react";
@@ -28,6 +30,12 @@ interface VariantFormProps {
   onSubmit: (values: VariantFormValues) => Promise<void>;
   onCancel: () => void;
   loading?: boolean;
+}
+
+interface FieldErrors {
+  name?: string;
+  color?: string;
+  stock?: string;
 }
 
 const IMAGE_ACCEPT = {
@@ -55,6 +63,12 @@ export function VariantForm({
   );
   const [uploading, setUploading] = useState(false);
 
+  const [errors, setErrors] = useState<FieldErrors>({});
+
+  function clearError(field: keyof FieldErrors) {
+    setErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
+  }
+
   const handleImageFile = useCallback(async (file: File) => {
     setUploading(true);
     try {
@@ -80,21 +94,27 @@ export function VariantForm({
     }
   }, [addToast]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-
-    if (!name.trim()) {
-      addToast("El nombre es obligatorio", "danger");
-      return;
-    }
-    if (!color.trim()) {
-      addToast("El color es obligatorio", "danger");
-      return;
-    }
-
+  function validate(): FieldErrors {
+    const errs: FieldErrors = {};
+    if (!name.trim()) errs.name = "Escribe un nombre para la variante";
+    if (!color.trim()) errs.color = "Especifica un color";
     const parsedStock = Number(stock);
     if (!Number.isInteger(parsedStock) || parsedStock < 0) {
-      addToast("El stock debe ser un entero no negativo", "danger");
+      errs.stock = "Debe ser un entero ≥ 0";
+    }
+    return errs;
+  }
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+
+    const errs = validate();
+    setErrors(errs);
+    if (Object.values(errs).some(Boolean)) {
+      requestAnimationFrame(() => {
+        form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+      });
       return;
     }
 
@@ -102,7 +122,7 @@ export function VariantForm({
       name: name.trim(),
       color: color.trim(),
       variantLabel: variantLabel.trim(),
-      stock: parsedStock,
+      stock: Number(stock),
       imageUrl: imageUrl.trim(),
     });
   }
@@ -110,13 +130,16 @@ export function VariantForm({
   const effectiveImageUrl = imagePreview ?? imageUrl;
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} noValidate className="space-y-4">
       <Input
         label="Nombre de la variante"
         value={name}
-        onChange={(e) => setName(e.currentTarget.value)}
+        onChange={(e) => {
+          setName(e.currentTarget.value);
+          clearError("name");
+        }}
         placeholder="Ej: Taza UCM Negra 370ml"
-        required
+        error={errors.name}
       />
 
       <Input
@@ -132,17 +155,22 @@ export function VariantForm({
           <Input
             label="Color"
             value={color}
-            onChange={(e) => setColor(e.currentTarget.value)}
+            onChange={(e) => {
+              setColor(e.currentTarget.value);
+              clearError("color");
+            }}
             placeholder="Ej: azul-marino, rojo, blanco"
-            required
+            error={errors.color}
           />
           <Input
             label="Stock"
             type="number"
-            min={0}
             value={stock}
-            onChange={(e) => setStock(e.currentTarget.value)}
-            required
+            onChange={(e) => {
+              setStock(e.currentTarget.value);
+              clearError("stock");
+            }}
+            error={errors.stock}
           />
         </div>
 
@@ -189,7 +217,7 @@ export function VariantForm({
       </div>
 
       <div className="flex gap-3 pt-2">
-        <Button type="button" variant="outline" className="flex-1" onClick={onCancel}>
+        <Button type="button" variant="danger" className="flex-1" onClick={onCancel}>
           Cancelar
         </Button>
         <Button type="submit" className="flex-1" loading={loading || uploading}>

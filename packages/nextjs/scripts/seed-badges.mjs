@@ -260,6 +260,20 @@ async function main() {
       return;
     }
 
+    // Idempotencia: si todas las asignaturas ya tienen al menos una tarea,
+    // saltamos sin ruido. Si solo algunas están seedeadas, caemos al loop
+    // que imprime por oferta cuál salta y cuál crea.
+    const seededOfferingsCount = await prisma.subjectBadge.count({
+      where: {
+        subjectOfferingId: { in: offerings.map((o) => o.id) },
+        assignments: { some: {} },
+      },
+    });
+    if (seededOfferingsCount === offerings.length) {
+      log(green(`Ya sincronizado (${offerings.length} asignatura${offerings.length !== 1 ? "s" : ""} con tareas). Saltando.`));
+      return;
+    }
+
     let createdAssignments = 0;
     let createdRewards = 0;
     let createdAwards = 0;

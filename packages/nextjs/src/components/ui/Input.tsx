@@ -31,6 +31,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             className,
           )}
           {...props}
+          aria-invalid={error ? "true" : undefined}
         />
         {error && <p className="text-sm text-danger">{error}</p>}
       </div>

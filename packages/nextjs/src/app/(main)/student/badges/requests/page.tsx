@@ -14,6 +14,7 @@ import { SkeletonPage } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { CategoryFilter } from "@/components/ui/CategoryFilter";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { ConfirmModal } from "@/components/shared/ConfirmModal";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/Table";
@@ -110,6 +111,8 @@ export default function StudentRequestsPage() {
     router.replace(`/student/badges/requests${qs ? `?${qs}` : ""}`);
   }
 
+  const [pendingCancel, setPendingCancel] = useState<number | null>(null);
+
   async function handleCancel(requestId: number) {
     setProcessing(requestId);
     try {
@@ -122,6 +125,13 @@ export default function StudentRequestsPage() {
     } finally {
       setProcessing(null);
     }
+  }
+
+  async function confirmCancel() {
+    if (pendingCancel === null) return;
+    const id = pendingCancel;
+    setPendingCancel(null);
+    await handleCancel(id);
   }
 
   if (loading) return <SkeletonPage />;
@@ -225,7 +235,7 @@ export default function StudentRequestsPage() {
                       <Button
                         size="sm"
                         variant="danger"
-                        onClick={() => handleCancel(r.requestId)}
+                        onClick={() => setPendingCancel(r.requestId)}
                         loading={processing === r.requestId}
                       >
                         Cancelar
@@ -238,6 +248,16 @@ export default function StudentRequestsPage() {
           </TableBody>
         </Table>
       )}
+
+      <ConfirmModal
+        open={pendingCancel !== null}
+        onClose={() => { if (processing === null) setPendingCancel(null); }}
+        onConfirm={confirmCancel}
+        title="Cancelar solicitud"
+        description="La solicitud será cancelada on-chain y no podrá recuperarse. ¿Quieres continuar?"
+        confirmLabel="Cancelar solicitud"
+        loading={processing === pendingCancel}
+      />
     </div>
   );
 }

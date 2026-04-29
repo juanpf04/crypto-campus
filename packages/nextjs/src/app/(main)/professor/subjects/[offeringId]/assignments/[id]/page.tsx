@@ -285,7 +285,6 @@ export default function ProfessorAssignmentDetailPage() {
         title="Cerrar entregas"
         description="Los alumnos ya no podrán marcar como entregada. Tú aún podrás otorgar premios."
         confirmLabel="Cerrar entregas"
-        variant="primary"
         loading={acting}
       />
 
@@ -296,7 +295,6 @@ export default function ProfessorAssignmentDetailPage() {
         title="Cerrar tarea definitivamente"
         description="Una vez cerrada no podrás otorgar más premios. Esta acción no se puede deshacer."
         confirmLabel="Cerrar tarea"
-        variant="danger"
         loading={acting}
       />
     </div>

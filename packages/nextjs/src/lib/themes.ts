@@ -46,6 +46,7 @@ export const THEMES: ThemePalette[] = [
       card: "#FFFFFF",
       border: "#E2E8F0",
       "border-hover": "#CBD5E1",
+      "border-swatch": "#E2E8F0",
 
       text: "#0B2233",
       "text-muted": "#64748B",
@@ -61,8 +62,8 @@ export const THEMES: ThemePalette[] = [
     values: {
       primary: "#0A6FFF",
       "primary-hover": "#085CD6",
-      secondary: "#00E0FF",
-      "secondary-hover": "#00C4E0",
+      secondary: "#0369A1",
+      "secondary-hover": "#075985",
       accent: "#D4AF37",
       "accent-hover": "#BF9D2E",
 
@@ -77,6 +78,7 @@ export const THEMES: ThemePalette[] = [
       card: "#121624",
       border: "#1E2538",
       "border-hover": "#2A3347",
+      "border-swatch": "#94A3B8",
 
       text: "#E6F0F6",
       "text-muted": "#8899AA",

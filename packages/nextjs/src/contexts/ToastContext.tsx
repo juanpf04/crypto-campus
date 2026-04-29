@@ -3,105 +3,118 @@
 /**
  * ToastContext.tsx — Sistema global de notificaciones flotantes (toasts).
  *
- * Flujo completo:
- * 1. <ToastProvider> envuelve toda la app desde providers.tsx, así cualquier
- *    componente hijo puede lanzar toasts sin prop-drilling.
- * 2. Un componente llama a addToast("mensaje", "success") →
- *    - Se genera un ID único con crypto.randomUUID().
- *    - Se añade al array reactivo `toasts` (provoca re-render).
- *    - Se programa un setTimeout de 10s que lo eliminará automáticamente.
- *    - El timer se guarda en timersRef (un Map id→timer) para poder cancelarlo.
- * 3. El componente <ToastContainer> (en ui/) consume este contexto,
- *    lee el array `toasts` y renderiza cada uno en pantalla (abajo-derecha).
- * 4. Si el usuario pulsa la X antes de los 10s → removeToast(id):
- *    - Cancela el timer pendiente con clearTimeout.
- *    - Lo elimina del mapa de timers.
- *    - Lo filtra fuera del array de toasts.
- * 5. Si pasan los 10s sin cerrar → el setTimeout se dispara y hace lo mismo
- *    (elimina del mapa y filtra del array).
+ * Modelo de cola:
+ *   - Hay como mucho MAX_VISIBLE (3) toasts en pantalla a la vez.
+ *   - Si llegan más, se encolan y aparecen cuando hay hueco.
+ *   - Entre dos apariciones consecutivas se respeta un gap mínimo de
+ *     MIN_GAP_MS (1s) para que no se "amontonen" cuando se disparan
+ *     muchas notificaciones en rápida sucesión.
  *
- * ¿Por qué useRef para los timers?
- * Porque crear/borrar timers no necesita provocar re-renders. Solo el array
- * `toasts` es estado reactivo (cuando cambia, React re-renderiza la UI).
+ * Estructura interna:
+ *   - `queue`   → toasts pendientes de aparecer (cola FIFO).
+ *   - `visible` → toasts actualmente en pantalla.
+ *
+ * La API pública sigue siendo { toasts, addToast, removeToast } — los
+ * llamadores no se enteran del split: leen `toasts` y reciben los visibles.
+ *
+ * Auto-dismiss:
+ *   El propio componente <Toast/> tiene su useEffect que llama a onClose
+ *   tras `duration`. Cuando dispara, removeToast(id) filtra de visible y el
+ *   effect de promoción detecta el hueco y mueve el siguiente de la cola.
  */
 
-import { createContext, useState, useCallback, useRef, type ReactNode } from "react";
+import {
+  createContext,
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  type ReactNode,
+} from "react";
 
-/** Variantes visuales disponibles — cada una se mapea a un color del tema CSS */
+/** Variantes visuales — cada una mapea a un color del tema CSS */
 export type ToastVariant = "success" | "danger" | "warning" | "info";
 
 export interface Toast {
-  id: string;            // Identificador único (UUID v4)
-  message: string;       // Texto que ve el usuario
-  variant: ToastVariant; // Determina colores: verde/rojo/amarillo/azul
+  id: string;
+  message: string;
+  variant: ToastVariant;
 }
 
 interface ToastContextValue {
-  toasts: Toast[];                                             // Array de toasts activos
-  addToast: (message: string, variant?: ToastVariant) => void; // Crear un toast nuevo
-  removeToast: (id: string) => void;                           // Cerrar un toast por ID
+  toasts: Toast[];
+  addToast: (message: string, variant?: ToastVariant) => void;
+  removeToast: (id: string) => void;
 }
 
-/** Milisegundos que un toast permanece visible antes de auto-eliminarse */
-const TOAST_DURATION = 10_000;
+/** Máximo de toasts visibles a la vez */
+const MAX_VISIBLE = 3;
 
-/**
- * Valor inicial null — si un componente intenta usar useToast() sin estar
- * dentro de <ToastProvider>, el hook useToast lanza un error descriptivo.
- */
+/** Gap mínimo (ms) entre dos apariciones consecutivas */
+const MIN_GAP_MS = 1000;
+
 export const ToastContext = createContext<ToastContextValue | null>(null);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
-  /** Array reactivo: cada cambio aquí re-renderiza el ToastContainer */
-  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [queue, setQueue] = useState<Toast[]>([]);
+  const [visible, setVisible] = useState<Toast[]>([]);
 
-  /**
-   * Mapa id → timer (setTimeout handle).
-   * Permite cancelar el auto-dismiss si el usuario cierra el toast antes.
-   * Es un useRef porque mutar este mapa no necesita provocar re-renders.
-   */
-  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  /** Timestamp (ms) de la última promoción cola → visible */
+  const lastShownAtRef = useRef<number>(0);
+  /** Timer en curso de promoción, si lo hay */
+  const promotionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Espejo de queue para inspeccionar al disparar el timer (evita closures stale) */
+  const queueRef = useRef<Toast[]>([]);
 
-  /**
-   * removeToast — Elimina un toast inmediatamente.
-   * 1. Busca si tiene un timer pendiente → lo cancela con clearTimeout.
-   * 2. Lo borra del mapa de timers.
-   * 3. Lo filtra fuera del array reactivo → re-render → desaparece de la UI.
-   */
+  useEffect(() => {
+    queueRef.current = queue;
+  }, [queue]);
+
   const removeToast = useCallback((id: string) => {
-    const timer = timersRef.current.get(id);
-    if (timer) {
-      clearTimeout(timer);
-      timersRef.current.delete(id);
-    }
-    setToasts((prev) => prev.filter((t) => t.id !== id));
+    setVisible((prev) => prev.filter((t) => t.id !== id));
+    setQueue((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  /**
-   * addToast — Crea y programa un toast nuevo.
-   * 1. Genera UUID único.
-   * 2. Lo añade al final del array (aparece abajo en la pila visual).
-   * 3. Programa setTimeout → cuando expira, elimina el toast del array
-   *    y limpia su entrada en el mapa de timers.
-   * 4. Guarda el handle del timer en timersRef por si hay que cancelarlo.
-   */
   const addToast = useCallback(
     (message: string, variant: ToastVariant = "info") => {
       const id = crypto.randomUUID();
-      setToasts((prev) => [...prev, { id, message, variant }]);
-
-      const timer = setTimeout(() => {
-        timersRef.current.delete(id);
-        setToasts((prev) => prev.filter((t) => t.id !== id));
-      }, TOAST_DURATION);
-
-      timersRef.current.set(id, timer);
+      setQueue((prev) => [...prev, { id, message, variant }]);
     },
     [],
   );
 
+  // Effect de promoción: cada vez que cambia queue o visible, evalúa si
+  // hay hueco para mover el primero de la cola a la zona visible.
+  useEffect(() => {
+    if (queue.length === 0) return;
+    if (visible.length >= MAX_VISIBLE) return;
+    if (promotionTimerRef.current !== null) return;
+
+    const elapsed = Date.now() - lastShownAtRef.current;
+    const wait = Math.max(0, MIN_GAP_MS - elapsed);
+    const candidateId = queue[0].id;
+
+    promotionTimerRef.current = setTimeout(() => {
+      promotionTimerRef.current = null;
+      // El candidato podría haber sido removido entre el schedule y el fire
+      // (p.ej. si el caller llamó removeToast). Comprobamos contra el ref.
+      const item = queueRef.current.find((t) => t.id === candidateId);
+      if (!item) return;
+      lastShownAtRef.current = Date.now();
+      setQueue((prev) => prev.filter((t) => t.id !== candidateId));
+      setVisible((prev) => [...prev, item]);
+    }, wait);
+
+    return () => {
+      if (promotionTimerRef.current !== null) {
+        clearTimeout(promotionTimerRef.current);
+        promotionTimerRef.current = null;
+      }
+    };
+  }, [queue, visible.length]);
+
   return (
-    <ToastContext.Provider value={{ toasts, addToast, removeToast }}>
+    <ToastContext.Provider value={{ toasts: visible, addToast, removeToast }}>
       {children}
     </ToastContext.Provider>
   );

@@ -66,7 +66,7 @@ export function ItemForm({ onSubmit, initialValues, isEdit }: ItemFormProps) {
   });
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
       <Input
         label="Título"
         placeholder="Ej: El Señor de los Anillos"

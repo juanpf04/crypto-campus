@@ -66,16 +66,16 @@ export default function AdminPrintingPage() {
             icon={icons.print}
           />
           <StatCard
-            title="Créditos iniciales"
-            value={stats.initialCredits}
-            subtitle="Por estudiante registrado"
-            icon={icons.token}
-          />
-          <StatCard
             title="Impresiones totales"
             value={stats.totalLogs}
             subtitle="Registradas en el sistema"
             icon={icons.orders}
+          />
+          <StatCard
+            title="Créditos ilimitados"
+            value="Infinito"
+            subtitle="Como administrador"
+            icon={icons.token}
           />
         </div>
       </section>
@@ -99,9 +99,16 @@ export default function AdminPrintingPage() {
             stat={`${stats.totalLogs} registros`}
           />
           <ActionRow
+            href="/admin/printing/print"
+            icon={icons.file}
+            title="Imprimir"
+            description="Imprimir un documento"
+            stat=""
+          />
+          <ActionRow
             href="/admin/printing/credits"
             icon={icons.token}
-            title="Créditos de estudiantes"
+            title="Créditos de alumnos y profesores"
             description="Consultar y asignar créditos de impresión"
             stat={`${stats.initialCredits} iniciales`}
             isLast

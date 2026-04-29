@@ -245,15 +245,14 @@ export default function AdminOfferingStudentsPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <button
-                          type="button"
+                        <Button
+                          variant="danger"
+                          size="sm"
                           onClick={() => setToUnenroll(s)}
-                          className="rounded-md p-1.5 text-text-muted hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer [&_svg]:h-4 [&_svg]:w-4"
                           aria-label={`Desmatricular a ${s.name}`}
-                          title="Desmatricular"
                         >
-                          {icons.trash}
-                        </button>
+                          Desmatricular
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -322,7 +321,7 @@ export default function AdminOfferingStudentsPage() {
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
-                <Button variant="ghost" onClick={() => setEnrollModalOpen(false)}>
+                <Button variant="danger" onClick={() => setEnrollModalOpen(false)}>
                   Cancelar
                 </Button>
                 <Button
@@ -351,7 +350,6 @@ export default function AdminOfferingStudentsPage() {
             : ""
         }
         confirmLabel="Desmatricular"
-        variant="danger"
       />
     </div>
   );

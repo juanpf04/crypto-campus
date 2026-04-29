@@ -1088,6 +1088,157 @@ export async function getOfferingRewardsInventory(offeringId: string) {
 	};
 }
 
+/**
+ * Inventario GLOBAL de recompensas canjeadas por todos los alumnos del sistema.
+ * Devuelve solo alumnos con al menos un canje. Cada reward incluye info del
+ * offering al que pertenece (asignatura, grupo, profesor) para permitir
+ * filtros client-side por alumno / asignatura / profesor / grupo.
+ *
+ * Acceso: ADMIN.
+ */
+export async function getAllRewardsInventory() {
+	const session = await getSession();
+	ensureRole(session, ["ADMIN"]);
+
+	const students = await prisma.user.findMany({
+		where: { role: "STUDENT" },
+		select: { id: true, name: true, email: true },
+		orderBy: { name: "asc" },
+	});
+	if (students.length === 0) return { students: [] };
+
+	const userIds = students.map((s) => s.id);
+
+	const [redemptions, requests] = await Promise.all([
+		prisma.rewardRedemption.findMany({
+			where: { userId: { in: userIds } },
+			include: {
+				reward: {
+					select: {
+						id: true,
+						name: true,
+						description: true,
+						category: true,
+						badgeCost: true,
+						subjectBadge: {
+							select: {
+								subjectOffering: {
+									select: {
+										id: true,
+										group: true,
+										academicYear: true,
+										subject: { select: { code: true, name: true } },
+										professor: { select: { id: true, name: true } },
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			orderBy: { redeemedAt: "desc" },
+		}),
+		prisma.useRequest.findMany({
+			where: { studentId: { in: userIds } },
+			select: { studentId: true, rewardId: true, status: true },
+		}),
+	]);
+
+	type RewardAgg = {
+		rewardId: string;
+		rewardName: string;
+		description: string | null;
+		category: string;
+		badgeCost: number;
+		redemptions: number;
+		pending: number;
+		approved: number;
+		available: number;
+		lastRedeemedAt: Date;
+		offeringId: string;
+		subjectCode: string;
+		subjectName: string;
+		group: string;
+		academicYear: string;
+		professorId: string;
+		professorName: string;
+	};
+
+	const perStudent = new Map<string, Map<string, RewardAgg>>();
+
+	for (const r of redemptions) {
+		const offering = r.reward.subjectBadge.subjectOffering;
+		const byReward = perStudent.get(r.userId) ?? new Map<string, RewardAgg>();
+		const existing = byReward.get(r.rewardId);
+		if (existing) {
+			existing.redemptions += 1;
+			if (r.redeemedAt > existing.lastRedeemedAt) existing.lastRedeemedAt = r.redeemedAt;
+		} else {
+			byReward.set(r.rewardId, {
+				rewardId: r.rewardId,
+				rewardName: r.reward.name,
+				description: r.reward.description,
+				category: r.reward.category,
+				badgeCost: r.reward.badgeCost,
+				redemptions: 1,
+				pending: 0,
+				approved: 0,
+				available: 0,
+				lastRedeemedAt: r.redeemedAt,
+				offeringId: offering.id,
+				subjectCode: offering.subject.code,
+				subjectName: offering.subject.name,
+				group: offering.group,
+				academicYear: offering.academicYear,
+				professorId: offering.professor.id,
+				professorName: offering.professor.name,
+			});
+		}
+		perStudent.set(r.userId, byReward);
+	}
+
+	for (const req of requests) {
+		const byReward = perStudent.get(req.studentId);
+		const entry = byReward?.get(req.rewardId);
+		if (!entry) continue;
+		if (req.status === "PENDING") entry.pending += 1;
+		else if (req.status === "APPROVED") entry.approved += 1;
+	}
+
+	const result = students
+		.filter((s) => perStudent.has(s.id))
+		.map((s) => {
+			const rewards = [...perStudent.get(s.id)!.values()];
+			let totalRedemptions = 0;
+			let totalAvailable = 0;
+			let totalPending = 0;
+			for (const r of rewards) {
+				r.available = r.redemptions - r.approved - r.pending;
+				if (r.available < 0) r.available = 0;
+				totalRedemptions += r.redemptions;
+				totalAvailable += r.available;
+				totalPending += r.pending;
+			}
+			rewards.sort((a, b) => {
+				const aTier = a.available > 0 ? 0 : a.pending > 0 ? 1 : 2;
+				const bTier = b.available > 0 ? 0 : b.pending > 0 ? 1 : 2;
+				if (aTier !== bTier) return aTier - bTier;
+				return b.lastRedeemedAt.getTime() - a.lastRedeemedAt.getTime();
+			});
+			return {
+				userId: s.id,
+				name: s.name,
+				email: s.email,
+				totalRedemptions,
+				totalAvailable,
+				totalPending,
+				rewards,
+			};
+		});
+
+	return { students: result };
+}
+
 // ── Solicitudes de uso ───────────────────────────────────────────────────
 
 export async function requestUseReward(rewardPrismaId: string) {
@@ -1962,6 +2113,7 @@ export async function getAllStudentsGlobal() {
 		name: s.name,
 		email: s.email,
 		offerings: s.enrollments.map(e => ({
+			enrollmentId: e.id,
 			offeringId: e.subjectOffering.id,
 			subjectName: e.subjectOffering.subject.name,
 			subjectCode: e.subjectOffering.subject.code,

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { usePaginatedList } from "@/hooks/usePaginatedList";
@@ -10,6 +11,8 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { ConfirmModal } from "@/components/shared/ConfirmModal";
+import { InfoModal } from "@/components/shared/InfoModal";
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "@/components/ui/Table";
@@ -18,6 +21,7 @@ const PAGE_SIZE = 20;
 
 interface Room {
   id: string; roomId: number; name: string; location: string | null; capacity: number; active: boolean;
+  activeBookingCount: number;
 }
 
 export default function LibrarianRoomsPage() {
@@ -31,9 +35,23 @@ export default function LibrarianRoomsPage() {
     onError: () => addToast("Error al cargar salas", "danger"),
   });
 
-  async function handleToggleActive(roomId: string, currentlyActive: boolean) {
+  const [pending, setPending] = useState<{ id: string; name: string; currentlyActive: boolean } | null>(null);
+  const [blocked, setBlocked] = useState<{ name: string; count: number } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  function requestToggle(room: Room) {
+    if (room.active && room.activeBookingCount > 0) {
+      setBlocked({ name: room.name, count: room.activeBookingCount });
+      return;
+    }
+    setPending({ id: room.id, name: room.name, currentlyActive: room.active });
+  }
+
+  async function confirmToggleActive() {
+    if (!pending) return;
+    const { id: roomId, currentlyActive } = pending;
     const action = currentlyActive ? "desactivar" : "reactivar";
-    if (!confirm(`¿${currentlyActive ? "Desactivar" : "Reactivar"} esta sala?`)) return;
+    setSubmitting(true);
     try {
       if (currentlyActive) {
         const res = await fetch(`/api/rooms/${roomId}`, { method: "DELETE" });
@@ -48,8 +66,11 @@ export default function LibrarianRoomsPage() {
       }
       addToast(`Sala ${currentlyActive ? "desactivada" : "reactivada"}`, "success");
       list.refresh();
+      setPending(null);
     } catch (err) {
       addToast(err instanceof Error ? err.message : "Error", "danger");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -97,7 +118,7 @@ export default function LibrarianRoomsPage() {
                           <Button
                             variant={room.active ? "danger" : "success"}
                             size="sm"
-                            onClick={() => handleToggleActive(room.id, room.active)}
+                            onClick={() => requestToggle(room)}
                           >
                             {room.active ? "Desactivar" : "Reactivar"}
                           </Button>
@@ -112,6 +133,31 @@ export default function LibrarianRoomsPage() {
           <Pagination offset={list.offset} limit={list.limit} total={list.total} onChange={list.setOffset} />
         </>
       )}
+
+      <ConfirmModal
+        open={pending !== null}
+        onClose={() => { if (!submitting) setPending(null); }}
+        onConfirm={confirmToggleActive}
+        title={pending?.currentlyActive ? "Desactivar sala" : "Reactivar sala"}
+        description={
+          pending?.currentlyActive
+            ? `"${pending.name}" dejará de estar disponible para nuevas reservas. ¿Quieres continuar?`
+            : `"${pending?.name}" volverá a estar disponible para reservas. ¿Quieres continuar?`
+        }
+        confirmLabel={pending?.currentlyActive ? "Desactivar" : "Reactivar"}
+        loading={submitting}
+      />
+
+      <InfoModal
+        open={blocked !== null}
+        onClose={() => setBlocked(null)}
+        title="No se puede desactivar"
+        description={
+          blocked
+            ? `"${blocked.name}" tiene ${blocked.count} reserva${blocked.count !== 1 ? "s" : ""} activa${blocked.count !== 1 ? "s" : ""} para hoy y no se puede desactivar hasta que se cancelen o terminen.`
+            : ""
+        }
+      />
     </div>
   );
 }

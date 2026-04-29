@@ -25,6 +25,8 @@ interface LibraryItemCardProps {
   availableCopies?: number;
   onRequestLoan: () => void;
   requesting?: boolean;
+  /** Si false, el botón se deshabilita y se muestra texto explicativo. */
+  hasTokens?: boolean;
   /** Base URL para el detalle (por defecto /student/library) */
   detailBase?: string;
 }
@@ -40,6 +42,7 @@ export function LibraryItemCard({
   availableCopies,
   onRequestLoan,
   requesting,
+  hasTokens = true,
   detailBase = "/student/library",
 }: LibraryItemCardProps) {
   return (
@@ -92,8 +95,10 @@ export function LibraryItemCard({
             className="mt-auto w-full"
             onClick={(e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); onRequestLoan(); }}
             loading={requesting}
+            disabled={!hasTokens}
+            title={!hasTokens ? "Necesitas Tokens de Préstamo para solicitar" : undefined}
           >
-            Solicitar préstamo
+            {hasTokens ? "Solicitar préstamo" : "Sin tokens disponibles"}
           </Button>
         </div>
 

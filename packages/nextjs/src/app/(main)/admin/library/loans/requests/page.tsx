@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
+import { ConfirmModal } from "@/components/shared/ConfirmModal";
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "@/components/ui/Table";
@@ -31,6 +32,8 @@ export default function AdminLoanRequestsPage() {
     onError: (msg) => addToast(msg, "danger"),
   });
 
+  const [pendingReject, setPendingReject] = useState<{ id: string; title: string } | null>(null);
+
   async function handleAction(id: string, action: "approve" | "reject") {
     setProcessing(id);
     try {
@@ -43,6 +46,13 @@ export default function AdminLoanRequestsPage() {
       list.refresh();
     } catch (err) { addToast(err instanceof Error ? err.message : "Error", "danger"); }
     finally { setProcessing(null); }
+  }
+
+  async function confirmReject() {
+    if (!pendingReject) return;
+    const id = pendingReject.id;
+    setPendingReject(null);
+    await handleAction(id, "reject");
   }
 
   if (list.loading && list.items.length === 0) return <SkeletonTable columns={5} rows={6} />;
@@ -78,7 +88,7 @@ export default function AdminLoanRequestsPage() {
                       <TableCell>
                         <div className="flex gap-2">
                           <Button size="sm" onClick={() => handleAction(req.id, "approve")} loading={processing === req.id}>Aprobar</Button>
-                          <Button size="sm" variant="ghost" onClick={() => handleAction(req.id, "reject")} disabled={processing === req.id}>Rechazar</Button>
+                          <Button size="sm" variant="danger" onClick={() => setPendingReject({ id: req.id, title: req.libraryItem.title })} disabled={processing === req.id}>Rechazar</Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -90,6 +100,20 @@ export default function AdminLoanRequestsPage() {
           <Pagination offset={list.offset} limit={list.limit} total={list.total} onChange={list.setOffset} />
         </>
       )}
+
+      <ConfirmModal
+        open={pendingReject !== null}
+        onClose={() => { if (processing === null) setPendingReject(null); }}
+        onConfirm={confirmReject}
+        title="Rechazar solicitud"
+        description={
+          pendingReject
+            ? `La solicitud de "${pendingReject.title}" será rechazada. Esta acción no se puede deshacer.`
+            : ""
+        }
+        confirmLabel="Rechazar"
+        loading={processing === pendingReject?.id}
+      />
     </div>
   );
 }

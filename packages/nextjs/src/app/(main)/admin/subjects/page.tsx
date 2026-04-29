@@ -33,6 +33,12 @@ interface Professor {
   email: string;
 }
 
+interface CatalogSubject {
+  id: string;
+  name: string;
+  code: string;
+}
+
 type RawOffering = SubjectRowOffering & {
   subject: { id: string; name: string; code: string };
 };
@@ -43,6 +49,7 @@ export default function AdminSubjectsHubPage() {
   const { addToast } = useToast();
 
   const [rawOfferings, setRawOfferings] = useState<RawOffering[]>([]);
+  const [catalogSubjects, setCatalogSubjects] = useState<CatalogSubject[]>([]);
   const [professors, setProfessors] = useState<Professor[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -52,12 +59,17 @@ export default function AdminSubjectsHubPage() {
 
   const load = useCallback(async () => {
     try {
-      const [offeringsRes, profsRes] = await Promise.all([
+      const [offeringsRes, profsRes, subjectsRes] = await Promise.all([
         fetch("/api/badges/subject-offerings"),
         fetch("/api/badges/professors"),
+        fetch("/api/academic/subjects"),
       ]);
       if (offeringsRes.ok) setRawOfferings(await offeringsRes.json());
       if (profsRes.ok) setProfessors(await profsRes.json());
+      if (subjectsRes.ok) {
+        const data = await subjectsRes.json();
+        setCatalogSubjects(Array.isArray(data) ? data : data.subjects ?? []);
+      }
     } catch {
       addToast("Error al cargar asignaturas", "danger");
     } finally {
@@ -91,9 +103,12 @@ export default function AdminSubjectsHubPage() {
     });
   }, [rawOfferings, search, yearFilter, profFilter]);
 
-  // Agrupado por asignatura
+  // Agrupado por asignatura. Incluye también asignaturas del catálogo sin grupos
+  // (offerings === []), para que el admin pueda crearles uno desde aquí.
   const subjects = useMemo<SubjectRowSubject[]>(() => {
     const map = new Map<string, SubjectRowSubject>();
+
+    // 1. Asignaturas que sí tienen grupos (filtradas)
     for (const o of filteredOfferings) {
       const existing = map.get(o.subject.id);
       if (existing) {
@@ -109,8 +124,31 @@ export default function AdminSubjectsHubPage() {
         });
       }
     }
+
+    // 2. Asignaturas del catálogo sin grupos. Solo cuando no hay filtros
+    // específicos de oferta activos (año/profesor), porque esos filtros no
+    // tienen sentido si la asignatura aún no tiene ningún grupo. El search
+    // sí se aplica para que sean encontrables por nombre/código.
+    if (!yearFilter && !profFilter) {
+      const q = search.trim().toLowerCase();
+      for (const s of catalogSubjects) {
+        if (map.has(s.id)) continue;
+        if (q) {
+          const hay = `${s.name} ${s.code}`.toLowerCase();
+          if (!hay.includes(q)) continue;
+        }
+        map.set(s.id, {
+          id: s.id,
+          name: s.name,
+          code: s.code,
+          offerings: [],
+          studentsTotal: 0,
+        });
+      }
+    }
+
     return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
-  }, [filteredOfferings]);
+  }, [filteredOfferings, catalogSubjects, search, yearFilter, profFilter]);
 
   function toggleExpand(subjectId: string) {
     setExpanded((prev) => {
@@ -144,10 +182,10 @@ export default function AdminSubjectsHubPage() {
         </Link>
       </div>
 
-      {rawOfferings.length === 0 ? (
+      {rawOfferings.length === 0 && catalogSubjects.length === 0 ? (
         <EmptyState
           title="Sin asignaturas"
-          description="Aún no hay asignaturas impartidas en el sistema."
+          description="Aún no hay asignaturas en el sistema."
         />
       ) : (
         <>

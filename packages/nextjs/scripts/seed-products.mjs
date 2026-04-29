@@ -1,9 +1,13 @@
 /**
  * seed-products.mjs — Carga el catálogo inicial de productos en la tienda.
  *
- * Es idempotente: si ya existen productos en la BD, no hace nada.
+ * Idempotente:
+ *   - Si Prisma ya tiene N productos (N === JSON.length), salta sin tocar nada.
+ *   - Si tanto Prisma como blockchain están vacíos, crea todo (write a chain + Prisma).
+ *   - Si Prisma está vacío pero blockchain tiene productos (o viceversa), avisa
+ *     de estado inconsistente y pide `pnpm reset:all` — no intenta rehidratar.
  *
- * Pasos por cada producto del JSON:
+ * Pasos por cada producto del JSON (cuando hay que crear):
  * 1. Llama a CampusShop.addProduct(price, stock) → obtiene productId on-chain
  * 2. Crea el registro en Prisma con nombre, descripción, categoría, imagen y el productId
  *
@@ -28,6 +32,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const cyan = (s) => `\x1b[36m${s}\x1b[0m`;
 const green = (s) => `\x1b[32m${s}\x1b[0m`;
 const yellow = (s) => `\x1b[33m${s}\x1b[0m`;
+const red = (s) => `\x1b[31m${s}\x1b[0m`;
 
 function log(msg) {
   console.log(`${cyan("[seed-products]")} ${msg}`);
@@ -98,19 +103,42 @@ async function main() {
       readFileSync(resolve(__dirname, "../prisma/seed-products.json"), "utf-8")
     );
 
-    log(`Sincronizando ${productsJson.length} producto(s) de catálogo...`);
+    const expected = productsJson.length;
+    const actual = await prisma.product.count();
 
-    // 1. Limpiar productos, bases, órdenes, carritos y batches anteriores de Prisma.
-    //    Hasta que se implemente Anvil state persistence, la blockchain se reinicia
-    //    en cada pnpm dev, así que los datos viejos en Prisma son huérfanos.
-    await prisma.cartItem.deleteMany({});
-    await prisma.cart.deleteMany({});
-    await prisma.order.deleteMany({});
-    await prisma.orderBatch.deleteMany({});
-    const deletedProducts = await prisma.product.deleteMany({});
-    await prisma.productBase.deleteMany({});
-    if (deletedProducts.count > 0) {
-      log(yellow(`  ⚠ Limpiados ${deletedProducts.count} producto(s) huérfanos de Prisma`));
+    // ── Detección de estado y bifurcación de idempotencia ──
+    // Caso 1: Prisma ya tiene exactamente lo que el JSON espera → no hacer nada.
+    if (actual === expected) {
+      log(green(`Ya sincronizado (${actual} productos). Saltando.`));
+      return;
+    }
+
+    // Leer el contador on-chain para distinguir "todo vacío" vs "estado inconsistente".
+    let nextProductId;
+    try {
+      const next = await publicClient.readContract({
+        address: CAMPUS_SHOP_ADDRESS,
+        abi: CAMPUS_SHOP_ABI,
+        functionName: "nextProductId",
+      });
+      nextProductId = Number(next);
+    } catch {
+      log(red("  ✗ No se pudo leer nextProductId on-chain. ¿Está el nodo arriba?"));
+      return;
+    }
+
+    const chainVirgin = nextProductId === 1;
+
+    // Caso 2: Prisma vacío + chain virgen → crear todo desde cero.
+    if (actual === 0 && chainVirgin) {
+      log(`Sincronizando ${expected} producto(s) de catálogo desde cero...`);
+      // continúa al bloque de creación abajo
+    }
+    // Caso 3: cualquier otra combinación → estado inconsistente, no tocar nada.
+    else {
+      log(red(`  ✗ Estado inconsistente: Prisma tiene ${actual} producto(s), blockchain ${nextProductId - 1}.`));
+      log(red(`    Esperado: ambos vacíos o ambos con ${expected}. Ejecuta 'pnpm reset:all' y vuelve a intentar.`));
+      return;
     }
 
     // Helper: derivar slug del grupo desde la imageUrl

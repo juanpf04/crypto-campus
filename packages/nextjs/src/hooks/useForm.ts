@@ -135,14 +135,16 @@ export function useForm<T extends object>({
    * Flujo:
    * 1. preventDefault() para evitar recarga de página.
    * 2. Marca todos los campos como touched (al dar submit quieres ver todos los errores).
-   * 3. Ejecuta validación → si hay errores, los muestra y aborta.
+   * 3. Ejecuta validación → si hay errores, los muestra, hace focus al primer
+   *    `[aria-invalid="true"]` del form y aborta.
    * 4. Activa loading, llama a onSubmit(fields).
    * 5. Si onSubmit lanza Error → lo captura en submitError.
    * 6. Finalmente desactiva loading.
    */
   const handleSubmit = useCallback(
-    async (e: SubmitEvent | { preventDefault: () => void }) => {
+    async (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
+      const form = e.currentTarget;
 
       if (validateRef.current) {
         for (const key of Object.keys(fields) as Array<keyof T>) {
@@ -151,6 +153,10 @@ export function useForm<T extends object>({
         const validationErrors = validateRef.current(fields);
         if (Object.keys(validationErrors).length > 0) {
           setErrors(validationErrors);
+          // Esperamos a que React pinte los aria-invalid antes de hacer focus.
+          requestAnimationFrame(() => {
+            form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+          });
           return;
         }
       }

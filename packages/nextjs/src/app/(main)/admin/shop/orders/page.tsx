@@ -252,7 +252,6 @@ export default function AdminOrdersPage() {
         title="Confirmar devolución"
         description={returnModal ? `¿Procesar devolución de "${returnModal.productName}"? Se reembolsarán los ShopTokens al usuario.` : ""}
         confirmLabel="Procesar devolución"
-        variant="danger"
       />
     </div>
   );

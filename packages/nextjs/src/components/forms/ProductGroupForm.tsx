@@ -9,6 +9,8 @@
  * Layout compacto:
  * - Grupo: [Nombre | Descripción] + [Categoría (combo) | Precio]
  * - Variante: [Color / Stock] | [FileDropZone imagen]
+ *
+ * Validación inline: cada campo muestra su error vía la prop `error` del Input/Select.
  */
 
 import { useEffect, useState, useCallback } from "react";
@@ -39,6 +41,15 @@ interface ProductGroupFormProps {
   loading?: boolean;
 }
 
+interface FieldErrors {
+  category?: string;
+  customCategory?: string;
+  price?: string;
+  variantName?: string;
+  color?: string;
+  stock?: string;
+}
+
 const IMAGE_ACCEPT = {
   "image/jpeg": [".jpg", ".jpeg"],
   "image/png": [".png"],
@@ -57,7 +68,11 @@ export function ProductGroupForm({
 }: ProductGroupFormProps) {
   const { addToast } = useToast();
 
-  // name se mantiene internamente para edición (no se muestra en el formulario)
+  // name se mantiene internamente para edición (no se muestra en el formulario:
+  // se conserva el valor original que viene en initialValues.name y se reenvía
+  // tal cual al onSubmit). En creación queda vacío y el backend lo deriva del
+  // nombre de la primera variante.
+  const [name] = useState(initialValues.name ?? "");
   const [description, setDescription] = useState(initialValues.description ?? "");
   const [category, setCategory] = useState(initialValues.category ?? "");
   const [customCategory, setCustomCategory] = useState("");
@@ -72,6 +87,12 @@ export function ProductGroupForm({
   const [imageUrl, setImageUrl] = useState(initialValues.imageUrl ?? "");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+
+  const [errors, setErrors] = useState<FieldErrors>({});
+
+  function clearError(field: keyof FieldErrors) {
+    setErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
+  }
 
   // Cargar categorías existentes
   useEffect(() => {
@@ -103,6 +124,8 @@ export function ProductGroupForm({
       setCustomCategory("");
       setCategory(value);
     }
+    clearError("category");
+    clearError("customCategory");
   }
 
   // Upload de imagen
@@ -133,38 +156,52 @@ export function ProductGroupForm({
     }
   }, [addToast]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function validate(): FieldErrors {
+    const errs: FieldErrors = {};
 
-    const finalCategory = isCustomCategory ? customCategory.trim() : category;
-    if (!finalCategory) {
-      addToast("La categoría es obligatoria", "danger");
-      return;
+    if (isCustomCategory) {
+      if (!customCategory.trim()) errs.customCategory = "Escribe la nueva categoría";
+    } else if (!category) {
+      errs.category = "Selecciona una categoría";
     }
 
     const parsedPrice = Number(price);
     if (!Number.isInteger(parsedPrice) || parsedPrice <= 0) {
-      addToast("El precio debe ser un entero positivo", "danger");
-      return;
+      errs.price = "Debe ser un entero positivo";
     }
 
     if (!isEdit) {
-      if (!variantName.trim()) {
-        addToast("El nombre de la variante es obligatorio", "danger");
-        return;
-      }
-      if (!color.trim()) {
-        addToast("El color de la primera variante es obligatorio", "danger");
-        return;
-      }
+      if (!variantName.trim()) errs.variantName = "Escribe un nombre para la variante";
+      if (!color.trim()) errs.color = "Especifica un color";
       const parsedStock = Number(stock);
       if (!Number.isInteger(parsedStock) || parsedStock < 0) {
-        addToast("El stock debe ser un entero no negativo", "danger");
-        return;
+        errs.stock = "Debe ser un entero ≥ 0";
       }
+    }
 
+    return errs;
+  }
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+
+    const errs = validate();
+    setErrors(errs);
+    if (Object.values(errs).some(Boolean)) {
+      requestAnimationFrame(() => {
+        form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+      });
+      return;
+    }
+
+    const finalCategory = isCustomCategory ? customCategory.trim() : category;
+    const parsedPrice = Number(price);
+
+    if (!isEdit) {
+      const parsedStock = Number(stock);
       await onSubmit({
-        name: "",
+        name: name.trim(),
         description: description.trim(),
         category: finalCategory,
         price: parsedPrice,
@@ -175,7 +212,7 @@ export function ProductGroupForm({
       });
     } else {
       await onSubmit({
-        name: "",
+        name: name.trim(),
         description: description.trim(),
         category: finalCategory,
         price: parsedPrice,
@@ -186,7 +223,7 @@ export function ProductGroupForm({
   const effectiveImageUrl = imagePreview ?? imageUrl;
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} noValidate className="space-y-5">
       {/* ── Datos del grupo ── */}
       <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wide">
         Datos del producto
@@ -211,14 +248,17 @@ export function ProductGroupForm({
               ...categories.map((cat) => ({ value: cat, label: cat })),
               { value: CUSTOM_CATEGORY_VALUE, label: "Otra (escribir)..." },
             ]}
-            required
+            error={errors.category}
           />
           {isCustomCategory && (
             <Input
               value={customCategory}
-              onChange={(e) => setCustomCategory(e.currentTarget.value)}
+              onChange={(e) => {
+                setCustomCategory(e.currentTarget.value);
+                clearError("customCategory");
+              }}
               placeholder="Escribe la nueva categoría"
-              required
+              error={errors.customCategory}
             />
           )}
         </div>
@@ -226,10 +266,12 @@ export function ProductGroupForm({
         <Input
           label="Precio (ShopTokens)"
           type="number"
-          min={1}
           value={price}
-          onChange={(e) => setPrice(e.currentTarget.value)}
-          required
+          onChange={(e) => {
+            setPrice(e.currentTarget.value);
+            clearError("price");
+          }}
+          error={errors.price}
         />
       </div>
 
@@ -251,9 +293,12 @@ export function ProductGroupForm({
           <Input
             label="Nombre de la variante"
             value={variantName}
-            onChange={(e) => setVariantName(e.currentTarget.value)}
+            onChange={(e) => {
+              setVariantName(e.currentTarget.value);
+              clearError("variantName");
+            }}
             placeholder="Ej: Taza UCM Negra 370ml"
-            required
+            error={errors.variantName}
           />
 
           <div className="grid grid-cols-3 gap-4">
@@ -262,17 +307,22 @@ export function ProductGroupForm({
               <Input
                 label="Color"
                 value={color}
-                onChange={(e) => setColor(e.currentTarget.value)}
+                onChange={(e) => {
+                  setColor(e.currentTarget.value);
+                  clearError("color");
+                }}
                 placeholder="Ej: azul, negro, blanco"
-                required
+                error={errors.color}
               />
               <Input
                 label="Stock inicial"
                 type="number"
-                min={0}
                 value={stock}
-                onChange={(e) => setStock(e.currentTarget.value)}
-                required
+                onChange={(e) => {
+                  setStock(e.currentTarget.value);
+                  clearError("stock");
+                }}
+                error={errors.stock}
               />
             </div>
 
@@ -323,7 +373,7 @@ export function ProductGroupForm({
 
       {/* ── Botones ── */}
       <div className="flex gap-3 pt-2">
-        <Button type="button" variant="outline" className="flex-1" onClick={onCancel}>
+        <Button type="button" variant="danger" className="flex-1" onClick={onCancel}>
           Cancelar
         </Button>
         <Button type="submit" className="flex-1" loading={loading || uploading}>

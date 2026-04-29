@@ -3,7 +3,7 @@
 import { useToast } from "@/hooks/useToast";
 import { Toast } from "./Toast";
 
-const TOAST_DURATION = 10_000;
+const TOAST_DURATION = 5_000;
 
 export function ToastContainer() {
   const { toasts, removeToast } = useToast();

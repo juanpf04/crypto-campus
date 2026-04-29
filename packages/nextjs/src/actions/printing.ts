@@ -92,7 +92,7 @@ async function getUserAddressById(userId: string): Promise<string> {
 
 /**
  * Lee los créditos disponibles de una dirección Ethereum en el contrato Printer.
- * @returns Créditos como bigint (o -1 si no es estudiante).
+ * @returns Créditos como bigint (o -1 si no está registrado como estudiante o profesor).
  */
 async function readCredits(address: string): Promise<bigint> {
 	try {
@@ -395,9 +395,9 @@ export async function getMyPrinterCredits() {
 }
 
 /**
- * Obtiene los créditos de impresión de un estudiante (solo admin).
- * @param userId ID del estudiante en la BD.
- * @returns Dirección del estudiante, créditos disponibles, e indicador si es estudiante.
+ * Obtiene los créditos de impresión de un estudiante o profesor (solo admin).
+ * @param userId ID del usuario (alumno o profesor) en la BD.
+ * @returns Dirección, créditos disponibles, e indicador si es estudiante/profesor (créditos >= 0).
  */
 export async function getStudentPrinterCredits(userId: string) {
 	const session = await getSession();
@@ -419,10 +419,11 @@ export async function getStudentPrinterCredits(userId: string) {
 }
 
 /**
- * Asigna una cantidad de créditos a un estudiante (solo admin).
+ * Asigna una cantidad de créditos a un estudiante o profesor (solo admin).
  * Escribe en el contrato Printer y aguarda confirmación de la transacción.
+ * El contrato revierte si el usuario no es estudiante ni profesor.
  *
- * @param userId ID del estudiante en la BD.
+ * @param userId ID del usuario (alumno o profesor) en la BD.
  * @param credits Cantidad exacta de créditos a asignar.
  * @returns Hash de la transacción, ID del usuario, dirección y créditos actualizados.
  */

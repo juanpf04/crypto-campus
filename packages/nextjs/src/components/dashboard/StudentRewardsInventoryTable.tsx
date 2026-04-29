@@ -32,6 +32,14 @@ export interface InventoryRewardEntry {
   pending: number;
   approved: number;
   available: number;
+  /** Info del offering al que pertenece la recompensa (vista global). */
+  offeringId?: string;
+  subjectCode?: string;
+  subjectName?: string;
+  group?: string;
+  academicYear?: string;
+  professorId?: string;
+  professorName?: string;
 }
 
 export interface InventoryStudentRow {
@@ -170,6 +178,12 @@ function StudentInventoryRow({ student, isOpen, onToggle }: StudentInventoryRowP
                           {r.description && (
                             <p className="text-xs text-text-muted truncate max-w-[260px]">
                               {r.description}
+                            </p>
+                          )}
+                          {r.subjectCode && r.group && (
+                            <p className="text-xs text-text-muted mt-0.5">
+                              {r.subjectCode} · {r.group}
+                              {r.professorName && <> · Prof. {r.professorName}</>}
                             </p>
                           )}
                         </TableCell>

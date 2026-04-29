@@ -71,7 +71,7 @@ export function RewardForm({
   });
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
       <Input
         label="Nombre de la recompensa"
         placeholder="Ej: Punto extra en examen"

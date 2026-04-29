@@ -159,7 +159,7 @@ export default function AdminLibraryTokensPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Button variant="outline" size="sm" onClick={() => openEdit(student)}>
+                    <Button variant="primary" size="sm" onClick={() => openEdit(student)}>
                       Modificar
                     </Button>
                   </TableCell>
@@ -178,7 +178,7 @@ export default function AdminLibraryTokensPage() {
         <div className="flex flex-col gap-4">
           <p className="text-sm text-text-muted">
             Introduce la nueva cantidad de Tokens de Préstamo para este estudiante.
-            Solo se pueden añadir tokens (mintear), no reducir el balance.
+            Puedes poner 0 para quitarle todos los tokens.
           </p>
           <Input
             label="Nuevos tokens"
@@ -188,7 +188,7 @@ export default function AdminLibraryTokensPage() {
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewAmount(e.target.value)}
           />
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setEditStudent(null)}>Cancelar</Button>
+            <Button variant="danger" onClick={() => setEditStudent(null)} disabled={saving}>Cancelar</Button>
             <Button loading={saving} onClick={handleSave}>Guardar</Button>
           </div>
         </div>

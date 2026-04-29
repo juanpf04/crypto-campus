@@ -256,11 +256,19 @@ export default function AdminDashboard() {
       {/* ── Gestión por dominio ── */}
       <section className="space-y-4">
         <SectionTitle icon={icons.items}>Gestión</SectionTitle>
+
+        {/* Usuarios — fila ancha al principio */}
+        <Card className="overflow-hidden p-0">
+          <ActionRow href="/admin/users" icon={icons.users} title="Usuarios" description="Gestionar cuentas y roles" stat={`${uc?.total ?? "—"} total`} />
+          <ActionRow href="/admin/users/new" icon={icons.student} title="Crear usuario" description="Añadir nueva cuenta" stat="" isLast />
+        </Card>
+
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {/* Usuarios */}
+          {/* Impresión */}
           <Card className="overflow-hidden p-0">
-            <ActionRow href="/admin/users" icon={icons.users} title="Usuarios" description="Gestionar cuentas y roles" stat={`${uc?.total ?? "—"} total`} />
-            <ActionRow href="/admin/users/new" icon={icons.student} title="Crear usuario" description="Añadir nueva cuenta" stat="" isLast />
+            <ActionRow href="/admin/printing/printers" icon={icons.print} title="Impresoras" description="Gestionar impresoras físicas" stat={`${activePrinters} activas`} />
+            <ActionRow href="/admin/printing/logs" icon={icons.history} title="Historial de impresiones" description="Ver todas las impresiones" stat={`${totalPrintLogs} registros`} />
+            <ActionRow href="/admin/printing/print" icon={icons.file} title="Imprimir" description="Imprimir un documento" stat="" isLast />
           </Card>
 
           {/* Biblioteca */}
@@ -282,12 +290,6 @@ export default function AdminDashboard() {
             <ActionRow href="/admin/subjects" icon={icons.items} title="Asignaturas del campus" description="Ofertas impartidas y catálogo" stat={`${bs?.totalSubjectBadges ?? "—"} con insignia`} />
             <ActionRow href="/admin/rewards" icon={icons.reward} title="Recompensas" description="Todas las recompensas del sistema" stat={`${bs?.totalRewards ?? "—"} total`} />
             <ActionRow href="/admin/use-requests" icon={icons.pending} title="Solicitudes" description="Aprobar/rechazar canjes" stat={`${bs?.pendingRequests ?? "—"} pendientes`} isLast />
-          </Card>
-
-          {/* Impresión */}
-          <Card className="overflow-hidden p-0 lg:col-span-2">
-            <ActionRow href="/admin/printing/printers" icon={icons.print} title="Impresoras" description="Gestionar impresoras físicas" stat={`${activePrinters} activas`} />
-            <ActionRow href="/admin/printing/logs" icon={icons.history} title="Historial de impresiones" description="Ver todas las impresiones" stat={`${totalPrintLogs} registros`} isLast />
           </Card>
         </div>
       </section>

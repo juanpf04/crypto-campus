@@ -1,9 +1,13 @@
 /**
  * seed-rooms.mjs — Carga las salas de estudio por defecto.
  *
- * Idempotente: limpia y recrea salas en cada arranque (blockchain se reinicia).
+ * Idempotente:
+ *   - Si Prisma ya tiene N salas (N === JSON.length), salta sin tocar nada.
+ *   - Si tanto Prisma como blockchain están vacíos, crea todo (write a chain + Prisma).
+ *   - Si solo uno de los dos lados tiene datos, avisa de estado inconsistente
+ *     y pide `pnpm reset:all` — no intenta rehidratar.
  *
- * Pasos por cada sala del JSON:
+ * Pasos por cada sala del JSON (cuando hay que crear):
  * 1. Llama a RoomBooking.addRoom(capacity) → obtiene roomId on-chain
  * 2. Crea el registro en Prisma (Room) con metadatos
  *
@@ -26,6 +30,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const cyan = (s) => `\x1b[36m${s}\x1b[0m`;
 const green = (s) => `\x1b[32m${s}\x1b[0m`;
 const yellow = (s) => `\x1b[33m${s}\x1b[0m`;
+const red = (s) => `\x1b[31m${s}\x1b[0m`;
 
 function log(msg) {
   console.log(`${cyan("[seed-rooms]")} ${msg}`);
@@ -90,13 +95,37 @@ async function main() {
       readFileSync(resolve(__dirname, "../prisma/seed-rooms.json"), "utf-8")
     );
 
-    log(`Sincronizando ${roomsJson.length} sala(s)...`);
+    const expected = roomsJson.length;
+    const actual = await prisma.room.count();
 
-    // Limpiar reservas y salas anteriores
-    const deletedBookings = await prisma.roomBooking.deleteMany({});
-    const deletedRooms = await prisma.room.deleteMany({});
-    if (deletedRooms.count > 0) {
-      log(yellow(`  ⚠ Limpiadas ${deletedRooms.count} sala(s) y ${deletedBookings.count} reserva(s) huérfanas`));
+    // ── Detección de estado y bifurcación de idempotencia ──
+    if (actual === expected) {
+      log(green(`Ya sincronizado (${actual} salas). Saltando.`));
+      return;
+    }
+
+    let nextRoomId;
+    try {
+      const next = await publicClient.readContract({
+        address: ROOM_BOOKING_ADDRESS,
+        abi: ROOM_BOOKING_ABI,
+        functionName: "nextRoomId",
+      });
+      nextRoomId = Number(next);
+    } catch {
+      log(red("  ✗ No se pudo leer nextRoomId on-chain. ¿Está el nodo arriba?"));
+      return;
+    }
+
+    const chainVirgin = nextRoomId === 1;
+
+    if (actual === 0 && chainVirgin) {
+      log(`Sincronizando ${expected} sala(s) desde cero...`);
+      // continúa al bloque de creación abajo
+    } else {
+      log(red(`  ✗ Estado inconsistente: Prisma tiene ${actual} sala(s), blockchain ${nextRoomId - 1}.`));
+      log(red(`    Esperado: ambos vacíos o ambos con ${expected}. Ejecuta 'pnpm reset:all' y vuelve a intentar.`));
+      return;
     }
 
     let created = 0;

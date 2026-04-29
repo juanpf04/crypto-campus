@@ -5,9 +5,14 @@
  *
  * Encapsula Card + título + Recharts PieChart con leyenda lateral.
  * Toma un colorMap para asignar colores por valor de `nameKey`.
+ *
+ * Sustituimos `ResponsiveContainer` por un `ResizeObserver` propio para
+ * evitar el warning de Recharts "width(-1) and height(-1)..." que aparece
+ * cuando el contenedor todavía no se ha medido en el primer render.
  */
 
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
+import { useEffect, useRef, useState } from "react";
+import { PieChart, Pie, Cell, Tooltip } from "recharts";
 import { Card } from "@/components/ui/Card";
 
 interface PieDataPoint {
@@ -35,14 +40,34 @@ export function DashboardPieChart({
   emptyMessage = "No hay datos",
   unitLabel = "",
 }: DashboardPieChartProps) {
+  const hasData = data.length > 0;
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dims, setDims] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setDims({ width: rect.width, height: rect.height });
+      }
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [hasData]);
+
   return (
     <Card className="space-y-3">
       <h3 className="font-medium text-text">{title}</h3>
-      {data.length > 0 ? (
+      {hasData ? (
         <div className="flex items-center gap-6">
-          <div className="h-48 w-48 shrink-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
+          <div ref={containerRef} className="h-48 w-48 shrink-0">
+            {dims.width > 0 && dims.height > 0 && (
+              <PieChart width={dims.width} height={dims.height}>
                 <Pie
                   data={data}
                   dataKey={dataKey}
@@ -68,7 +93,7 @@ export function DashboardPieChart({
                   }}
                 />
               </PieChart>
-            </ResponsiveContainer>
+            )}
           </div>
           <div className="space-y-2 flex-1">
             {data.map((entry, i) => {

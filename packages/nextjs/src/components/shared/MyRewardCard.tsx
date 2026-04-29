@@ -9,6 +9,7 @@
 import { useState } from "react";
 import type { RewardCategory } from "@prisma/client";
 import { Card } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { RewardCategoryIcon, getCategoryLabel } from "@/components/shared/RewardCategoryIcon";
 
@@ -20,6 +21,8 @@ interface MyRewardCardProps {
   available: number;
   pending: number;
   approved: number;
+  /** Si se pasa, muestra la asignatura (útil cuando se ven todas mezcladas). */
+  subjectName?: string;
   onRequestUse: (quantity: number) => Promise<void>;
   processing?: boolean;
 }
@@ -31,6 +34,7 @@ export function MyRewardCard({
   available,
   pending,
   approved,
+  subjectName,
   onRequestUse,
   processing,
 }: MyRewardCardProps) {
@@ -63,34 +67,41 @@ export function MyRewardCard({
         <p className="text-sm text-text-muted line-clamp-2">{description}</p>
       )}
 
-      <div className="grid grid-cols-3 gap-2 rounded-lg bg-bg border border-border-default p-2.5 text-center">
+      {subjectName && (
         <div>
-          <p className="text-xl font-bold text-success leading-none">{available}</p>
-          <p className="text-[11px] text-text-muted mt-1">Disponibles</p>
+          <Badge variant="neutral">{subjectName}</Badge>
         </div>
-        <div className="border-x border-border-default">
-          <p className="text-xl font-bold text-warning leading-none">{pending}</p>
-          <p className="text-[11px] text-text-muted mt-1">Pendientes</p>
-        </div>
-        <div>
-          <p className="text-xl font-bold text-text-muted leading-none">{approved}</p>
-          <p className="text-[11px] text-text-muted mt-1">Usadas</p>
-        </div>
-      </div>
+      )}
 
-      {!pickerOpen ? (
-        <Button
-          size="sm"
-          className="mt-auto w-full"
-          onClick={openPicker}
-          disabled={!canRequest}
-        >
-          {available === 0
-            ? (pending > 0 ? "Ya has solicitado todas" : "Sin tokens disponibles")
-            : "Solicitar uso"}
-        </Button>
-      ) : (
-        <div className="mt-auto space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
+      <div className="mt-auto flex flex-col gap-2">
+        <div className="grid grid-cols-3 gap-2 rounded-lg bg-bg border border-border-default p-2.5 text-center">
+          <div>
+            <p className="text-xl font-bold text-success leading-none">{available}</p>
+            <p className="text-[11px] text-text-muted mt-1">Disponibles</p>
+          </div>
+          <div className="border-x border-border-default">
+            <p className="text-xl font-bold text-warning leading-none">{pending}</p>
+            <p className="text-[11px] text-text-muted mt-1">Pendientes</p>
+          </div>
+          <div>
+            <p className="text-xl font-bold text-text-muted leading-none">{approved}</p>
+            <p className="text-[11px] text-text-muted mt-1">Usadas</p>
+          </div>
+        </div>
+
+        {!pickerOpen ? (
+          <Button
+            size="sm"
+            className="w-full"
+            onClick={openPicker}
+            disabled={!canRequest}
+          >
+            {available === 0
+              ? (pending > 0 ? "Ya has solicitado todas" : "Sin tokens disponibles")
+              : "Solicitar uso"}
+          </Button>
+        ) : (
+          <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
           <div className="flex items-center justify-between gap-2">
             <label className="text-xs font-medium text-text">Cantidad a solicitar</label>
             <select
@@ -110,7 +121,7 @@ export function MyRewardCard({
           <div className="flex gap-2">
             <Button
               size="sm"
-              variant="ghost"
+              variant="danger"
               className="flex-1"
               onClick={() => setPickerOpen(false)}
               disabled={processing}
@@ -128,6 +139,7 @@ export function MyRewardCard({
           </div>
         </div>
       )}
+      </div>
     </Card>
   );
 }

@@ -137,7 +137,7 @@ export function PurchaseConfirmModal({
         {/* ── Botones ── */}
         <div className="flex gap-3 pt-2">
           <Button
-            variant="outline"
+            variant="danger"
             onClick={onClose}
             disabled={loading}
             className="flex-1"

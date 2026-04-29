@@ -59,7 +59,7 @@ export function ProductForm({ onSubmit, initialValues, isEdit }: ProductFormProp
   });
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
       <Input
         label="Nombre del producto"
         placeholder="Ej: Camiseta UCM Blanca"

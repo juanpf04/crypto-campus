@@ -47,7 +47,7 @@ export function InactiveAlert({
       {onAction && (
         <Button
           size="sm"
-          variant="primary"
+          variant="success"
           onClick={onAction}
           loading={loading}
           className="shrink-0"

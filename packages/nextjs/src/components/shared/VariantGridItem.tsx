@@ -78,7 +78,7 @@ export function VariantGridItem({
       <p className="text-sm font-medium text-text text-center line-clamp-2 mb-1">{name}</p>
       <div className="flex items-center justify-center gap-2 mb-2">
         <span
-          className="inline-block h-3 w-3 rounded-full border border-border-default"
+          className="inline-block h-3 w-3 rounded-full border border-border-swatch"
           style={{ backgroundColor: colorToHex(color || "default") }}
         />
         <span className="text-xs text-text-muted">{color || "—"}</span>
@@ -91,11 +91,11 @@ export function VariantGridItem({
 
       {/* Acciones rápidas */}
       <div className="flex gap-2 mt-3" onClick={(e) => e.stopPropagation()}>
-        <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={onEdit}>
+        <Button variant="secondary" size="sm" className="flex-1 text-xs" onClick={onEdit}>
           Editar
         </Button>
         <Button
-          variant={active ? "danger" : "primary"}
+          variant={active ? "danger" : "success"}
           size="sm"
           className="flex-1 text-xs"
           onClick={onToggleActive}

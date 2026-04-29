@@ -45,7 +45,7 @@ export function RoomForm({ onSubmit, initialValues, isEdit }: RoomFormProps) {
   });
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
       <Input
         label="Nombre de la sala"
         placeholder="Ej: Sala de Estudio A"
