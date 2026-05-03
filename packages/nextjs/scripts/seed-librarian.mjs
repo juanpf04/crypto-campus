@@ -114,6 +114,18 @@ const adminWalletClient = createWalletClient({
   transport: http("http://127.0.0.1:8545"),
 });
 
+/**
+ * Espera el receipt y lanza si la tx revirtió. Sin esto, una tx revertida
+ * deja huérfana la fila Prisma posterior porque viem NO lanza por sí solo.
+ */
+async function txWaitOrThrow(hash, label = "tx") {
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  if (receipt.status !== "success") {
+    throw new Error(`${label} revertida (hash=${hash})`);
+  }
+  return receipt;
+}
+
 // ── Datos del librarian por defecto ──
 const LIBRARIAN_EMAIL = "librarian@ucm.es";
 const LIBRARIAN_PASSWORD = "Admin^12";
@@ -150,7 +162,7 @@ async function main() {
       to: account.address,
       value: parseEther("10"),
     });
-    await publicClient.waitForTransactionReceipt({ hash: fundHash });
+    await txWaitOrThrow(fundHash, "fund librarian wallet");
 
     // 6. Registrar en CampusRoles con LIBRARIAN_ROLE
     const regHash = await adminWalletClient.writeContract({
@@ -159,7 +171,7 @@ async function main() {
       functionName: "registerUser",
       args: [account.address, LIBRARIAN_NAME, LIBRARIAN_ROLE_HASH],
     });
-    await publicClient.waitForTransactionReceipt({ hash: regHash });
+    await txWaitOrThrow(regHash, "registerUser librarian");
 
     // 7. Guardar en PostgreSQL
     await prisma.user.create({

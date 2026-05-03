@@ -5,7 +5,7 @@
  *   - Si Prisma ya tiene N productos (N === JSON.length), salta sin tocar nada.
  *   - Si tanto Prisma como blockchain están vacíos, crea todo (write a chain + Prisma).
  *   - Si Prisma está vacío pero blockchain tiene productos (o viceversa), avisa
- *     de estado inconsistente y pide `pnpm reset:all` — no intenta rehidratar.
+ *     de estado inconsistente y pide `pnpm dev:new` — no intenta rehidratar.
  *
  * Pasos por cada producto del JSON (cuando hay que crear):
  * 1. Llama a CampusShop.addProduct(price, stock) → obtiene productId on-chain
@@ -106,14 +106,9 @@ async function main() {
     const expected = productsJson.length;
     const actual = await prisma.product.count();
 
-    // ── Detección de estado y bifurcación de idempotencia ──
-    // Caso 1: Prisma ya tiene exactamente lo que el JSON espera → no hacer nada.
-    if (actual === expected) {
-      log(green(`Ya sincronizado (${actual} productos). Saltando.`));
-      return;
-    }
-
-    // Leer el contador on-chain para distinguir "todo vacío" vs "estado inconsistente".
+    // Leer el contador on-chain. Lo que importa es comparar Prisma con la
+    // chain, no con el JSON: un usuario puede haber añadido productos via UI
+    // posteriormente, en cuyo caso Prisma > expected pero sigue todo en sync.
     let nextProductId;
     try {
       const next = await publicClient.readContract({
@@ -126,18 +121,26 @@ async function main() {
       log(red("  ✗ No se pudo leer nextProductId on-chain. ¿Está el nodo arriba?"));
       return;
     }
+    const chainCount = nextProductId - 1;
 
-    const chainVirgin = nextProductId === 1;
+    // ── Detección de estado y bifurcación de idempotencia ──
+    // Caso 1: Prisma y chain en sync, con al menos los del seed → todo bien.
+    if (actual === chainCount && actual >= expected) {
+      const extras = actual - expected;
+      const detail = extras > 0 ? ` · ${extras} añadido(s) por uso` : "";
+      log(green(`Ya sincronizado (${actual} productos${detail}). Saltando.`));
+      return;
+    }
 
-    // Caso 2: Prisma vacío + chain virgen → crear todo desde cero.
-    if (actual === 0 && chainVirgin) {
+    // Caso 2: ambos a cero → seed inicial.
+    if (actual === 0 && chainCount === 0) {
       log(`Sincronizando ${expected} producto(s) de catálogo desde cero...`);
       // continúa al bloque de creación abajo
     }
-    // Caso 3: cualquier otra combinación → estado inconsistente, no tocar nada.
+    // Caso 3: drift real (Prisma y chain no coinciden, o ambos están a medio camino).
     else {
-      log(red(`  ✗ Estado inconsistente: Prisma tiene ${actual} producto(s), blockchain ${nextProductId - 1}.`));
-      log(red(`    Esperado: ambos vacíos o ambos con ${expected}. Ejecuta 'pnpm reset:all' y vuelve a intentar.`));
+      log(red(`  ✗ Estado inconsistente: Prisma tiene ${actual} producto(s), blockchain ${chainCount}.`));
+      log(red(`    Ejecuta 'pnpm db:doctor' para diagnosticar.`));
       return;
     }
 

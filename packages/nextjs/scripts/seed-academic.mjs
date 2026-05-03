@@ -139,6 +139,18 @@ const ADMIN_PRIVATE_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae7
 const adminAccount = privateKeyToAccount(ADMIN_PRIVATE_KEY);
 const adminWalletClient = createWalletClient({ account: adminAccount, chain: hardhat, transport: http("http://127.0.0.1:8545") });
 
+/**
+ * Espera el receipt y lanza si la tx revirtió. Sin esto, una tx revertida
+ * deja huérfana la fila Prisma posterior porque viem NO lanza por sí solo.
+ */
+async function txWaitOrThrow(hash, label = "tx") {
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  if (receipt.status !== "success") {
+    throw new Error(`${label} revertida (hash=${hash})`);
+  }
+  return receipt;
+}
+
 const DEFAULT_PASSWORD = "Admin^12";
 
 /**
@@ -164,7 +176,7 @@ async function ensureSubjectBadge(prisma, offeringId) {
     functionName: "createSubjectBadge",
     args: [],
   });
-  await publicClient.waitForTransactionReceipt({ hash });
+  await txWaitOrThrow(hash, "createSubjectBadge");
 
   return prisma.subjectBadge.create({
     data: { tokenId, subjectOfferingId: offeringId, txHash: hash },
@@ -188,7 +200,7 @@ async function createSeedReward(prisma, subjectBadge, professorId, template) {
     functionName: "createReward",
     args: [BigInt(subjectBadge.tokenId), BigInt(template.badgeCost), BigInt(template.supply)],
   });
-  await publicClient.waitForTransactionReceipt({ hash });
+  await txWaitOrThrow(hash, "createReward");
 
   return prisma.reward.create({
     data: {
@@ -219,21 +231,21 @@ async function createUser(prisma, { email, name, role }) {
 
   // Fondear wallet
   const fundHash = await adminWalletClient.sendTransaction({ to: account.address, value: parseEther("10") });
-  await publicClient.waitForTransactionReceipt({ hash: fundHash });
+  await txWaitOrThrow(fundHash, "fund wallet");
 
   // Registrar on-chain
   const regHash = await adminWalletClient.writeContract({
     address: ADDRESSES.campusRoles, abi: CAMPUS_ABI, functionName: "registerUser",
     args: [account.address, name, ROLE_HASHES[role]],
   });
-  await publicClient.waitForTransactionReceipt({ hash: regHash });
+  await txWaitOrThrow(regHash, "registerUser");
 
   // Mintear LibraryTokens iniciales (depósito para préstamos)
   const libHash = await adminWalletClient.writeContract({
     address: ADDRESSES.libraryToken, abi: LIBRARY_TOKEN_ABI, functionName: "mint",
     args: [account.address, 10n],
   });
-  await publicClient.waitForTransactionReceipt({ hash: libHash });
+  await txWaitOrThrow(libHash, "mint LibraryToken");
 
   // No minteamos ShopTokens al crear usuarios: se ganan usando la app
   // (sistema de recompensas en ShopTokenReward). Empiezan con balance 0.

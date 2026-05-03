@@ -5,7 +5,7 @@
  *   - Si Prisma ya tiene N salas (N === JSON.length), salta sin tocar nada.
  *   - Si tanto Prisma como blockchain están vacíos, crea todo (write a chain + Prisma).
  *   - Si solo uno de los dos lados tiene datos, avisa de estado inconsistente
- *     y pide `pnpm reset:all` — no intenta rehidratar.
+ *     y pide `pnpm dev:new` — no intenta rehidratar.
  *
  * Pasos por cada sala del JSON (cuando hay que crear):
  * 1. Llama a RoomBooking.addRoom(capacity) → obtiene roomId on-chain
@@ -98,12 +98,9 @@ async function main() {
     const expected = roomsJson.length;
     const actual = await prisma.room.count();
 
-    // ── Detección de estado y bifurcación de idempotencia ──
-    if (actual === expected) {
-      log(green(`Ya sincronizado (${actual} salas). Saltando.`));
-      return;
-    }
-
+    // Leer el contador on-chain. Lo que importa es comparar Prisma con la
+    // chain, no con el JSON: un usuario puede haber añadido salas via UI
+    // posteriormente, en cuyo caso Prisma > expected pero sigue todo en sync.
     let nextRoomId;
     try {
       const next = await publicClient.readContract({
@@ -116,15 +113,26 @@ async function main() {
       log(red("  ✗ No se pudo leer nextRoomId on-chain. ¿Está el nodo arriba?"));
       return;
     }
+    const chainCount = nextRoomId - 1;
 
-    const chainVirgin = nextRoomId === 1;
+    // ── Detección de estado y bifurcación de idempotencia ──
+    // Caso 1: Prisma y chain en sync, con al menos los del seed → todo bien.
+    if (actual === chainCount && actual >= expected) {
+      const extras = actual - expected;
+      const detail = extras > 0 ? ` · ${extras} añadida(s) por uso` : "";
+      log(green(`Ya sincronizado (${actual} salas${detail}). Saltando.`));
+      return;
+    }
 
-    if (actual === 0 && chainVirgin) {
+    // Caso 2: ambos a cero → seed inicial.
+    if (actual === 0 && chainCount === 0) {
       log(`Sincronizando ${expected} sala(s) desde cero...`);
       // continúa al bloque de creación abajo
-    } else {
-      log(red(`  ✗ Estado inconsistente: Prisma tiene ${actual} sala(s), blockchain ${nextRoomId - 1}.`));
-      log(red(`    Esperado: ambos vacíos o ambos con ${expected}. Ejecuta 'pnpm reset:all' y vuelve a intentar.`));
+    }
+    // Caso 3: drift real (Prisma y chain no coinciden, o ambos están a medio camino).
+    else {
+      log(red(`  ✗ Estado inconsistente: Prisma tiene ${actual} sala(s), blockchain ${chainCount}.`));
+      log(red(`    Ejecuta 'pnpm db:doctor' para diagnosticar.`));
       return;
     }
 

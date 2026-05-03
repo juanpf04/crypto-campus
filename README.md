@@ -105,11 +105,12 @@ Al cambiar de motor ejecuta `pnpm reset:all` para evitar divergencia entre el es
 | Escenario | Comando |
 |---|---|
 | Día a día (estado persistido con Anvil) | `pnpm dev` |
-| Primer arranque o reinstalación | `pnpm install && pnpm dev:fresh` |
-| He tocado un contrato `.sol` | `pnpm compile && pnpm dev:fresh` |
-| He tocado `schema.prisma` con cambio destructivo | `pnpm dev:fresh` |
-| Compañero clonó el repo | `pnpm install && pnpm dev` |
+| Primer arranque o reinstalación | `pnpm install && pnpm dev:new` |
+| He tocado un contrato `.sol` | `pnpm compile && pnpm dev:new` |
+| He tocado `schema.prisma` con cambio destructivo | `pnpm dev:new` |
+| Compañero clonó el repo | `pnpm install && pnpm dev:new` |
 | Re-ejecutar seeds sin reiniciar | `pnpm db:seed` |
+| Diagnosticar drift Prisma↔chain | `pnpm db:doctor` |
 
 ## Estructura del proyecto
 
@@ -208,11 +209,12 @@ SESSION_SECRET="tu-secreto-local-de-al-menos-32-caracteres"
 
 | Comando | Descripción |
 |---|---|
-| `pnpm dev` | Stack completo con **Anvil por defecto** (estado persistente) |
+| `pnpm dev` | Stack completo con **Anvil por defecto** (estado persistente). Arranque rápido: NO ejecuta seeds ni resync. ~4-5s. |
 | `pnpm dev:hardhat` | Igual pero fuerza **Hardhat node** (volátil) |
-| `pnpm dev:fresh` | `pnpm dev` empezando de cero: resetea BD + borra estado blockchain |
+| `pnpm dev:new` | **Empezar de cero**: resetea BD + estado blockchain, redespliega contratos y ejecuta resync + todos los seeds. Úsalo en primer arranque, tras tocar contratos o schema, o cuando quieras un estado limpio. |
 | `pnpm dev:next` | Solo Next.js (requiere que el nodo ya esté arriba) |
 | `pnpm db:seed` | Re-ejecuta todos los seeds (idempotentes) sin reiniciar |
+| `pnpm db:doctor` | Diagnostica drift entre Prisma y blockchain. Lista filas huérfanas si las hay. |
 
 ### Reset
 
@@ -233,7 +235,7 @@ SESSION_SECRET="tu-secreto-local-de-al-menos-32-caracteres"
 | `pnpm run db:studio` | Abre [Prisma Studio](https://www.prisma.io/studio) en `http://localhost:5555` |
 
 > [!WARNING]
-> `pnpm run db:reset` / `pnpm dev:fresh` borran **todos** los datos de la BD. Úsalos solo en local cuando necesites empezar desde cero.
+> `pnpm run db:reset` / `pnpm dev:new` borran **todos** los datos de la BD. Úsalos solo en local cuando necesites empezar desde cero.
 
 ### Smart Contracts
 
@@ -271,13 +273,16 @@ Docker Desktop no está corriendo. Ábrelo y espera a que el icono de la bandeja
 No tienes Foundry instalado. Instálalo con `curl -L https://foundry.paradigm.xyz | bash && foundryup` (Git Bash en Windows) o ejecuta `pnpm dev:hardhat` para usar Hardhat en su lugar.
 
 **La DApp arranca pero muestra "No autenticado" al loguear**
-La BD está vacía o no tiene el admin semilla. Ejecuta `pnpm db:seed` o `pnpm dev:fresh` para repoblar.
+La BD está vacía o no tiene el admin semilla. Ejecuta `pnpm db:seed` o `pnpm dev:new` para repoblar.
 
 **Transacciones on-chain fallan con "insufficient funds"**
-Tu estado de Anvil está desincronizado con Prisma (p. ej. reinstalaste dependencias sin `pnpm reset:all`). Ejecuta `pnpm reset:all` y luego `pnpm dev`.
+Tu estado de Anvil está desincronizado con Prisma (p. ej. reinstalaste dependencias sin reset). Ejecuta `pnpm dev:new` para empezar de cero con todo sincronizado.
 
 **Cambié un contrato y `pnpm dev` no lo recoge**
-Los contratos ya desplegados no se redespliegan automáticamente. Ejecuta `pnpm compile && pnpm dev:fresh` para forzar redeploy.
+Los contratos ya desplegados no se redespliegan automáticamente. Ejecuta `pnpm compile && pnpm dev:new` para forzar redeploy + reseed.
+
+**Veo "Estado inconsistente: Prisma tiene N, blockchain M" en los seeds**
+Hay drift real entre BD y blockchain. Ejecuta `pnpm db:doctor` (con el nodo arriba) para identificar las filas huérfanas. Si el drift es real y no recuperable, `pnpm dev:new` te deja en un estado limpio.
 
 **Puerto 5435 ocupado al arrancar Docker**
 Otra instancia de PostgreSQL está corriendo. Para la local con `pnpm run db:down` y luego `pnpm dev`.

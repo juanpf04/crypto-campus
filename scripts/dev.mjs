@@ -13,12 +13,16 @@
  * Con Anvil el estado blockchain persiste entre reinicios (.anvil-state.json).
  * Con Hardhat el estado se pierde al parar (comportamiento histórico).
  *
+ * Por defecto NO ejecuta seeds ni resync (arranque rápido, ~4-5s) porque los
+ * seeds son idempotentes y solo aportan valor cuando hay reset previo. Para
+ * empezar desde cero (limpiar BD + chain + reseed) usa --new; para resembrar
+ * ad-hoc sin reset usa `pnpm db:seed`.
+ *
  * Flags:
  *   --hardhat | --anvil  Fuerza motor blockchain (default: anvil)
- *   --fresh              Resetea BD + estado blockchain antes de arrancar
- *                        (equivalente a 'reset:all' pero Postgres ya estará arriba)
- *   --skip-seed          Salta resync de usuarios y todos los seeds (arranca solo
- *                        Postgres + nodo + Next.js, asumiendo que la BD ya está OK)
+ *   --new                Empieza desde cero: borra .anvil-state.json,
+ *                        deployments, resetea BD, redespliega contratos y
+ *                        ejecuta resync + todos los seeds.
  *
  * Uso: node scripts/dev.mjs (o pnpm dev)
  */
@@ -65,8 +69,12 @@ const BLOCKCHAIN_NODE = resolveBlockchainNode();
 const ANVIL_STATE_FILE = resolve(ROOT, ".anvil-state.json");
 const DEPLOYMENTS_DIR = resolve(HARDHAT_DIR, "ignition/deployments");
 
-const FRESH = process.argv.includes("--fresh");
-const SKIP_SEED = process.argv.includes("--skip-seed");
+// `--new` = arranque limpio: borra estado de chain + BD, redespliega
+// contratos y ejecuta resync + seeds. En el día a día (sin --new) no
+// se ejecutan seeds — son idempotentes y solo aportarían "verificar
+// sincronía", trabajo que puedes hacer puntualmente con `pnpm db:doctor`.
+const IS_NEW = process.argv.includes("--new");
+const RUN_SEEDS = IS_NEW;
 
 // Colores para la consola
 const cyan = (s) => `\x1b[36m${s}\x1b[0m`;
@@ -240,7 +248,12 @@ async function ensurePrismaClient() {
 	await run("pnpm", ["run", "db:generate"], { cwd: NEXTJS_DIR, prefix: "[prisma]", quiet: true });
 }
 
-async function resetFreshState() {
+/**
+ * Borra estado de blockchain (anvil-state.json + deployments) y resetea Postgres.
+ * Solo se invoca con --new. El nodo Anvil aún no está corriendo en este punto,
+ * así que el siguiente paso (startAnvil) arrancará con cadena virgen.
+ */
+async function resetAllState() {
 	const removed = [];
 	if (existsSync(ANVIL_STATE_FILE)) {
 		rmSync(ANVIL_STATE_FILE, { force: true });
@@ -410,13 +423,12 @@ async function deployContracts() {
 
 // Calcular total de steps según flags
 totalSteps = 5; // postgres + prisma-gen + schema + node + (deploy o "ya desplegados")
-if (FRESH) totalSteps += 1; // reset
-if (!SKIP_SEED) totalSteps += 2; // resync + seed-completo (admin va dentro de seed)
+if (IS_NEW) totalSteps += 1; // reset
+if (RUN_SEEDS) totalSteps += 2; // resync + seed-completo (admin va dentro de seed)
 
 const flags = [
 	BLOCKCHAIN_NODE === "anvil" ? "anvil (persistente)" : "hardhat (volátil)",
-	FRESH ? "fresh" : null,
-	SKIP_SEED ? "skip-seed" : null,
+	IS_NEW ? "new (con seeds)" : "fast (sin seeds)",
 ].filter(Boolean).join(" · ");
 log(dim(`Modo: ${flags}`));
 console.log("");
@@ -427,9 +439,9 @@ await step("PostgreSQL", ensureDatabase);
 // 2. Prisma generate
 await step("Prisma generate", ensurePrismaClient);
 
-// 3. (opcional) Reset si --fresh
-if (FRESH) {
-	await step("Reset BD + blockchain", resetFreshState);
+// 3. (opcional) Reset si --new
+if (IS_NEW) {
+	await step("Reset BD + blockchain", resetAllState);
 }
 
 // 4. Schema sync
@@ -468,10 +480,10 @@ await step("Contratos desplegados", async () => {
 	return "ya desplegados, saltando";
 });
 
-// 7-8. Resync + Seeds (saltable con --skip-seed)
-// El admin se crea como primer sub-seed dentro del master seed (`seed.mjs`),
-// no necesita un step separado.
-if (!SKIP_SEED) {
+// 7-8. Resync + Seeds (solo con --new; en el día a día se omiten para que
+// `pnpm dev` sea rápido. El admin se crea como primer sub-seed del master
+// seed, no necesita un step separado).
+if (RUN_SEEDS) {
 	await step("Resync usuarios", () => runNodeScript("scripts/resync-users.mjs", {
 		cwd: NEXTJS_DIR,
 		prefix: "[resync]",

@@ -5,7 +5,7 @@
  *   - Si Prisma ya tiene N ítems (N === JSON.length), salta sin tocar nada.
  *   - Si tanto Prisma como blockchain están vacíos, crea todo (write a chain + Prisma).
  *   - Si solo uno de los dos lados tiene datos, avisa de estado inconsistente
- *     y pide `pnpm reset:all` — no intenta rehidratar.
+ *     y pide `pnpm dev:new` — no intenta rehidratar.
  *
  * Pasos por cada ítem del JSON (cuando hay que crear):
  * 1. Llama a LibraryManager.addBook(copies) → obtiene tokenId on-chain
@@ -104,12 +104,9 @@ async function main() {
     const expected = itemsJson.length;
     const actual = await prisma.libraryItem.count();
 
-    // ── Detección de estado y bifurcación de idempotencia ──
-    if (actual === expected) {
-      log(green(`Ya sincronizado (${actual} ítems). Saltando.`));
-      return;
-    }
-
+    // Leer el contador on-chain. Lo que importa es comparar Prisma con la
+    // chain, no con el JSON: un usuario puede haber añadido ítems via UI
+    // posteriormente, en cuyo caso Prisma > expected pero sigue todo en sync.
     let nextBookId;
     try {
       const next = await publicClient.readContract({
@@ -122,15 +119,26 @@ async function main() {
       log(red("  ✗ No se pudo leer nextBookId on-chain. ¿Está el nodo arriba?"));
       return;
     }
+    const chainCount = nextBookId - 1;
 
-    const chainVirgin = nextBookId === 1;
+    // ── Detección de estado y bifurcación de idempotencia ──
+    // Caso 1: Prisma y chain en sync, con al menos los del seed → todo bien.
+    if (actual === chainCount && actual >= expected) {
+      const extras = actual - expected;
+      const detail = extras > 0 ? ` · ${extras} añadido(s) por uso` : "";
+      log(green(`Ya sincronizado (${actual} ítems${detail}). Saltando.`));
+      return;
+    }
 
-    if (actual === 0 && chainVirgin) {
+    // Caso 2: ambos a cero → seed inicial.
+    if (actual === 0 && chainCount === 0) {
       log(`Sincronizando ${expected} ítem(s) de biblioteca desde cero...`);
       // continúa al bloque de creación abajo
-    } else {
-      log(red(`  ✗ Estado inconsistente: Prisma tiene ${actual} ítem(s), blockchain ${nextBookId - 1}.`));
-      log(red(`    Esperado: ambos vacíos o ambos con ${expected}. Ejecuta 'pnpm reset:all' y vuelve a intentar.`));
+    }
+    // Caso 3: drift real (Prisma y chain no coinciden, o ambos están a medio camino).
+    else {
+      log(red(`  ✗ Estado inconsistente: Prisma tiene ${actual} ítem(s), blockchain ${chainCount}.`));
+      log(red(`    Ejecuta 'pnpm db:doctor' para diagnosticar.`));
       return;
     }
 

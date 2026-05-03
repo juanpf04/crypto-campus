@@ -130,6 +130,12 @@ function getNavGroups(role: UserRole) {
             { href: `${base}/printing`, icon: icons.print, label: "Impresión" },
           ],
         },
+        {
+          title: "Sistema",
+          items: [
+            { href: `${base}/system`, icon: icons.alert, label: "Estado del sistema" },
+          ],
+        },
       ];
   }
 }

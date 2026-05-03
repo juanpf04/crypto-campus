@@ -24,7 +24,11 @@ export { TopListCard, type TopListItem } from "./TopListCard";
 
 // ── Modales y formularios shared ─────────────────────────────────────────
 export { ConfirmModal } from "./ConfirmModal";
+export { DangerConfirmModal } from "./DangerConfirmModal";
 export { PasswordRequirements } from "./PasswordRequirements";
+
+// ── Sistema (admin) ──────────────────────────────────────────────────────
+export { ModuleStatusCard } from "./ModuleStatusCard";
 
 // ── Shop ─────────────────────────────────────────────────────────────────
 export { ProductCard } from "./ProductCard";

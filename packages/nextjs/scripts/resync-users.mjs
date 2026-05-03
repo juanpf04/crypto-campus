@@ -125,6 +125,18 @@ const adminWalletClient = createWalletClient({
   transport: http("http://127.0.0.1:8545"),
 });
 
+/**
+ * Espera el receipt y lanza si la tx revirtió. Sin esto, una tx revertida
+ * deja huérfana la fila Prisma posterior porque viem NO lanza por sí solo.
+ */
+async function txWaitOrThrow(hash, label = "tx") {
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  if (receipt.status !== "success") {
+    throw new Error(`${label} revertida (hash=${hash})`);
+  }
+  return receipt;
+}
+
 // ── Main ──
 async function main() {
   const dbUrl = env.DATABASE_URL || process.env.DATABASE_URL;
@@ -176,7 +188,7 @@ async function main() {
           to: account.address,
           value: parseEther("10"),
         });
-        await publicClient.waitForTransactionReceipt({ hash: fundHash });
+        await txWaitOrThrow(fundHash, "fund wallet");
 
         // 4. Registrar en CampusRoles
         const role = ROLE_MAP[user.role] || ROLE_MAP.STUDENT;
@@ -186,7 +198,7 @@ async function main() {
           functionName: "registerUser",
           args: [account.address, user.name, role],
         });
-        await publicClient.waitForTransactionReceipt({ hash: regHash });
+        await txWaitOrThrow(regHash, "registerUser");
 
         // 5. Mintear tokens iniciales (solo a estudiantes y profesores)
         if (user.role === "STUDENT" || user.role === "PROFESSOR") {
@@ -196,7 +208,7 @@ async function main() {
             functionName: "mint",
             args: [account.address, BigInt(10)],
           });
-          await publicClient.waitForTransactionReceipt({ hash: mintLibHash });
+          await txWaitOrThrow(mintLibHash, "mint LibraryToken");
 
           const mintShopHash = await adminWalletClient.writeContract({
             address: ADDRESSES.shopToken,
@@ -204,7 +216,7 @@ async function main() {
             functionName: "mint",
             args: [account.address, BigInt(100)],
           });
-          await publicClient.waitForTransactionReceipt({ hash: mintShopHash });
+          await txWaitOrThrow(mintShopHash, "mint ShopToken");
         }
 
         registered += 1;
