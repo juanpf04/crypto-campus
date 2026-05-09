@@ -18,6 +18,7 @@ import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "@/components/ui/Table";
 import { LinkArrow } from "@/components/shared/LinkArrow";
+import { HistoricalBadge } from "@/components/shared/HistoricalBadge";
 import { ORDER_STATUS_MAP } from "@/lib/shop-constants";
 import { formatShortDate } from "@/lib/formatters";
 
@@ -28,7 +29,8 @@ export interface OrderTableRow {
   pricePaid: number;
   product: { name: string };
   user?: { name: string; email: string };
-  txHash?: string;
+  txHash?: string | null;
+  historical?: boolean;
 }
 
 interface OrderItemTableProps {
@@ -96,22 +98,27 @@ export function OrderItemTable({
                   <span className="font-semibold text-primary">{order.pricePaid} ShopTokens</span>
                 </TableCell>
                 <TableCell>
-                  <Badge variant={status.variant}>{status.label}</Badge>
+                  <div className="flex items-center gap-1.5">
+                    <Badge variant={status.variant}>{status.label}</Badge>
+                    {order.historical && <HistoricalBadge />}
+                  </div>
                 </TableCell>
-                {showTxHash && order.txHash && (
+                {showTxHash && (
                   <TableCell className="font-mono text-xs text-text-muted">
-                    {order.txHash.slice(0, 6)}…{order.txHash.slice(-4)}
+                    {order.txHash
+                      ? `${order.txHash.slice(0, 6)}…${order.txHash.slice(-4)}`
+                      : <span className="not-italic">—</span>}
                   </TableCell>
                 )}
                 {showActions && (
                   <TableCell>
                     <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                      {onDeliver && order.status === "PAID" && (
+                      {!order.historical && onDeliver && order.status === "PAID" && (
                         <Button size="sm" onClick={() => onDeliver(order.id)}>
                           Entregar
                         </Button>
                       )}
-                      {onReturn && (order.status === "PAID" || order.status === "DELIVERED") && (
+                      {!order.historical && onReturn && (order.status === "PAID" || order.status === "DELIVERED") && (
                         <Button variant="danger" size="sm" onClick={() => onReturn(order.id, order.product.name)}>
                           Devolver
                         </Button>

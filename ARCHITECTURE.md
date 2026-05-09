@@ -20,8 +20,9 @@ Documento de referencia técnica. Explica cada decisión arquitectónica, qué h
 9. [Roles y permisos](#9-roles-y-permisos)
 10. [Sistema de recompensas automáticas](#10-sistema-de-recompensas-automáticas)
 11. [Motor blockchain: Anvil vs Hardhat](#11-motor-blockchain-anvil-vs-hardhat)
-12. [Convenciones de código](#12-convenciones-de-código)
-13. [Cómo arrancar el proyecto](#13-cómo-arrancar-el-proyecto)
+12. [Pausa modular del sistema](#12-pausa-modular-del-sistema)
+13. [Convenciones de código](#13-convenciones-de-código)
+14. [Cómo arrancar el proyecto](#14-cómo-arrancar-el-proyecto)
 
 ---
 
@@ -398,7 +399,7 @@ src/app/
 
 **Regla**: Toda lógica que toca Prisma o firma transacciones blockchain vive aquí.
 
-Los 8 módulos:
+Los 9 módulos:
 
 | Módulo | Responsabilidad |
 |---|---|
@@ -410,6 +411,7 @@ Los 8 módulos:
 | `printing.ts` | `executeMyPrintJob`, `getMyPrinterCredits`, `listMyPrinterLogs`, `createPrinter`, `getMyPrintsByMonth`, ... |
 | `shop.ts` | `listProducts`, `addToCart`, `checkout`, `returnOrder`, `createProduct`, `topup`, ... |
 | `onboarding.ts` | `markModuleFirstUse`, helpers de primer uso para gatillar recompensas bonus |
+| `system.ts` | `getModulesStatus`, `pauseModule`, `unpauseModule`, `pauseAllModules`, `unpauseAllModules` — pausa modular admin-only (ver §12) |
 
 ### 6.3 Patrón canónico de una Server Action
 
@@ -489,12 +491,15 @@ Ver sección 10 de [TFG-DOCUMENTACION-TECNICA.md](./TFG-DOCUMENTACION-TECNICA.md
 | Capa | Carpeta | Nº | Qué tiene |
 |---|---|---|---|
 | Atoms | `components/ui/` | 36 | `Button`, `Input`, `Card`, `Table`, `Modal`, `Pagination`, etc. Sin lógica de negocio |
-| Molecules | `components/shared/` | 49 | `StatCard`, `LoanCard`, `ProductCard`, `SectionTitle`, `NavCard`, etc. Sin side-effects pesados |
+| Molecules | `components/shared/` | 54 | `StatCard`, `LoanCard`, `ProductCard`, `SectionTitle`, `NavCard`, `ConfirmModal`/`DangerConfirmModal`, `ModuleGuard`, `ModulePausedScreen`, `ModuleStatusCard`, etc. Sin side-effects pesados |
 | Forms | `components/forms/` | 13 | Formularios con `onSubmit(data)` (`LoginForm`, `ItemForm`, `AssignmentForm`, ...) |
 | Organisms | `components/dashboard/` | 13 | `ShopCartDrawer`, `OrderBatchTable`, `SubjectExpandableRow`, `StudentRewardsInventoryTable`, etc. Orquestan hooks + actions |
+| Printing views | `components/printing/` | 3 | `PrintingHomeView`, `PrintingHistoryView`, `PrintingDetailView` — vistas reutilizables parametrizadas por rol (estudiante/profesor) y `basePath` |
 | Layout | `components/layout/` | 4 | `Header`, `Sidebar`, `ProfessorSubjectsNav`, `StudentOnboardingModal` |
 
-Cada carpeta tiene un `index.ts` que re-exporta todo (barrel). La carpeta `shared/` tiene cobertura 100% (49/49).
+Cada carpeta tiene un `index.ts` que re-exporta todo (barrel) salvo `components/printing/` que se importa por path explícito.
+
+**Nota sobre `ModuleGuard` y compañía**: aunque viven en `components/shared/`, son piezas server-side de protección de rutas (ver §12). `ModuleStatusCard` es el item que pinta cada módulo en el panel admin. `DangerConfirmModal` es la variante reforzada de `ConfirmModal` que exige escribir una frase exacta para confirmar acciones especialmente destructivas.
 
 ### 6.6 `src/lib/` — Utilidades y configuración
 
@@ -506,15 +511,21 @@ src/lib/
 ├── wagmi.ts                 # Configuración Wagmi client-side (chain hardhat, SSR: true)
 ├── session.ts               # SessionOptions de iron-session + SessionData
 ├── crypto.ts                # encrypt/decrypt AES-256-GCM para claves privadas
-├── auth.ts                  # getSession(), ensureRole(), ensureAdmin() helpers
+├── auth.ts                  # getSession(), ensureRole(), ensureAdmin(), logPrismaRecovery()
+├── validators.ts            # validateEmail() (@ucm.es), validatePassword() (8+ con mayús/minús/núm/especial)
 ├── shopRewards.ts           # mintShopReward, issueReward (server-only)
 ├── shopRewardsMeta.ts       # Enums + constantes (cliente/servidor safe)
 ├── rewardToast.ts           # toastRewards() helper cliente
+├── system-modules.ts        # Catálogo: 6 módulos lógicos sobre 8 contratos Pausable + deriveModuleStatus()
+├── system-modules-status.ts # Lectura cacheada (revalidate 5s) de paused() vía unstable_cache
+├── contractErrors.ts        # isContractPauseError() + translateContractError() para EnforcedPause
+├── themes.ts                # Definición de temas claro/oscuro + applyTheme()
+├── dashboard-colors.ts      # Color maps para gráficas (LIBRARY_TYPE_COLORS, USER_ROLE_COLORS, ...)
 ├── formatters.ts            # formatShortDate, formatCredits, etc.
 ├── library-constants.ts     # opciones filtros, labels
 ├── shop-constants.ts        # idem
 ├── shop-utils.ts            # helpers de shop (slug, buildGroupSummary, ...)
-├── rate-limit.ts            # Rate limiter en memoria
+├── rate-limit.ts            # Rate limiter en memoria (login)
 └── utils.ts                 # cn() (clsx + tailwind-merge)
 ```
 
@@ -712,7 +723,80 @@ Al cambiar de motor: `pnpm reset:all` para evitar divergencia entre estado on-ch
 
 ---
 
-## 12. Convenciones de código
+## 12. Pausa modular del sistema
+
+Los **8 contratos** de producción heredan `Pausable` de OpenZeppelin. Esto da al admin un kill-switch granular sobre el sistema. La pausa se expone al admin agrupada en **6 módulos lógicos** (no 8 contratos sueltos) porque algunos módulos requieren pausar varios contratos a la vez para ser coherentes (p. ej. tienda = `CampusShop` + `ShopToken`).
+
+### 12.1 Catálogo de módulos
+
+Definido en [`lib/system-modules.ts`](packages/nextjs/src/lib/system-modules.ts):
+
+| Módulo (`ModuleId`) | Contratos | Efecto cuando está pausado |
+|---|---|---|
+| `roles` | `CampusRoles` | Bloquea creación/edición/borrado de usuarios. **NO** bloquea las consultas de rol que hacen los demás contratos (siguen funcionando) |
+| `library` | `LibraryManager` + `LibraryToken` | Bloquea préstamos, solicitudes, devoluciones y mintes de LIB |
+| `shop` | `CampusShop` + `ShopToken` | Bloquea compras, devoluciones, topups y minteo de SHPT (incluye recompensas automáticas) |
+| `badges` | `BadgeSystem` | Bloquea creación de tareas, awards, canjes |
+| `rooms` | `RoomBooking` | Bloquea reservas y cancelaciones |
+| `print` | `Printer` | Bloquea trabajos de impresión |
+
+`deriveModuleStatus()` produce tres estados: `active` (ningún contrato pausado), `paused` (todos pausados) y `partial` (solo posible si el módulo tiene > 1 contrato y están desincronizados — útil tras un fallo parcial).
+
+### 12.2 Defensa en profundidad
+
+**Capa A — `<ModuleGuard moduleId="...">`** ([`components/shared/ModuleGuard.tsx`](packages/nextjs/src/components/shared/ModuleGuard.tsx)). Server Component que envuelve los `layout.tsx` de cada sección. Antes de renderizar:
+
+1. Si `session.role === "ADMIN"`, deja pasar (necesita poder despausar).
+2. Llama a `getCachedModuleStatus(moduleId)` (lectura `paused()` cacheada 5 s con `unstable_cache`, tag `module-status`).
+3. Si el estado no es `active`, renderiza `<ModulePausedScreen>` con un Card explicativo y un botón al panel del rol.
+
+Como es server-side, **el HTML de la pantalla de bloqueo ya viene pre-renderizado** — sin flash, funciona también con URL tipeada directamente.
+
+**Capa B — `translateContractError()`** ([`lib/contractErrors.ts`](packages/nextjs/src/lib/contractErrors.ts)). En el `catch` de cada Server Action que escribe on-chain (`library.ts`, `printing.ts`, `rooms.ts`, `shop.ts`, `badges.ts`), si la revert tiene marcador `EnforcedPause` o el selector `0xd93c0665`, se reemplaza el error críptico por `"Esta funcionalidad (Biblioteca) está pausada por el administrador. Inténtalo más tarde."`.
+
+Esto cubre el agujero de la capa A: la lectura de `paused()` se cachea 5 s, así que entre que el admin pausa y los layouts revalidan puede haber peticiones que pasen el guard pero choquen contra el contrato.
+
+### 12.3 Layouts con guard
+
+Distribución actual de los `layout.tsx` que envuelven con `ModuleGuard`:
+
+| Ruta | `moduleId` |
+|---|---|
+| `librarian/items/`, `librarian/loans/`, `student/library/(library-routes)/` | `library` |
+| `librarian/printing/`, `professor/printing/`, `student/library/printing/` | `print` |
+| `librarian/rooms/`, `student/library/rooms/` | `rooms` |
+| `professor/badges/`, `professor/rewards/`, `professor/use-requests/`, `professor/pending-reviews/`, `professor/students/`, `professor/subjects/`, `student/badges/` | `badges` |
+| `student/shop/` | `shop` |
+
+Patrón importante: en `student/library/`, el guard NO va en el layout raíz porque las subrutas `printing/` y `rooms/` pertenecen a otros módulos. Por eso se usa un **route group `(library-routes)`** dentro de `student/library/` que contiene únicamente las páginas propias del módulo biblioteca (catálogo, detalle, mis préstamos), aplicando el guard solo a ese subárbol.
+
+### 12.4 Server Actions admin (`actions/system.ts`)
+
+| Función | Qué hace |
+|---|---|
+| `getModulesStatus()` | Lee `paused()` de los 8 contratos en paralelo, deriva estado por módulo, detecta si el nodo responde (banner "Nodo blockchain no responde") |
+| `pauseModule(id)` / `unpauseModule(id)` | Itera secuencialmente los contratos del módulo. Idempotente: si ya está en el estado destino, devuelve `outcome: "skipped"` sin tx |
+| `pauseAllModules()` / `unpauseAllModules()` | Itera todos los módulos. Si uno falla, sigue con los siguientes y devuelve detalle por contrato (no revierte parciales) |
+
+Cada operación devuelve `{ contractKey, outcome: "skipped"|"executed"|"failed", txHash?, error? }`. La UI suma `executed/skipped/failed` para producir el toast resumen.
+
+### 12.5 API routes
+
+```
+/api/admin/system/status                    GET   getModulesStatus
+/api/admin/system/modules/[moduleId]/pause  POST  pauseModule(moduleId)
+/api/admin/system/modules/[moduleId]/unpause POST unpauseModule(moduleId)
+/api/admin/system/all/pause                 POST  pauseAllModules
+/api/admin/system/all/unpause               POST  unpauseAllModules
+```
+
+### 12.6 Panel admin (`/admin/system`)
+
+[`app/(main)/admin/system/page.tsx`](packages/nextjs/src/app/(main)/admin/system/page.tsx). Sin polling: carga al montar + botón "Actualizar" + re-fetch tras cada mutación. Pausa global protegida con `DangerConfirmModal` que exige escribir literalmente `PAUSAR TODO`.
+
+---
+
+## 13. Convenciones de código
 
 ### Nombrado de archivos
 
@@ -769,7 +853,7 @@ BLOCKCHAIN_NODE      # opcional: "anvil" (default) | "hardhat"
 
 ---
 
-## 13. Cómo arrancar el proyecto
+## 14. Cómo arrancar el proyecto
 
 Ver [README.md](./README.md) para la guía completa de onboarding. Resumen:
 

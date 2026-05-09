@@ -23,6 +23,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession, ensureRole } from "@/lib/auth";
 import { adminWalletClient, publicClient } from "@/lib/viem";
 import { CONTRACT_ADDRESSES, PRINTER_ABI } from "@/lib/contracts";
+import { isContractPauseError, translateContractError } from "@/lib/contractErrors";
 import { issueReward, hasRewardOfType, ShopTokenRewardReason, type RewardGrant } from "@/lib/shopRewards";
 
 interface ExecutePrintInput {
@@ -576,6 +577,7 @@ async function executePrinterJob(
 			printLog,
 		};
 	} catch (error) {
+		if (isContractPauseError(error)) throw translateContractError(error, "Impresión");
 		throw new Error(`Error al ejecutar trabajo de impresión: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -634,6 +636,7 @@ export async function executeMyPrintJob(input: ExecutePrintInput) {
 
 		return { ...result, rewards };
 	} catch (error) {
+		if (isContractPauseError(error)) throw translateContractError(error, "Impresión");
 		throw new Error(`Error al ejecutar trabajo personal: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }

@@ -26,6 +26,7 @@
     "db:seed:library": "node packages/nextjs/scripts/seed-library.mjs",
     "db:seed:rooms": "node packages/nextjs/scripts/seed-rooms.mjs",
     "db:seed:printers": "node packages/nextjs/scripts/seed-printers.mjs",
+    "db:seed:historical": "node packages/nextjs/scripts/seed-historical.mjs",
     "reset:chain": "node scripts/reset-chain.mjs",
     "reset:all": "pnpm reset:chain && pnpm db:reset",
     "start": "pnpm --filter nextjs run start",

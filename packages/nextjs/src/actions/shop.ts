@@ -24,6 +24,8 @@ import { hardhat } from "viem/chains";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { getSession, ensureRole } from "@/lib/auth";
+import { isContractPauseError, translateContractError } from "@/lib/contractErrors";
+import { ensureOnChainId, ONLY_LIVE } from "@/lib/historical";
 import { adminWalletClient, publicClient } from "@/lib/viem";
 import {
 	CONTRACT_ADDRESSES,
@@ -1455,7 +1457,7 @@ export async function quickPurchase(productPrismaId: string, quantity = 1) {
 
 		// Actualizar en Prisma a DELIVERED
 		await prisma.order.updateMany({
-			where: { batchId: orderBatch.id },
+			where: { ...ONLY_LIVE, batchId: orderBatch.id },
 			data: { status: "DELIVERED", deliveryDate: new Date() },
 		});
 
@@ -1476,6 +1478,7 @@ export async function quickPurchase(productPrismaId: string, quantity = 1) {
 			error.message.startsWith("Stock insuficiente") ||
 			error.message.startsWith("Saldo insuficiente")
 		)) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al realizar la compra: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -1768,19 +1771,20 @@ export async function checkoutCart() {
 		}
 
 		// 8. Auto-deliver: marcar todos como entregados on-chain (simulación)
+		// Acabamos de crearlos con un orderId on-chain fresh; nunca son null aquí.
 		for (const order of createdOrders) {
 			const deliverHash = await adminWalletClient.writeContract({
 				address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
 				abi: CAMPUS_SHOP_ABI,
 				functionName: "markDelivered",
-				args: [BigInt(order.orderId)],
+				args: [BigInt(order.orderId!)],
 			});
 			await publicClient.waitForTransactionReceipt({ hash: deliverHash });
 		}
 
 		// Actualizar en Prisma a DELIVERED
 		await prisma.order.updateMany({
-			where: { batchId: orderBatch.id },
+			where: { ...ONLY_LIVE, batchId: orderBatch.id },
 			data: { status: "DELIVERED", deliveryDate: new Date() },
 		});
 
@@ -1821,6 +1825,7 @@ export async function checkoutCart() {
 			error.message.includes("Stock insuficiente") ||
 			error.message.includes("Saldo insuficiente")
 		)) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al procesar el pago: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -1953,6 +1958,7 @@ export async function markOrderDelivered(orderPrismaId: string) {
 		const order = await prisma.order.findUnique({ where: { id: orderPrismaId } });
 		if (!order) throw new Error("Pedido no encontrado");
 		if (order.status !== "PAID") throw new Error("Solo se pueden marcar como entregados pedidos en estado PAGADO");
+		ensureOnChainId(order, "orderId", "Pedido");
 
 		// Marcar entregado on-chain
 		const hash = await adminWalletClient.writeContract({
@@ -1999,6 +2005,7 @@ export async function processReturn(orderPrismaId: string) {
 		if (order.status !== "PAID" && order.status !== "DELIVERED") {
 			throw new Error("Solo se pueden devolver pedidos pagados o entregados");
 		}
+		ensureOnChainId(order, "orderId", "Pedido");
 
 		// Procesar devolución on-chain
 		const hash = await adminWalletClient.writeContract({
@@ -2064,6 +2071,7 @@ export async function requestReturn(orderPrismaId: string) {
 				throw new Error("El plazo de devolución de 30 días ha expirado");
 			}
 		}
+		ensureOnChainId(order, "orderId", "Pedido");
 
 		// Firmar con la wallet del estudiante
 		const { walletClient } = await getUserWalletClient(session.userId!);
@@ -2299,13 +2307,14 @@ export async function markBatchDelivered(batchPrismaId: string) {
 		});
 		if (!batch) throw new Error("Pedido no encontrado");
 
-		const paidItems = batch.items.filter((i) => i.status === "PAID");
+		const paidItems = batch.items.filter((i) => i.status === "PAID" && !i.historical);
 		if (paidItems.length === 0) {
 			throw new Error("No hay artículos pendientes de entrega en este pedido");
 		}
 
 		// Marcar cada artículo como entregado on-chain
 		for (const item of paidItems) {
+			ensureOnChainId(item, "orderId", "Pedido");
 			const hash = await adminWalletClient.writeContract({
 				address: CONTRACT_ADDRESSES.campusShop as `0x${string}`,
 				abi: CAMPUS_SHOP_ABI,
@@ -2318,6 +2327,7 @@ export async function markBatchDelivered(batchPrismaId: string) {
 		// Actualizar en Prisma
 		await prisma.order.updateMany({
 			where: {
+				...ONLY_LIVE,
 				id: { in: paidItems.map((i) => i.id) },
 			},
 			data: {

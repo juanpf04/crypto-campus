@@ -84,18 +84,21 @@ const publicClient = createPublicClient({
 });
 
 // ── Lista de entidades a auditar ──
+// `hasHistorical: true` indica que el modelo tiene un flag `historical` que el
+// doctor debe ignorar al comparar con la cadena (filas con `historical=true`
+// viven solo en Prisma, no consumen ids on-chain).
 const ENTITIES = [
-  { label: "Rooms",            contract: ADDRESSES.roomBooking,    abi: ABIS.RoomBooking,    counter: "nextRoomId",          model: "room",          idField: "roomId",          txField: "txHash" },
-  { label: "Library items",    contract: ADDRESSES.libraryManager, abi: ABIS.LibraryManager, counter: "nextBookId",          model: "libraryItem",   idField: "tokenId",         txField: null      },
-  { label: "Loans",            contract: ADDRESSES.libraryManager, abi: ABIS.LibraryManager, counter: "nextLoanId",          model: "loan",          idField: "loanId",          txField: "requestTxHash" },
-  { label: "Products",         contract: ADDRESSES.campusShop,     abi: ABIS.CampusShop,     counter: "nextProductId",       model: "product",       idField: "productId",       txField: null      },
-  { label: "Order batches",    contract: ADDRESSES.campusShop,     abi: ABIS.CampusShop,     counter: "nextBatchId",         model: "orderBatch",    idField: "batchId",         txField: "txHash" },
-  { label: "Orders",           contract: ADDRESSES.campusShop,     abi: ABIS.CampusShop,     counter: "nextOrderId",         model: "order",         idField: "orderId",         txField: "txHash" },
-  { label: "Subject badges",   contract: ADDRESSES.badgeSystem,    abi: ABIS.BadgeSystem,    counter: "nextSubjectBadgeId",  model: "subjectBadge",  idField: "tokenId",         txField: "txHash" },
-  { label: "Assignments",      contract: ADDRESSES.badgeSystem,    abi: ABIS.BadgeSystem,    counter: "nextAssignmentId",    model: "assignment",    idField: "assignmentId",    txField: "txHash" },
-  { label: "Prize categories", contract: ADDRESSES.badgeSystem,    abi: ABIS.BadgeSystem,    counter: "nextPrizeCategoryId", model: "prizeCategory", idField: "prizeCategoryId", txField: "txHash" },
-  { label: "Rewards",          contract: ADDRESSES.badgeSystem,    abi: ABIS.BadgeSystem,    counter: "nextRewardId",        model: "reward",        idField: "rewardId",        txField: "txHash" },
-  { label: "Use requests",     contract: ADDRESSES.badgeSystem,    abi: ABIS.BadgeSystem,    counter: "nextUseRequestId",    model: "useRequest",    idField: "requestId",       txField: "txHash" },
+  { label: "Rooms",            contract: ADDRESSES.roomBooking,    abi: ABIS.RoomBooking,    counter: "nextRoomId",          model: "room",          idField: "roomId",          txField: "txHash",        hasHistorical: false },
+  { label: "Library items",    contract: ADDRESSES.libraryManager, abi: ABIS.LibraryManager, counter: "nextBookId",          model: "libraryItem",   idField: "tokenId",         txField: null,            hasHistorical: false },
+  { label: "Loans",            contract: ADDRESSES.libraryManager, abi: ABIS.LibraryManager, counter: "nextLoanId",          model: "loan",          idField: "loanId",          txField: "requestTxHash", hasHistorical: true  },
+  { label: "Products",         contract: ADDRESSES.campusShop,     abi: ABIS.CampusShop,     counter: "nextProductId",       model: "product",       idField: "productId",       txField: null,            hasHistorical: false },
+  { label: "Order batches",    contract: ADDRESSES.campusShop,     abi: ABIS.CampusShop,     counter: "nextBatchId",         model: "orderBatch",    idField: "batchId",         txField: "txHash",        hasHistorical: true  },
+  { label: "Orders",           contract: ADDRESSES.campusShop,     abi: ABIS.CampusShop,     counter: "nextOrderId",         model: "order",         idField: "orderId",         txField: "txHash",        hasHistorical: true  },
+  { label: "Subject badges",   contract: ADDRESSES.badgeSystem,    abi: ABIS.BadgeSystem,    counter: "nextSubjectBadgeId",  model: "subjectBadge",  idField: "tokenId",         txField: "txHash",        hasHistorical: false },
+  { label: "Assignments",      contract: ADDRESSES.badgeSystem,    abi: ABIS.BadgeSystem,    counter: "nextAssignmentId",    model: "assignment",    idField: "assignmentId",    txField: "txHash",        hasHistorical: false },
+  { label: "Prize categories", contract: ADDRESSES.badgeSystem,    abi: ABIS.BadgeSystem,    counter: "nextPrizeCategoryId", model: "prizeCategory", idField: "prizeCategoryId", txField: "txHash",        hasHistorical: false },
+  { label: "Rewards",          contract: ADDRESSES.badgeSystem,    abi: ABIS.BadgeSystem,    counter: "nextRewardId",        model: "reward",        idField: "rewardId",        txField: "txHash",        hasHistorical: false },
+  { label: "Use requests",     contract: ADDRESSES.badgeSystem,    abi: ABIS.BadgeSystem,    counter: "nextUseRequestId",    model: "useRequest",    idField: "requestId",       txField: "txHash",        hasHistorical: false },
 ];
 
 const MAX_ORPHAN_DETAILS = 10;
@@ -114,22 +117,36 @@ async function checkEntity(prisma, entity) {
     return { ok: false, label: entity.label };
   }
 
-  const prismaCount = await prisma[entity.model].count();
+  // Para modelos con flag `historical`, ignoramos las filas históricas:
+  // viven solo en Prisma (sin id on-chain) y no deben contar como drift.
+  const liveOnlyWhere = entity.hasHistorical ? { historical: false } : {};
+  const prismaCount = await prisma[entity.model].count({ where: liveOnlyWhere });
+
+  // Reportamos las históricas como información extra (no son drift).
+  let historicalCount = 0;
+  if (entity.hasHistorical) {
+    historicalCount = await prisma[entity.model].count({ where: { historical: true } });
+  }
 
   if (onChainCount === prismaCount) {
-    log(green(`✓ ${entity.label}: ${prismaCount} en sync`));
+    const histInfo = historicalCount > 0 ? dim(` (+${historicalCount} histórico${historicalCount === 1 ? "" : "s"} solo Prisma)`) : "";
+    log(green(`✓ ${entity.label}: ${prismaCount} en sync${histInfo}`));
     return { ok: true, label: entity.label };
   }
 
   // Caso A: Prisma tiene de más → filas huérfanas (creadas en Prisma sin contrapartida on-chain válida).
   if (prismaCount > onChainCount) {
     const diff = prismaCount - onChainCount;
-    log(red(`✗ ${entity.label}: Prisma=${prismaCount}, chain=${onChainCount} → ${diff} fila(s) huérfana(s) en Prisma`));
+    const histInfo = historicalCount > 0 ? dim(` (+${historicalCount} histórico${historicalCount === 1 ? "" : "s"} ignorado${historicalCount === 1 ? "" : "s"})`) : "";
+    log(red(`✗ ${entity.label}: Prisma=${prismaCount}, chain=${onChainCount} → ${diff} fila(s) huérfana(s) en Prisma${histInfo}`));
 
     const select = { id: true, [entity.idField]: true };
     if (entity.txField) select[entity.txField] = true;
     const orphans = await prisma[entity.model].findMany({
-      where: { [entity.idField]: { gt: onChainCount } },
+      where: {
+        [entity.idField]: { gt: onChainCount },
+        ...liveOnlyWhere,
+      },
       select,
       orderBy: { [entity.idField]: "asc" },
       take: MAX_ORPHAN_DETAILS,
@@ -214,6 +231,7 @@ async function main() {
   log(dim(`  - Filas Prisma huérfanas (con txHash null): borrar manualmente en Prisma Studio.`));
   log(dim(`  - Filas Prisma huérfanas (con txHash real): la tx existió on-chain pero se perdió. Reset: 'pnpm dev:new'.`));
   log(dim(`  - IDs on-chain sin Prisma: probable caída de servidor a mitad de creación. Revisar logs.`));
+  log(dim(`  - Filas históricas (idField=null, historical=true): NO son drift, son datos sembrados solo en Prisma para gráficas.`));
   log(dim(`  - Si dudas: 'pnpm dev:new' garantiza sincronía total (resetea chain + BD y resembra).`));
   process.exit(1);
 }

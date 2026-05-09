@@ -296,7 +296,7 @@ model LibraryItem {
 // Flujo: QUEUED/RESERVED → PICKED_UP → RETURNED / CANCELLED.
 model Loan {
   id               String     @id @default(cuid())
-  loanId           Int        @unique  // ID en el contrato LibraryManager
+  loanId           Int?       @unique  // ID en el contrato LibraryManager (null en históricos)
   libraryItemId    String
   userId           String
   status           LoanStatus @default(QUEUED)
@@ -309,9 +309,13 @@ model Loan {
   dueDate          DateTime?
   returnDate       DateTime?
   overdue          Boolean    @default(false)
+  historical       Boolean    @default(false)  // true = solo Prisma, sin contraparte on-chain
 
   libraryItem LibraryItem @relation(fields: [libraryItemId], references: [id])
   user        User        @relation(fields: [userId], references: [id])
+
+  @@index([userId, historical])
+  @@index([status, historical])
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -335,21 +339,24 @@ model Room {
 
 model RoomBooking {
   id          String   @id @default(cuid())
-  bookingId   Int      @unique         // ID on-chain en RoomBooking
+  bookingId   Int?     @unique         // ID on-chain en RoomBooking (null en históricos)
   roomId      String
   userId      String
   date        DateTime                 // dia (sin hora, truncado a medianoche)
   startHour   Int                      // 0-23
   duration    Int                      // 1-4
   cancelled   Boolean  @default(false)
-  txHash      String
+  txHash      String?                  // null en históricos
   createdAt   DateTime @default(now())
+  historical  Boolean  @default(false) // true = solo Prisma, sin contraparte on-chain
 
   room        Room     @relation(fields: [roomId], references: [id])
   user        User     @relation(fields: [userId], references: [id])
 
   @@index([roomId, date])
   @@index([userId, date])
+  @@index([userId, historical])
+  @@index([date, cancelled, historical])
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -372,10 +379,11 @@ model PrintLog {
   pages        Int                  // total de caras impresas (= créditos consumidos)
   copies       Int      @default(1)
   printerId    String
-  txHash       String               // prueba blockchain del pago de créditos
+  txHash       String?              // prueba blockchain (null en históricos)
   creditsUsed  Int
   creditsAfter Int
   createdAt    DateTime @default(now())
+  historical   Boolean  @default(false)  // true = solo Prisma, sin contraparte on-chain
 
   // Campos del simulador de impresión
   color         Boolean  @default(false)  // false = B/N, true = color
@@ -391,6 +399,9 @@ model PrintLog {
 
   user    User    @relation(fields: [userId], references: [id])
   printer Printer @relation(fields: [printerId], references: [id])
+
+  @@index([userId, historical])
+  @@index([createdAt, historical])
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -445,38 +456,43 @@ model ProductBase {
 // Pedido agrupado (batch). Un checkout del carrito = 1 batch con N artículos.
 model OrderBatch {
   id           String   @id @default(cuid())
-  batchId      Int      @unique  // ID en el contrato CampusShop
+  batchId      Int?     @unique  // ID en el contrato CampusShop (null en históricos)
   userId       String
   totalPaid    Int
-  txHash       String            // 1 solo txHash para toda la compra
+  txHash       String?           // 1 solo txHash para toda la compra (null en históricos)
   purchaseDate DateTime @default(now())
+  historical   Boolean  @default(false)  // true = solo Prisma, sin contraparte on-chain
 
   user  User    @relation(fields: [userId], references: [id])
   items Order[]                  // artículos individuales del pedido
 
   @@index([userId, purchaseDate])
+  @@index([userId, historical])
 }
 
 // Artículo individual de un pedido. orderId = ID en CampusShop.
 model Order {
   id           String      @id @default(cuid())
-  orderId      Int         @unique  // ID en el contrato CampusShop
+  orderId      Int?        @unique  // ID en el contrato CampusShop (null en históricos)
   userId       String
   productId    String
-  batchId      String?             // nullable: compras sueltas (purchase) no tienen batch
+  batchId      String?             // FK Prisma a OrderBatch.id (no es batchId on-chain)
   quantity     Int         @default(1)
   pricePaid    Int
   status       OrderStatus @default(PAID)
-  txHash       String
+  txHash       String?             // null en históricos
   purchaseDate DateTime    @default(now())
   deliveryDate DateTime?
   returnDate   DateTime?
+  historical   Boolean     @default(false)  // true = solo Prisma, sin contraparte on-chain
 
   user    User        @relation(fields: [userId], references: [id])
   product Product     @relation(fields: [productId], references: [id])
   batch   OrderBatch? @relation(fields: [batchId], references: [id])
 
   @@index([batchId])
+  @@index([userId, historical])
+  @@index([status, historical])
 }
 
 model Cart {

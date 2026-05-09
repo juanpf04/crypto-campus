@@ -26,6 +26,7 @@ export { TopListCard, type TopListItem } from "./TopListCard";
 export { ConfirmModal } from "./ConfirmModal";
 export { DangerConfirmModal } from "./DangerConfirmModal";
 export { PasswordRequirements } from "./PasswordRequirements";
+export { HistoricalBadge } from "./HistoricalBadge";
 
 // ── Sistema (admin) ──────────────────────────────────────────────────────
 export { ModuleStatusCard } from "./ModuleStatusCard";

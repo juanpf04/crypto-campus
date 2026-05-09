@@ -41,9 +41,10 @@ interface PrintLogDetail {
   filePages: number;
   fileSize: number;
   filePath: string | null;
-  txHash: string;
+  txHash: string | null;
   createdAt: string;
   printer: { id: string; location: string };
+  historical?: boolean;
 }
 
 interface PrintingDetailViewProps {

@@ -17,11 +17,12 @@
 13. [Autenticación y seguridad](#13-autenticación-y-seguridad)
 14. [Flujos end-to-end](#14-flujos-end-to-end)
 15. [Patrones UX transversales](#15-patrones-ux-transversales)
-16. [Sistema de testing dual](#16-sistema-de-testing-dual)
-17. [Flujo de desarrollo](#17-flujo-de-desarrollo)
-18. [Decisiones arquitectónicas relevantes](#18-decisiones-arquitectónicas-relevantes)
-19. [Glosario](#19-glosario)
-20. [Métricas del proyecto](#20-métricas-del-proyecto)
+16. [Pausa modular del sistema (kill-switch)](#16-pausa-modular-del-sistema-kill-switch)
+17. [Sistema de testing dual](#17-sistema-de-testing-dual)
+18. [Flujo de desarrollo](#18-flujo-de-desarrollo)
+19. [Decisiones arquitectónicas relevantes](#19-decisiones-arquitectónicas-relevantes)
+20. [Glosario](#20-glosario)
+21. [Métricas del proyecto](#21-métricas-del-proyecto)
 
 ---
 
@@ -85,13 +86,13 @@ CryptoCampus/
 │
 └── packages/nextjs/             # Capa web full-stack
     ├── prisma/schema.prisma     # 27 modelos
-    ├── scripts/                 # 10 scripts (seeds + resync + cleanup)
+    ├── scripts/                 # 11 scripts (seeds + resync + cleanup + db-doctor)
     └── src/
-        ├── actions/             # 8 módulos
-        ├── app/                 # App Router — 121 pages + 110 API routes
-        ├── components/          # ui/ + shared/ + forms/ + dashboard/ + layout/
+        ├── actions/             # 9 módulos (incluye system.ts, pausa modular)
+        ├── app/                 # App Router — 128 pages + 116 API routes
+        ├── components/          # ui/ + shared/ + forms/ + dashboard/ + printing/ + layout/
         ├── hooks/               # 5 hooks custom
-        ├── lib/                 # utilidades server/cliente
+        ├── lib/                 # utilidades server/cliente (incluye system-modules, contractErrors, validators, themes)
         ├── contexts/            # 4 contextos React
         └── types/               # tipos compartidos
 ```
@@ -191,7 +192,7 @@ Todos los contratos siguen el [Solidity Style Guide](https://docs.soliditylang.o
 
 - **CEI (Checks-Effects-Interactions)**: Todas las funciones verifican, actualizan estado y después hacen llamadas externas. Previene reentrancia.
 - **ReentrancyGuard**: Aplicado en funciones con transferencias ERC-1155 (`LibraryManager`, `CampusShop`, `RoomBooking`).
-- **Pausable**: Todos los contratos pueden pausarse por el admin en caso de emergencia.
+- **Pausable**: Los **8 contratos de producción** heredan `Pausable` de OpenZeppelin. Cada uno expone `pause()`/`unpause()` que solo el admin (`DEFAULT_ADMIN_ROLE`) puede invocar. Al pausar, OpenZeppelin protege todas las funciones decoradas con `whenNotPaused` y revierte con el custom error `EnforcedPause()` (selector `0xd93c0665`). El sistema de pausa modular (§16) explota esto agrupando los 8 contratos en 6 módulos lógicos.
 - **Custom errors**: En vez de `require("mensaje")` se usan errores tipados (`error NotStudent(address)`) que consumen menos gas y son más informativos.
 - **Restricción de transferencias**: `LibraryManager` y `BadgeSystem` sobrescriben `_update()` para impedir transferencias directas entre usuarios; solo el contrato media las operaciones. En `BadgeSystem` esto implementa el patrón **soulbound** — las insignias no son intercambiables.
 
@@ -457,9 +458,9 @@ export async function requestLoan(itemId: string) {
 }
 ```
 
-### Módulos de actions (8)
+### Módulos de actions (9)
 
-`academic.ts`, `auth.ts`, `badges.ts`, `library.ts`, `onboarding.ts`, `printing.ts`, `rooms.ts`, `shop.ts`.
+`academic.ts`, `auth.ts`, `badges.ts`, `library.ts`, `onboarding.ts`, `printing.ts`, `rooms.ts`, `shop.ts`, `system.ts` (admin, pausa modular — ver §16).
 
 ### API Routes como thin wrappers
 
@@ -645,9 +646,137 @@ Acciones destructivas (borrar, devolver, aprobar pagos) siempre pasan por `Confi
 
 La primera vez que un STUDENT entra en la plataforma, un `StudentOnboardingModal` explica los módulos y otorga los bonus de primer uso si se cumplen las condiciones.
 
+### Validación compartida
+
+[`lib/validators.ts`](packages/nextjs/src/lib/validators.ts) centraliza dos reglas reutilizadas en `LoginForm`, `UserForm` y servidor:
+
+- `validateEmail`: obligatorio, contiene `@`, termina en `@ucm.es`, hay usuario antes del `@`.
+- `validatePassword`: ≥ 8 caracteres, al menos 1 mayúscula, 1 minúscula, 1 número y 1 carácter especial.
+
+Esto garantiza que cliente y servidor aplican exactamente las mismas reglas y los mensajes de error son consistentes.
+
+### Tema claro/oscuro
+
+[`lib/themes.ts`](packages/nextjs/src/lib/themes.ts) define dos paletas (`light`, `dark`) como mapas de CSS custom properties (`--primary`, `--bg`, `--text`, `--border`, etc.). `applyTheme(themeId)` sobrescribe esas variables en `document.documentElement` en runtime, sin recargar la página. La preferencia se persiste en `localStorage` vía `ThemeContext` y se expone con `useTheme()`. Hay un atom `ThemeSwitcher` en `components/shared/` para alternar.
+
+### Colores de gráficos
+
+Los color maps usados por las gráficas Recharts (PieChart, BarChart) están centralizados en [`lib/dashboard-colors.ts`](packages/nextjs/src/lib/dashboard-colors.ts) (`LIBRARY_TYPE_COLORS`, `USER_ROLE_COLORS`, `ASSIGNMENT_STATUS_COLORS`). Cualquier nueva gráfica debe consumir desde aquí en lugar de hardcodear colores.
+
 ---
 
-## 16. Sistema de testing dual
+## 16. Pausa modular del sistema (kill-switch)
+
+Una de las garantías clave de un sistema con dinero on-chain es poder **detener operaciones en caliente** ante un incidente (vulnerabilidad descubierta, fork de red, dato corrupto, etc.). CryptoCampus implementa un kill-switch granular sobre los 8 contratos, expuesto al admin como **6 módulos lógicos** y reforzado con dos capas de defensa (server-rendering + traducción de errores).
+
+### 16.1 Por qué 6 módulos sobre 8 contratos
+
+El admin razona en términos de funcionalidades del campus, no de contratos. Algunas funcionalidades dependen de varios contratos coordinados, así que pausar contratos sueltos dejaría estados incoherentes:
+
+| Módulo lógico (`ModuleId`) | Contratos | Justificación |
+|---|---|---|
+| `roles` | `CampusRoles` | Aislado: solo gobierna registro de usuarios |
+| `library` | `LibraryManager` + `LibraryToken` | Sin LIB no se pueden hacer préstamos; pausar uno y dejar el otro provoca errores confusos |
+| `shop` | `CampusShop` + `ShopToken` | Misma razón: sin SHPT no hay tienda funcional, y además se mintean recompensas en SHPT |
+| `badges` | `BadgeSystem` | Aislado: tareas, awards y rewards conviven en el mismo contrato |
+| `rooms` | `RoomBooking` | Aislado |
+| `print` | `Printer` | Aislado |
+
+`deriveModuleStatus()` produce tres valores: `active` (todos OK), `paused` (todos los contratos del módulo pausados) y `partial` (al menos uno pausado pero no todos — solo posible si el módulo tiene > 1 contrato y hubo un fallo a mitad). La UI pinta `partial` en color naranja como aviso.
+
+### 16.2 Defensa en profundidad
+
+#### Capa A — `ModuleGuard` (server-side)
+
+[`components/shared/ModuleGuard.tsx`](packages/nextjs/src/components/shared/ModuleGuard.tsx) es un **Server Component** que envuelve los `layout.tsx` de cada sección protegida:
+
+```tsx
+// app/(main)/student/library/(library-routes)/layout.tsx
+import { ModuleGuard } from "@/components/shared/ModuleGuard";
+
+export default function StudentLibraryRoutesLayout({ children }: { children: ReactNode }) {
+  return <ModuleGuard moduleId="library">{children}</ModuleGuard>;
+}
+```
+
+El guard:
+1. Si el usuario es `ADMIN`, deja pasar (necesita acceso para despausar).
+2. Si no, llama a `getCachedModuleStatus(moduleId)` ([`lib/system-modules-status.ts`](packages/nextjs/src/lib/system-modules-status.ts)) que lee `paused()` de los contratos del módulo en paralelo, cacheado con `unstable_cache` y `revalidate: 5s` bajo el tag `module-status`.
+3. Si el estado no es `active`, renderiza `<ModulePausedScreen>` con un Card explicativo y botón "Volver al panel".
+
+Como es server-side, el HTML de la pantalla de bloqueo viene **pre-renderizado**: no hay flash, funciona aunque el usuario tipee la URL directamente.
+
+#### Capa B — `translateContractError` (defensa en error)
+
+[`lib/contractErrors.ts`](packages/nextjs/src/lib/contractErrors.ts) detecta el revert de un contrato pausado por dos marcadores: el string `"EnforcedPause"` y el selector `0xd93c0665`. Si lo encuentra, sustituye el stack-trace críptico por:
+
+> "Esta funcionalidad (Biblioteca) está pausada por el administrador. Inténtalo más tarde."
+
+Las Server Actions críticas (`library.ts`, `printing.ts`, `rooms.ts`, `shop.ts`, `badges.ts`) lo aplican en su `catch`:
+
+```typescript
+} catch (error) {
+  if (isContractPauseError(error)) throw translateContractError(error, "Biblioteca");
+  throw new Error(`Error al solicitar préstamo: ${...}`);
+}
+```
+
+Esto **cubre el agujero de la capa A**: como `getCachedModuleStatus` cachea 5 s, entre que el admin pausa y todos los layouts revalidan puede haber peticiones que crucen el guard pero choquen contra el contrato. La capa B asegura un mensaje legible incluso en esa ventana.
+
+### 16.3 Distribución de los layouts con guard
+
+17 `layout.tsx` con `ModuleGuard`:
+
+| Ruta | `moduleId` |
+|---|---|
+| `librarian/items/`, `librarian/loans/`, `student/library/(library-routes)/` | `library` |
+| `librarian/printing/`, `professor/printing/`, `student/library/printing/` | `print` |
+| `librarian/rooms/`, `student/library/rooms/` | `rooms` |
+| `professor/badges/`, `professor/rewards/`, `professor/use-requests/`, `professor/pending-reviews/`, `professor/students/`, `professor/subjects/`, `student/badges/` | `badges` |
+| `student/shop/` | `shop` |
+
+**Detalle del route group `(library-routes)`**: El guard NO va en el layout raíz de `student/library/` porque las subrutas `printing/` y `rooms/` pertenecen a otros módulos y deben sobrevivir si el módulo `library` se pausa. Para acotar el guard solo a las páginas propias de biblioteca (catálogo, detalle, mis préstamos) se usa el route group `(library-routes)/`. Los paréntesis hacen que la URL final no incluya `(library-routes)`, así que las URLs públicas no cambian — pero el subárbol queda envuelto por su propio layout con guard.
+
+### 16.4 Server Actions admin (`actions/system.ts`)
+
+Patrón consistente con el resto del repo (`adminWalletClient.writeContract` → `waitForTransactionReceipt` → check `status === "success"`), más **idempotencia** (lectura previa del estado actual + skip si ya está en el estado destino).
+
+| Función | Descripción |
+|---|---|
+| `getModulesStatus()` | Lee `paused()` de los 8 contratos en paralelo. Detecta primero si el nodo responde (`getBlockNumber()`); si no, devuelve `{ nodeOnline: false }` para que la UI muestre banner |
+| `pauseModule(id)` / `unpauseModule(id)` | Itera secuencialmente los contratos del módulo. Devuelve `ContractActionResult[]` con `outcome: "skipped"|"executed"|"failed"` por contrato |
+| `pauseAllModules()` / `unpauseAllModules()` | Itera todos los módulos secuencialmente. No revierte parciales: si un contrato falla, sigue con los siguientes y devuelve detalle completo |
+
+La idempotencia hace que reintentar tras una pausa parcial sea seguro. La iteración secuencial (en lugar de paralelizar) es deliberada: más predecible y permite que un fallo intermedio se observe sin saturar el RPC.
+
+### 16.5 Endpoints API y panel admin
+
+```
+GET  /api/admin/system/status                     → getModulesStatus
+POST /api/admin/system/modules/[moduleId]/pause   → pauseModule
+POST /api/admin/system/modules/[moduleId]/unpause → unpauseModule
+POST /api/admin/system/all/pause                  → pauseAllModules
+POST /api/admin/system/all/unpause                → unpauseAllModules
+```
+
+El panel [`/admin/system`](packages/nextjs/src/app/(main)/admin/system/page.tsx):
+- Sin polling automático: carga al montar + botón "Actualizar" + re-fetch tras cada mutación.
+- Banner rojo "Nodo blockchain no responde" si `getBlockNumber()` falla.
+- Grid de tarjetas `<ModuleStatusCard>` (una por módulo lógico) con indicador `active/paused/partial` y botones pausar/despausar.
+- Card de "Pausa de emergencia" con botones globales `Pausar todo` / `Despausar todo`.
+- "Pausar todo" exige `<DangerConfirmModal>` con frase de confirmación literal (`PAUSAR TODO`) — inspirado en los flujos GitHub de borrar repo: imposible pausar todo el sistema por accidente.
+- Toasts diferenciados: `success` si todos los contratos respondieron, `info` si todos eran skipped (sin cambios), `danger` si alguno falló.
+
+### 16.6 Trade-offs del diseño
+
+- **Ventaja**: kill-switch granular sin redeploys ni migraciones. El admin puede aislar un módulo afectado sin tirar el resto del sistema.
+- **Coste**: cada Server Action que escribe on-chain debe acordarse de aplicar `translateContractError`. Si se olvida, el usuario verá un stack-trace ilegible.
+- **Cache 5 s**: equilibrio entre consistencia (queremos que la pausa se note rápido) y carga del RPC (lecturas en cada navegación serían demasiado). 5 s en el peor caso es aceptable para un campus.
+- **No persistencia de motivos**: la pausa no guarda quién/cuándo/por qué (solo el `txHash` queda en el log de la blockchain). Para una versión productiva se añadiría un modelo `PauseEvent` en Prisma con `userId`, `reason`, `timestamp`.
+
+---
+
+## 17. Sistema de testing dual
 
 ### Tests TypeScript (`node:test`)
 
@@ -688,7 +817,7 @@ No hay tests E2E ni de componentes para la parte Next.js. La validación de fron
 
 ---
 
-## 17. Flujo de desarrollo
+## 18. Flujo de desarrollo
 
 Un solo comando arranca todo el entorno:
 
@@ -711,7 +840,9 @@ Orquestado por `scripts/dev.mjs`:
 
 En arranques sucesivos con Anvil persistente los pasos 7 y 9 son casi instantáneos (todo detectado como ya existente).
 
-### Seeds (10 scripts `.mjs`)
+### Seeds y mantenimiento (11 scripts `.mjs`)
+
+En `packages/nextjs/scripts/`:
 
 - `seed-admin`: crea admin @ `admin@ucm.es`.
 - `seed-librarian`: crea bibliotecario.
@@ -720,10 +851,13 @@ En arranques sucesivos con Anvil persistente los pasos 7 y 9 son casi instantán
 - `seed-badges`: badges demo.
 - `resync-users`: reconstruye grants de rol on-chain para usuarios existentes (útil al reiniciar Anvil).
 - `cleanup-uploads`: purga archivos subidos huérfanos (`public/uploads/print/`).
+- `db-doctor`: diagnostica drift Prisma↔blockchain. Recorre las entidades con representación on-chain (`Loan`, `Order`, `RoomBooking`, …) y comprueba que los `tokenId/loanId/orderId` siguen vivos en el contrato. Lista filas huérfanas. Útil cuando aparece "Estado inconsistente: Prisma tiene N, blockchain M" durante los seeds.
+
+Todos los seeds son **idempotentes**: detectan filas existentes por clave de unión y saltan, así que se pueden re-ejecutar tantas veces como se quiera sin duplicar datos.
 
 ---
 
-## 18. Decisiones arquitectónicas relevantes
+## 19. Decisiones arquitectónicas relevantes
 
 ### Monorepo con pnpm workspaces
 
@@ -758,10 +892,13 @@ El proyecto pasó por un refactor grande donde:
 
 - **Matrículas funcionales** en `/admin/subjects/[offeringId]/students`: modal multi-select para añadir alumnos + botón de desmatricular por fila (`POST /api/academic/enrollments`, `DELETE /api/academic/enrollments/[id]`).
 - **Inventario de recompensas por alumno**: nueva acción `getOfferingRewardsInventory`, endpoint `/api/badges/offerings/[offeringId]/rewards-inventory` y dos vistas — `/professor/students/rewards` (profesor, filtro por asignatura propia) y `/admin/rewards/inventory` (admin, filtros obligatorios asignatura + profesor).
+- **Pausa modular del sistema** (último hito): kill-switch admin sobre los 8 contratos, agrupados en 6 módulos lógicos. Ver §16 para el detalle. Nuevos archivos clave: `actions/system.ts`, `lib/system-modules.ts`, `lib/system-modules-status.ts`, `lib/contractErrors.ts`, `components/shared/ModuleGuard.tsx`, `components/shared/ModulePausedScreen.tsx`, `components/shared/ModuleStatusCard.tsx`, `components/shared/DangerConfirmModal.tsx`, panel `/admin/system/`, 17 layouts con `ModuleGuard`.
+- **Vistas de impresión reutilizables por rol** en [`components/printing/`](packages/nextjs/src/components/printing/): `PrintingHomeView`, `PrintingHistoryView`, `PrintingDetailView` parametrizadas por `basePath` y `parentLink` opcional. Compartidas entre `/student/library/printing/`, `/professor/printing/` y `/librarian/printing/`. Eliminan tres copias casi idénticas de la simulación de impresión.
+- **Datos históricos solo-Prisma** (planeado, no implementado todavía — ver [`PLAN_DATOS_HISTORICOS.md`](./PLAN_DATOS_HISTORICOS.md)): añadir flag `historical: Boolean` en `Loan`, `OrderBatch`, `Order`, `PrintLog`, `RoomBooking` para poblar gráficas con datos de demo sin emitir miles de transacciones on-chain. Las acciones de mutación filtrarán siempre `historical: false`.
 
 ---
 
-## 19. Glosario
+## 20. Glosario
 
 | Término | Definición |
 |---|---|
@@ -782,26 +919,35 @@ El proyecto pasó por un refactor grande donde:
 | **Server Action** | Función Next.js marcada con `"use server"`. Se ejecuta en el servidor y puede llamarse directamente desde componentes cliente. |
 | **Ignition** | Sistema declarativo de despliegue de Hardhat. Gestiona dependencias y orden de despliegue. |
 | **trustedSpender** | Patrón de `LibraryToken`/`ShopToken` que permite a un contrato específico (ej. `LibraryManager`) gastar tokens de un usuario sin `approve` previo. |
+| **Pausable** | Mixin de OpenZeppelin que añade `pause()`/`unpause()` y el modifier `whenNotPaused`. Al pausar, las funciones protegidas revierten con el custom error `EnforcedPause()`. |
+| **EnforcedPause** | Custom error emitido por OpenZeppelin Pausable cuando una función `whenNotPaused` se invoca con el contrato pausado. Selector `0xd93c0665`. |
+| **Module (CryptoCampus)** | Agrupación lógica de 1-2 contratos relacionados (`library` = `LibraryManager + LibraryToken`, `shop` = `CampusShop + ShopToken`, etc.). Unidad sobre la que opera la pausa de admin. |
+| **ModuleGuard** | Server Component que envuelve los `layout.tsx` de cada sección. Lee el estado del módulo y renderiza `ModulePausedScreen` si no está activo (admin tiene bypass). |
+| **DangerConfirmModal** | Modal reforzado que exige escribir una frase exacta (p. ej. `PAUSAR TODO`) para confirmar. Usado en acciones destructivas globales. |
+| **Route group** | Carpeta entre paréntesis (`(library-routes)`, `(auth)`, `(main)`) que agrupa rutas con un layout compartido sin afectar a la URL pública. Útil para acotar guards/contextos a un subconjunto de rutas. |
 
 ---
 
-## 20. Métricas del proyecto
+## 21. Métricas del proyecto
 
 | Métrica | Valor |
 |---------|-------|
 | Contratos Solidity en producción | 8 (+ `Example.sol` como guía de estilo) |
 | Atoms (`components/ui/`) | 36 |
-| Moléculas (`components/shared/`) | 49 |
+| Moléculas (`components/shared/`) | 54 |
 | Formularios (`components/forms/`) | 13 |
 | Organisms (`components/dashboard/`) | 13 |
+| Vistas de impresión reutilizables (`components/printing/`) | 3 |
 | Componentes de layout | 4 |
-| Páginas (`page.tsx`) | 121 |
-| API endpoints (`route.ts`) | 110 |
-| Módulos de Server Actions | 8 |
+| Páginas (`page.tsx`) | 128 |
+| API endpoints (`route.ts`) | 116 |
+| Módulos de Server Actions | 9 |
 | Hooks custom | 5 |
 | Modelos de base de datos (Prisma) | 27 |
 | Contextos React | 4 (Cart, Onboarding, Theme, Toast) |
-| Scripts de mantenimiento (`.mjs`) | 10 (seeds + cleanup + resync) |
+| Scripts de mantenimiento (`.mjs`) | 11 (seeds + cleanup + resync + db-doctor) |
+| Layouts con `ModuleGuard` | 17 |
+| Módulos lógicos pausables | 6 (cubren los 8 contratos) |
 
 ---
 
@@ -810,5 +956,6 @@ El proyecto pasó por un refactor grande donde:
 - [README.md](./README.md) — onboarding, instalación, comandos, troubleshooting.
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — referencia arquitectónica exhaustiva.
 - [CLAUDE.md](./CLAUDE.md) — guía interna para Claude Code.
+- [PLAN_DATOS_HISTORICOS.md](./PLAN_DATOS_HISTORICOS.md) — plan pendiente para poblar gráficas con datos solo-Prisma (flag `historical`).
 - [packages/nextjs/RUTAS.md](./packages/nextjs/RUTAS.md) — tabla exhaustiva de rutas de páginas por rol.
 - [packages/nextjs/API_ACCESS_AUDIT.md](./packages/nextjs/API_ACCESS_AUDIT.md) — auditoría de control de acceso en endpoints.

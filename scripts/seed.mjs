@@ -62,9 +62,10 @@ const seeds = [
 	{ name: "products",  file: "scripts/seed-products.mjs",  label: "Catálogo de productos" },
 	{ name: "badges",    file: "scripts/seed-badges.mjs",    label: "Tareas y premios de insignias" },
 	{ name: "library",   file: "scripts/seed-library.mjs",   label: "Catálogo de biblioteca" },
-	{ name: "rooms",     file: "scripts/seed-rooms.mjs",     label: "Salas de estudio" },
-	{ name: "printers",  file: "scripts/seed-printers.mjs",  label: "Impresoras del campus" },
-	{ name: "cleanup",   file: "scripts/cleanup-uploads.mjs", label: "Limpieza de archivos expirados" },
+	{ name: "rooms",      file: "scripts/seed-rooms.mjs",      label: "Salas de estudio" },
+	{ name: "printers",   file: "scripts/seed-printers.mjs",   label: "Impresoras del campus" },
+	{ name: "historical", file: "scripts/seed-historical.mjs", label: "Datos históricos para gráficas (solo Prisma, sin on-chain)" },
+	{ name: "cleanup",    file: "scripts/cleanup-uploads.mjs", label: "Limpieza de archivos expirados" },
 ];
 
 const total = seeds.length;

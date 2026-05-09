@@ -8,6 +8,7 @@
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { HistoricalBadge } from "@/components/shared/HistoricalBadge";
 
 interface LoanCardProps {
   title: string;
@@ -16,10 +17,11 @@ interface LoanCardProps {
   dueDate: string | null;
   reservationDate: string | null;
   queuePosition: number | null;
+  historical?: boolean;
   onCancel?: () => void;
 }
 
-export function LoanCard({ title, creator, status, dueDate, reservationDate, queuePosition, onCancel }: LoanCardProps) {
+export function LoanCard({ title, creator, status, dueDate, reservationDate, queuePosition, historical, onCancel }: LoanCardProps) {
   const isOverdue = status === "PICKED_UP" && dueDate && new Date(dueDate) < new Date();
 
   // Calcular fecha límite de recogida (reservationDate + 3 días)
@@ -29,12 +31,15 @@ export function LoanCard({ title, creator, status, dueDate, reservationDate, que
 
   return (
     <Card className={`p-4 space-y-2 ${isOverdue ? "border-danger/50" : ""}`}>
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-2">
         <div>
           <p className="font-medium text-text">{title}</p>
           {creator && <p className="text-sm text-text-muted">{creator}</p>}
         </div>
-        <StatusBadge status={status} />
+        <div className="flex items-center gap-1.5 shrink-0">
+          {historical && <HistoricalBadge />}
+          <StatusBadge status={status} />
+        </div>
       </div>
 
       {/* QUEUED: posición en cola */}

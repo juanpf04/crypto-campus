@@ -9,6 +9,7 @@
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { QRCodeSVG } from "qrcode.react";
+import { HistoricalBadge } from "@/components/shared/HistoricalBadge";
 
 interface BookingCardProps {
   roomName: string;
@@ -18,7 +19,9 @@ interface BookingCardProps {
   duration: number;
   onCancel: () => void;
   /** Si se pasa bookingId, muestra el QR */
-  bookingId?: number;
+  bookingId?: number | null;
+  /** Marca la reserva como histórica (sin firma on-chain, no admite acciones). */
+  historical?: boolean;
 }
 
 export function BookingCard({
@@ -29,6 +32,7 @@ export function BookingCard({
   duration,
   onCancel,
   bookingId,
+  historical,
 }: BookingCardProps) {
   const endHour = startHour + duration;
   const qrValue = bookingId
@@ -40,9 +44,12 @@ export function BookingCard({
       <div className="flex">
         {/* Info de la reserva — ocupa todo el ancho restante */}
         <div className="flex-1 p-4 space-y-2">
-          <div>
-            <p className="font-medium text-text">{roomName}</p>
-            {roomLocation && <p className="text-xs text-text-muted">{roomLocation}</p>}
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="font-medium text-text">{roomName}</p>
+              {roomLocation && <p className="text-xs text-text-muted">{roomLocation}</p>}
+            </div>
+            {historical && <HistoricalBadge />}
           </div>
           <p className="text-sm text-text">
             {new Date(date).toLocaleDateString("es-ES", {
@@ -53,12 +60,14 @@ export function BookingCard({
             {" "}
             {startHour}:00 - {endHour}:00
           </p>
-          <Button size="sm" variant="danger" onClick={onCancel}>
-            Cancelar reserva
-          </Button>
+          {!historical && (
+            <Button size="sm" variant="danger" onClick={onCancel}>
+              Cancelar reserva
+            </Button>
+          )}
         </div>
 
-        {/* QR pegado a la derecha */}
+        {/* QR pegado a la derecha (solo si hay bookingId — los históricos van sin QR) */}
         {bookingId && (
           <div className="flex flex-col items-center justify-center gap-1 border-l border-border-default bg-white px-4">
             <QRCodeSVG value={qrValue} size={96} />

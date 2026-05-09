@@ -18,6 +18,7 @@ import { hardhat } from "viem/chains";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { getSession, ensureRole, logPrismaRecovery } from "@/lib/auth";
+import { isContractPauseError, translateContractError } from "@/lib/contractErrors";
 import { adminWalletClient, publicClient } from "@/lib/viem";
 import { CONTRACT_ADDRESSES, BADGE_SYSTEM_ABI } from "@/lib/contracts";
 import { hasRewardOfType, issueReward, ShopTokenRewardReason, type RewardGrant } from "@/lib/shopRewards";
@@ -1242,6 +1243,15 @@ export async function getAllRewardsInventory() {
 // ── Solicitudes de uso ───────────────────────────────────────────────────
 
 export async function requestUseReward(rewardPrismaId: string) {
+	try {
+		return await _requestUseRewardImpl(rewardPrismaId);
+	} catch (error) {
+		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		throw error;
+	}
+}
+
+async function _requestUseRewardImpl(rewardPrismaId: string) {
 	const session = await getSession();
 	ensureRole(session, ["STUDENT"]);
 

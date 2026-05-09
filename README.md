@@ -14,6 +14,7 @@ TFG — Plataforma universitaria sobre blockchain para la FDI UCM. Integra 5 mó
 - [Módulos funcionales](#módulos-funcionales)
 - [Roles del sistema](#roles-del-sistema)
 - [Sistema de recompensas automáticas](#sistema-de-recompensas-automáticas)
+- [Pausa de emergencia (módulos del sistema)](#pausa-de-emergencia-módulos-del-sistema)
 - [Variables de entorno](#variables-de-entorno)
 - [Comandos disponibles](#comandos-disponibles)
 - [Tests](#tests)
@@ -132,18 +133,19 @@ CryptoCampus/
     │
     └── nextjs/                    Capa web (full-stack)
         ├── prisma/schema.prisma   27 modelos de base de datos
-        ├── scripts/               10 scripts idempotentes (seeds + resync + cleanup)
+        ├── scripts/               11 scripts idempotentes (seeds + resync + cleanup + db-doctor)
         └── src/
-            ├── actions/           8 módulos de Server Actions
-            ├── app/               App Router (121 pages + 110 API routes)
+            ├── actions/           9 módulos de Server Actions
+            ├── app/               App Router (128 pages + 116 API routes)
             ├── components/
             │   ├── ui/            Atoms (36)
-            │   ├── shared/        Molecules (49)
+            │   ├── shared/        Molecules (54, incluye ModuleGuard/PausedScreen/StatusCard)
             │   ├── forms/         Form molecules (13)
             │   ├── dashboard/     Organisms (13)
+            │   ├── printing/      Vistas de impresión reutilizables por rol (3)
             │   └── layout/        Layout (Header, Sidebar, ...)
             ├── hooks/             useAuthUser, useForm, usePaginatedList, useToast, useTheme
-            ├── lib/               viem, prisma, crypto, session, shopRewards, ...
+            ├── lib/               viem, prisma, crypto, session, shopRewards, system-modules, contractErrors, themes, validators, ...
             └── contexts/          CartContext, OnboardingContext, ThemeContext, ToastContext
 ```
 
@@ -186,6 +188,29 @@ Cada vez que un usuario completa una acción "premiable", el backend mintea auto
 | Bonus primer uso del módulo (library/rooms/printing/badges/shop) | 2 cada uno, una sola vez |
 
 La recompensa se persiste en `ShopTokenReward` (auditoría) y se pinta en toast en el cliente. Ver [`shopRewardsMeta.ts`](packages/nextjs/src/lib/shopRewardsMeta.ts) para el catálogo completo.
+
+## Pausa de emergencia (módulos del sistema)
+
+Los 8 contratos heredan `Pausable` de OpenZeppelin. El admin puede detener cualquier módulo desde **`/admin/system`** sin tocar el resto:
+
+| Módulo lógico | Contratos que pausa | Efecto en la app |
+|---|---|---|
+| Control de acceso | `CampusRoles` | Bloquea crear/editar usuarios. No afecta a `hasRole()` |
+| Biblioteca | `LibraryManager` + `LibraryToken` | Bloquea préstamos, solicitudes y devoluciones |
+| Tienda | `CampusShop` + `ShopToken` | Bloquea compras, devoluciones y minteo de recompensas SHPT |
+| Insignias | `BadgeSystem` | Bloquea creación de tareas, awards y canjes |
+| Salas | `RoomBooking` | Bloquea reservas y cancelaciones |
+| Impresión | `Printer` | Bloquea trabajos de impresión |
+
+Dos capas de defensa:
+
+1. **`<ModuleGuard moduleId="...">`** en los `layout.tsx` server-side — si el módulo está pausado, ni siquiera se renderizan las páginas internas. El admin tiene bypass.
+2. **`translateContractError()`** en los `catch` de Server Actions — si una tx llega al contrato pausado, devuelve un mensaje legible (`EnforcedPause` → "Esta funcionalidad está pausada por el administrador").
+
+Operaciones disponibles desde el panel de admin:
+- Pausar/despausar un módulo individual (con `ConfirmModal`).
+- "Pausar todo" / "Despausar todo" los 8 contratos a la vez (la pausa global exige escribir literalmente `PAUSAR TODO` para evitar accidentes).
+- Idempotente: si un contrato ya está en el estado deseado, se omite (`outcome: "skipped"`).
 
 ## Variables de entorno
 
@@ -295,8 +320,9 @@ Has editado `schema.prisma` pero no has regenerado el cliente. Ejecuta `pnpm run
 
 ## Documentación adicional
 
-- [TFG-DOCUMENTACION-TECNICA.md](./TFG-DOCUMENTACION-TECNICA.md) — Explicación técnica orientada a la memoria del TFG: contratos, doble ledger, Atomic Design, Server Actions, testing, recompensas.
+- [TFG-DOCUMENTACION-TECNICA.md](./TFG-DOCUMENTACION-TECNICA.md) — Explicación técnica orientada a la memoria del TFG: contratos, doble ledger, Atomic Design, Server Actions, testing, recompensas, pausa modular.
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — Referencia arquitectónica exhaustiva: estructura de carpetas detallada, flujos de datos end-to-end, convenciones de código, tabla de rutas API.
 - [CLAUDE.md](./CLAUDE.md) — Guía interna para trabajar con Claude Code en este proyecto (comandos, convenciones, detalles operacionales).
+- [PLAN_DATOS_HISTORICOS.md](./PLAN_DATOS_HISTORICOS.md) — Plan pendiente para poblar gráficas con datos históricos solo-Prisma (flag `historical`).
 - [packages/nextjs/RUTAS.md](./packages/nextjs/RUTAS.md) — Tabla exhaustiva de rutas de páginas por rol.
 - [packages/nextjs/API_ACCESS_AUDIT.md](./packages/nextjs/API_ACCESS_AUDIT.md) — Auditoría de control de acceso en endpoints.

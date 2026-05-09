@@ -17,12 +17,14 @@ import { hardhat } from "viem/chains";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { getSession, ensureRole } from "@/lib/auth";
+import { isContractPauseError, translateContractError } from "@/lib/contractErrors";
 import { adminWalletClient, publicClient } from "@/lib/viem";
 import {
 	CONTRACT_ADDRESSES,
 	ROOM_BOOKING_ABI,
 } from "@/lib/contracts";
 import { issueReward, ShopTokenRewardReason, type RewardGrant } from "@/lib/shopRewards";
+import { ensureOnChainId, ONLY_LIVE } from "@/lib/historical";
 
 // ── Helpers internos ─────────────────────────────────────────────────────
 
@@ -329,6 +331,7 @@ export async function bookRoom(
 		dateForCheck.setUTCHours(0, 0, 0, 0);
 		const existingBooking = await prisma.roomBooking.findFirst({
 			where: {
+				...ONLY_LIVE,
 				userId: session.userId!,
 				date: dateForCheck,
 				cancelled: false,
@@ -395,6 +398,7 @@ export async function bookRoom(
 		return { success: true, booking, rewards };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Salas");
 		throw new Error(`Error al reservar sala: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -410,6 +414,7 @@ export async function cancelBooking(bookingPrismaId: string) {
 		const booking = await prisma.roomBooking.findUnique({ where: { id: bookingPrismaId } });
 		if (!booking) throw new Error("Reserva no encontrada");
 		if (booking.cancelled) throw new Error("La reserva ya está cancelada");
+		ensureOnChainId(booking, "bookingId", "Reserva");
 
 		// Verificar permisos
 		const isOwner = booking.userId === session.userId;
@@ -482,6 +487,7 @@ export async function getRoomAvailability(roomPrismaId: string, date: string) {
 
 		const bookings = await prisma.roomBooking.findMany({
 			where: {
+				...ONLY_LIVE,
 				roomId: room.id,
 				date: dateObj,
 				cancelled: false,
@@ -530,7 +536,7 @@ export async function listBookings(filters?: {
 	const session = await getSession();
 	ensureRole(session, ["LIBRARIAN", "ADMIN"]);
 
-	const where: Record<string, unknown> = {};
+	const where: Record<string, unknown> = { ...ONLY_LIVE };
 	if (filters?.roomId) where.roomId = filters.roomId;
 	if (filters?.cancelled !== undefined) where.cancelled = filters.cancelled;
 	if (filters?.date) {

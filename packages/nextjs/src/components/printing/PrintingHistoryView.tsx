@@ -38,9 +38,10 @@ interface PrintLog {
   duplex: boolean;
   orientation: string;
   paperSize: string;
-  txHash: string;
+  txHash: string | null;
   createdAt: string;
   printer: { id: string; location: string };
+  historical?: boolean;
 }
 
 interface PrintingHistoryViewProps {
