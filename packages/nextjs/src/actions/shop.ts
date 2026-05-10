@@ -1281,22 +1281,10 @@ export async function topupWithSimulatedCard(input: SimulatedCardInput) {
 	try {
 		const mintResult = await mintShopTokensInternal(session.userId!, validated.amount);
 
-		await prisma.$transaction([
-			prisma.cardTopupSimulation.update({
-				where: { id: simulation.id },
-				data: { status: "SUCCESS", txHash: mintResult.txHash },
-			}),
-			prisma.paymentSimulationLog.create({
-				data: {
-					userId: session.userId!,
-					method: "SIMULATED_CARD",
-					amount: validated.amount,
-					result: "SUCCESS",
-					cardLast4: validated.cardLast4,
-					txHash: mintResult.txHash,
-				},
-			}),
-		]);
+		await prisma.cardTopupSimulation.update({
+			where: { id: simulation.id },
+			data: { status: "SUCCESS", txHash: mintResult.txHash },
+		});
 
 		return {
 			simulationId: simulation.id,
@@ -1309,22 +1297,10 @@ export async function topupWithSimulatedCard(input: SimulatedCardInput) {
 	} catch (error) {
 		const reason = error instanceof Error ? error.message : "error_desconocido";
 
-		await prisma.$transaction([
-			prisma.cardTopupSimulation.update({
-				where: { id: simulation.id },
-				data: { status: "FAILED", errorReason: reason },
-			}),
-			prisma.paymentSimulationLog.create({
-				data: {
-					userId: session.userId!,
-					method: "SIMULATED_CARD",
-					amount: validated.amount,
-					result: "FAILED",
-					cardLast4: validated.cardLast4,
-					errorReason: reason,
-				},
-			}),
-		]);
+		await prisma.cardTopupSimulation.update({
+			where: { id: simulation.id },
+			data: { status: "FAILED", errorReason: reason },
+		});
 
 		throw new Error(`Error al recargar saldo: ${reason}`);
 	}

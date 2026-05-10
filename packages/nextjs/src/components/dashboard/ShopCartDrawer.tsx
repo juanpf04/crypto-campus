@@ -301,7 +301,7 @@ export function ShopCartDrawer({ open, onClose, onCartChange }: ShopCartDrawerPr
                         type="button"
                         onClick={() => removeItem(item.id)}
                         className="rounded p-1 text-text-muted hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer [&_svg]:h-4 [&_svg]:w-4"
-                        aria-label="Eliminar "
+                        aria-label={`Eliminar ${item.name} del carrito`}
                       >
                         {icons.close}
                       </button>

@@ -10,7 +10,6 @@ export { ThemeSwitcher } from "./ThemeSwitcher";
 export { StatCard } from "./StatCard";
 export { StatusBadge } from "./StatusBadge";
 export { CreditsBanner } from "./CreditsBanner";
-export { TokenBalance } from "./TokenBalance";
 export { ActionRow } from "./ActionRow";
 export { AlertCalloutCard } from "./AlertCalloutCard";
 export { CompoundCard, type CompoundCardSlot } from "./CompoundCard";

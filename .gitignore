@@ -141,3 +141,7 @@ dist
 # Blockchain local (cada dev regenera su estado)
 .anvil-state.json
 packages/hardhat/ignition/deployments/
+
+# SQL diffs/baselines accidentales en raíz
+# (los SQL legítimos viven en packages/nextjs/prisma/migrations/)
+/*.sql

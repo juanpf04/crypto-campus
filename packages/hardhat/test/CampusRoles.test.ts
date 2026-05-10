@@ -834,8 +834,10 @@ describe("CampusRoles", async function () {
         it("Should revert grantRole with UseContractFunctions", async function () {
             const { campusRoles, user1, studentRole } = await deploy();
 
+            // grantRole esta override como `pure` para revertir; viem la clasifica
+            // como read, asi que la invocamos por read y verificamos el revert.
             await assert.rejects(async () => {
-                await campusRoles.write.grantRole([studentRole, user1.account.address]);
+                await campusRoles.read.grantRole([studentRole, user1.account.address]);
             });
         });
 
@@ -843,7 +845,7 @@ describe("CampusRoles", async function () {
             const { campusRoles, user1, studentRole } = await deploy();
 
             await assert.rejects(async () => {
-                await campusRoles.write.revokeRole([studentRole, user1.account.address]);
+                await campusRoles.read.revokeRole([studentRole, user1.account.address]);
             });
         });
     });

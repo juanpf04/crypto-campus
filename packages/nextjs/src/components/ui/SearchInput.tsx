@@ -22,6 +22,8 @@ interface SearchInputProps {
   debounceMs?: number;
   /** Clases CSS adicionales para el contenedor */
   className?: string;
+  /** Etiqueta accesible (sr-only). Por defecto usa el placeholder. */
+  ariaLabel?: string;
 }
 
 export function SearchInput({
@@ -29,6 +31,7 @@ export function SearchInput({
   onSearch,
   debounceMs = 300,
   className,
+  ariaLabel,
 }: SearchInputProps) {
   const [value, setValue] = useState("");
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -71,10 +74,11 @@ export function SearchInput({
       </div>
 
       <input
-        type="text"
+        type="search"
         value={value}
         onChange={handleChange}
         placeholder={placeholder}
+        aria-label={ariaLabel ?? placeholder}
         className={cn(
           "w-full rounded-lg border border-border-default bg-card pl-10 pr-3 py-2 text-sm text-text",
           "placeholder:text-text-muted",

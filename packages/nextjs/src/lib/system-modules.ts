@@ -9,6 +9,7 @@
  * lo importan tanto los server actions, las API routes como la UI.
  */
 
+import type { Abi } from "viem";
 import {
   CONTRACT_ADDRESSES,
   CAMPUS_ROLES_ABI,
@@ -38,16 +39,16 @@ export type ContractKey =
  */
 export const CONTRACT_META: Record<
   ContractKey,
-  { address: `0x${string}`; abi: typeof CAMPUS_ROLES_ABI; label: string }
+  { address: `0x${string}`; abi: Abi; label: string }
 > = {
-  campusRoles:    { address: CONTRACT_ADDRESSES.campusRoles    as `0x${string}`, abi: CAMPUS_ROLES_ABI,    label: "CampusRoles" },
-  libraryManager: { address: CONTRACT_ADDRESSES.libraryManager as `0x${string}`, abi: LIBRARY_MANAGER_ABI, label: "LibraryManager" },
-  libraryToken:   { address: CONTRACT_ADDRESSES.libraryToken   as `0x${string}`, abi: LIBRARY_TOKEN_ABI,   label: "LibraryToken" },
-  campusShop:     { address: CONTRACT_ADDRESSES.campusShop     as `0x${string}`, abi: CAMPUS_SHOP_ABI,     label: "CampusShop" },
-  shopToken:      { address: CONTRACT_ADDRESSES.shopToken      as `0x${string}`, abi: SHOP_TOKEN_ABI,      label: "ShopToken" },
-  badgeSystem:    { address: CONTRACT_ADDRESSES.badgeSystem    as `0x${string}`, abi: BADGE_SYSTEM_ABI,    label: "BadgeSystem" },
-  roomBooking:    { address: CONTRACT_ADDRESSES.roomBooking    as `0x${string}`, abi: ROOM_BOOKING_ABI,    label: "RoomBooking" },
-  printer:        { address: CONTRACT_ADDRESSES.printer        as `0x${string}`, abi: PRINTER_ABI,         label: "Printer" },
+  campusRoles:    { address: CONTRACT_ADDRESSES.campusRoles    as `0x${string}`, abi: CAMPUS_ROLES_ABI    as Abi, label: "CampusRoles" },
+  libraryManager: { address: CONTRACT_ADDRESSES.libraryManager as `0x${string}`, abi: LIBRARY_MANAGER_ABI as Abi, label: "LibraryManager" },
+  libraryToken:   { address: CONTRACT_ADDRESSES.libraryToken   as `0x${string}`, abi: LIBRARY_TOKEN_ABI   as Abi, label: "LibraryToken" },
+  campusShop:     { address: CONTRACT_ADDRESSES.campusShop     as `0x${string}`, abi: CAMPUS_SHOP_ABI     as Abi, label: "CampusShop" },
+  shopToken:      { address: CONTRACT_ADDRESSES.shopToken      as `0x${string}`, abi: SHOP_TOKEN_ABI      as Abi, label: "ShopToken" },
+  badgeSystem:    { address: CONTRACT_ADDRESSES.badgeSystem    as `0x${string}`, abi: BADGE_SYSTEM_ABI    as Abi, label: "BadgeSystem" },
+  roomBooking:    { address: CONTRACT_ADDRESSES.roomBooking    as `0x${string}`, abi: ROOM_BOOKING_ABI    as Abi, label: "RoomBooking" },
+  printer:        { address: CONTRACT_ADDRESSES.printer        as `0x${string}`, abi: PRINTER_ABI         as Abi, label: "Printer" },
 };
 
 /** Definición de un módulo lógico expuesto al admin. */

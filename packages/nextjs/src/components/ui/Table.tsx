@@ -4,8 +4,6 @@ import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------
    Piezas atómicas de tabla — se componen libremente.
-   Para una tabla "lista para usar" con columns + data, ver
-   src/components/DataTable.tsx
    ------------------------------------------------------------------ */
 
 interface TableRootProps {

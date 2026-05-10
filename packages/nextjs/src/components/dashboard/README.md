@@ -18,6 +18,3 @@ Las pages importan estos organisms y quedan finas (<150 L idealmente).
 ### Academic
 - `SubjectExpandableRow` — Fila desplegable de asignatura con grupos y acciones.
 - `StudentRewardsInventoryTable` — Tabla de alumnos con desplegable por fila que muestra el inventario de recompensas (canjeadas, disponibles, pendientes) por alumno dentro de un offering.
-
-### Genéricos
-- `DataTable` — Tabla genérica columns + data.

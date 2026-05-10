@@ -18,37 +18,39 @@ enum Role {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  password     String
-  name         String
-  role         Role     @default(STUDENT)
-  address      String   @unique   // wallet generada invisiblemente
-  encryptedKey String             // clave privada cifrada con AES-256-GCM
-  active                Boolean  @default(true)
-  onboardingCompleted   Boolean  @default(false)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  email               String   @unique
+  password            String
+  name                String
+  role                Role     @default(STUDENT)
+  address             String   @unique // wallet generada
+  encryptedKey        String // clave privada cifrada con AES-256-GCM
+  active              Boolean  @default(true)
+  onboardingCompleted Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   // Relaciones
-  enrollments       Enrollment[]
-  printLogs         PrintLog[]
-  loans             Loan[]
-  orders            Order[]
-  orderBatches      OrderBatch[]
-  cart              Cart?
-  topupSimulations  CardTopupSimulation[]
-  paymentLogs       PaymentSimulationLog[]
-  shopTokenRewards  ShopTokenReward[]
-  roomBookings      RoomBooking[]
-  badgeAwards         BadgeAward[]
-  awardedBadgesTo     BadgeAward[]      @relation("AwardedBy")
-  assignmentsCreated  Assignment[]      @relation("AssignmentCreator")
-  taskSubmissions     TaskSubmission[]  @relation("AssignmentSubmissions")
-  rewardsCreated      Reward[]          @relation("RewardCreator")
-  rewardRedemptions   RewardRedemption[]
-  useRequests         UseRequest[]      @relation("UseRequestStudent")
-  subjectOfferings    SubjectOffering[] @relation("OfferingProfessor")
+  enrollments        Enrollment[]
+  printLogs          PrintLog[]
+  loans              Loan[]
+  orders             Order[]
+  orderBatches       OrderBatch[]
+  cart               Cart?
+  topupSimulations   CardTopupSimulation[]
+  shopTokenRewards   ShopTokenReward[]
+  roomBookings       RoomBooking[]
+  badgeAwards        BadgeAward[]
+  awardedBadgesTo    BadgeAward[]          @relation("AwardedBy")
+  assignmentsCreated Assignment[]          @relation("AssignmentCreator")
+  taskSubmissions    TaskSubmission[]      @relation("AssignmentSubmissions")
+  rewardsCreated     Reward[]              @relation("RewardCreator")
+  rewardRedemptions  RewardRedemption[]
+  useRequests        UseRequest[]          @relation("UseRequestStudent")
+  subjectOfferings   SubjectOffering[]     @relation("OfferingProfessor")
+
+  @@index([role])
+  @@index([active])
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -56,24 +58,24 @@ model User {
 // ─────────────────────────────────────────────────────────────
 
 model Subject {
-  id        String @id @default(cuid())
-  name      String // "Fundamentos de Aplicaciones en la Red"
-  code      String @unique // "FAL"
+  id   String @id @default(cuid())
+  name String // "Fundamentos de Algoritmia"
+  code String @unique // "FAL"
 
   offerings SubjectOffering[]
 }
 
-// Una "oferta" es una asignatura impartida por un profesor a un grupo concreto
+// Es una asignatura impartida por un profesor a un grupo concreto
 model SubjectOffering {
-  id           String   @id @default(cuid())
+  id           String @id @default(cuid())
   subjectId    String
   professorId  String
-  group        String   // "2ºE", "2ºA"
-  academicYear String   // "2024-2025"
+  group        String // "2ºE", "2ºA"
+  academicYear String // "2024-2025"
 
-  subject     Subject   @relation(fields: [subjectId], references: [id])
-  professor   User      @relation("OfferingProfessor", fields: [professorId], references: [id])
-  enrollments Enrollment[]
+  subject      Subject       @relation(fields: [subjectId], references: [id])
+  professor    User          @relation("OfferingProfessor", fields: [professorId], references: [id])
+  enrollments  Enrollment[]
   subjectBadge SubjectBadge?
 
   @@unique([subjectId, professorId, group, academicYear])
@@ -100,8 +102,8 @@ model Enrollment {
 // cuando el profesor publica su primera assignment. tokenId = ID ERC-1155.
 model SubjectBadge {
   id                String   @id @default(cuid())
-  tokenId           Int      @unique  // ID on-chain en BadgeSystem
-  subjectOfferingId String   @unique  // 1:1
+  tokenId           Int      @unique // ID on-chain en BadgeSystem
+  subjectOfferingId String   @unique // 1:1
   txHash            String
   createdAt         DateTime @default(now())
 
@@ -112,9 +114,9 @@ model SubjectBadge {
 }
 
 enum AssignmentStatus {
-  OPEN       // alumnos pueden marcar como entregada
-  REVIEWING  // entregas cerradas, profesor revisando
-  CLOSED     // ya no se pueden otorgar premios
+  OPEN // alumnos pueden marcar como entregada
+  REVIEWING // entregas cerradas, profesor revisando
+  CLOSED // ya no se pueden otorgar premios
 }
 
 // Tarea/practica de una asignatura. assignmentId = ID on-chain.
@@ -140,12 +142,12 @@ model Assignment {
 
 // Cada premio dentro de una assignment. prizeCategoryId = ID on-chain.
 model PrizeCategory {
-  id              String @id @default(cuid())
-  prizeCategoryId Int    @unique
-  name            String           // "Mejor nota", "Mejor diseño"...
+  id              String   @id @default(cuid())
+  prizeCategoryId Int      @unique
+  name            String // "Mejor nota", "Mejor diseño"...
   description     String?
-  badgeReward     Int              // cuántas insignias se otorgan al ganador
-  maxWinners      Int              // cuántos alumnos pueden ganar este premio
+  badgeReward     Int // cuántas insignias se otorgan al ganador
+  maxWinners      Int // cuántos alumnos pueden ganar este premio
   assignmentId    String
   txHash          String
   createdAt       DateTime @default(now())
@@ -183,6 +185,8 @@ model BadgeAward {
   awardedBy     User          @relation("AwardedBy", fields: [awardedById], references: [id])
 
   @@unique([userId, prizeCategoryId])
+  @@index([awardedAt])
+  @@index([awardedById])
 }
 
 enum RewardCategory {
@@ -201,7 +205,7 @@ model Reward {
   description    String?
   subjectBadgeId String
   badgeCost      Int
-  supply         Int            // 0 = ilimitado
+  supply         Int // 0 = ilimitado
   active         Boolean        @default(true)
   category       RewardCategory @default(OTROS)
   creatorId      String
@@ -224,6 +228,8 @@ model RewardRedemption {
 
   user   User   @relation(fields: [userId], references: [id])
   reward Reward @relation(fields: [rewardId], references: [id])
+
+  @@index([userId, redeemedAt])
 }
 
 // Solicitudes de uso de recompensas (mirror on-chain).
@@ -246,6 +252,8 @@ model UseRequest {
 
   student User   @relation("UseRequestStudent", fields: [studentId], references: [id])
   reward  Reward @relation(fields: [rewardId], references: [id])
+
+  @@index([status])
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -275,17 +283,17 @@ enum LoanStatus {
 //   VIDEO_GAME: { platform, genre }
 model LibraryItem {
   id                String          @id @default(cuid())
-  tokenId           Int             @unique  // ID en LibraryManager
+  tokenId           Int             @unique // ID en LibraryManager
   type              LibraryItemType @default(BOOK)
   title             String
-  creator           String?         // autor, diseñador, desarrollador...
+  creator           String? // autor, diseñador, desarrollador...
   description       String?
   coverUrl          String?
   category          String?
-  physicalLocation  String?         // "2ª planta, Estantería 4B"
+  physicalLocation  String? // "2ª planta, Estantería 4B"
   physicalCondition String          @default("Bueno")
   totalCopies       Int
-  metadata          Json?           // datos específicos del tipo
+  metadata          Json? // datos específicos del tipo
   active            Boolean         @default(true)
   createdAt         DateTime        @default(now())
 
@@ -295,27 +303,28 @@ model LibraryItem {
 // Préstamo con cola automática. loanId = ID en LibraryManager.
 // Flujo: QUEUED/RESERVED → PICKED_UP → RETURNED / CANCELLED.
 model Loan {
-  id               String     @id @default(cuid())
-  loanId           Int?       @unique  // ID en el contrato LibraryManager (null en históricos)
-  libraryItemId    String
-  userId           String
-  status           LoanStatus @default(QUEUED)
-  requestTxHash    String?
-  pickupTxHash     String?
-  returnTxHash     String?
-  requestDate      DateTime   @default(now())
-  reservationDate  DateTime?
-  pickupDate       DateTime?
-  dueDate          DateTime?
-  returnDate       DateTime?
-  overdue          Boolean    @default(false)
-  historical       Boolean    @default(false)  // true = solo Prisma, sin contraparte on-chain
+  id              String     @id @default(cuid())
+  loanId          Int?       @unique // ID en el contrato LibraryManager (null en históricos)
+  libraryItemId   String
+  userId          String
+  status          LoanStatus @default(QUEUED)
+  requestTxHash   String?
+  pickupTxHash    String?
+  returnTxHash    String?
+  requestDate     DateTime   @default(now())
+  reservationDate DateTime?
+  pickupDate      DateTime?
+  dueDate         DateTime?
+  returnDate      DateTime?
+  overdue         Boolean    @default(false)
+  historical      Boolean    @default(false) // true = solo Prisma, sin contraparte on-chain
 
   libraryItem LibraryItem @relation(fields: [libraryItemId], references: [id])
   user        User        @relation(fields: [userId], references: [id])
 
   @@index([userId, historical])
   @@index([status, historical])
+  @@index([libraryItemId, status])
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -323,35 +332,35 @@ model Loan {
 // ─────────────────────────────────────────────────────────────
 
 model Room {
-  id          String    @id @default(cuid())
-  roomId      Int       @unique        // ID on-chain en RoomBooking
-  name        String                   // "Sala 1", "Sala de Estudio A"
+  id          String   @id @default(cuid())
+  roomId      Int      @unique // ID on-chain en RoomBooking
+  name        String // "Sala 1", "Sala de Estudio A"
   description String?
-  location    String?                  // "Planta 2, ala norte"
+  location    String? // "Planta 2, ala norte"
   capacity    Int
-  amenities   Json?                    // { "projector": true, "whiteboard": true }
-  active      Boolean   @default(true)
+  amenities   Json? // { "projector": true, "whiteboard": true }
+  active      Boolean  @default(true)
   txHash      String
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime @default(now())
 
-  bookings    RoomBooking[]
+  bookings RoomBooking[]
 }
 
 model RoomBooking {
-  id          String   @id @default(cuid())
-  bookingId   Int?     @unique         // ID on-chain en RoomBooking (null en históricos)
-  roomId      String
-  userId      String
-  date        DateTime                 // dia (sin hora, truncado a medianoche)
-  startHour   Int                      // 0-23
-  duration    Int                      // 1-4
-  cancelled   Boolean  @default(false)
-  txHash      String?                  // null en históricos
-  createdAt   DateTime @default(now())
-  historical  Boolean  @default(false) // true = solo Prisma, sin contraparte on-chain
+  id         String   @id @default(cuid())
+  bookingId  Int?     @unique // ID on-chain en RoomBooking (null en históricos)
+  roomId     String
+  userId     String
+  date       DateTime // dia (sin hora, truncado a medianoche)
+  startHour  Int // 0-23
+  duration   Int // 1-4
+  cancelled  Boolean  @default(false)
+  txHash     String? // null en históricos
+  createdAt  DateTime @default(now())
+  historical Boolean  @default(false) // true = solo Prisma, sin contraparte on-chain
 
-  room        Room     @relation(fields: [roomId], references: [id])
-  user        User     @relation(fields: [userId], references: [id])
+  room Room @relation(fields: [roomId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@index([roomId, date])
   @@index([userId, date])
@@ -364,9 +373,9 @@ model RoomBooking {
 // ─────────────────────────────────────────────────────────────
 
 model Printer {
-  id        String  @id         // "IMP-BIB-01"
-  location  String              // "Biblioteca, planta 2"
-  active    Boolean @default(true)
+  id       String  @id // "IMP-BIB-01"
+  location String // "Biblioteca, planta 2"
+  active   Boolean @default(true)
 
   printLogs PrintLog[]
 }
@@ -375,33 +384,34 @@ model Printer {
 model PrintLog {
   id           String   @id @default(cuid())
   userId       String
-  filename     String               // nombre original del archivo subido
-  pages        Int                  // total de caras impresas (= créditos consumidos)
+  filename     String // nombre original del archivo subido
+  pages        Int // total de caras impresas (= créditos consumidos)
   copies       Int      @default(1)
   printerId    String
-  txHash       String?              // prueba blockchain (null en históricos)
+  txHash       String? // prueba blockchain (null en históricos)
   creditsUsed  Int
   creditsAfter Int
   createdAt    DateTime @default(now())
-  historical   Boolean  @default(false)  // true = solo Prisma, sin contraparte on-chain
+  historical   Boolean  @default(false) // true = solo Prisma, sin contraparte on-chain
 
   // Campos del simulador de impresión
-  color         Boolean  @default(false)  // false = B/N, true = color
-  duplex        Boolean  @default(false)  // impresión a doble cara
-  orientation   String   @default("portrait")  // "portrait" | "landscape"
-  paperSize     String   @default("A4")        // "A4" | "letter" | "A3"
-  pageRangeFrom Int?                     // null = imprimir todas
-  pageRangeTo   Int?                     // null = imprimir todas
-  pagesPerSheet Int      @default(1)     // 1, 2 o 4 páginas por hoja
-  filePages     Int      @default(1)     // páginas detectadas en el archivo original
-  fileSize      Int      @default(0)     // tamaño del archivo en bytes
-  filePath      String?                  // ruta temporal del archivo (se limpia)
+  color         Boolean @default(false) // false = B/N, true = color
+  duplex        Boolean @default(false) // impresión a doble cara
+  orientation   String  @default("portrait") // "portrait" | "landscape"
+  paperSize     String  @default("A4") // "A4" | "letter" | "A3"
+  pageRangeFrom Int? // null = imprimir todas
+  pageRangeTo   Int? // null = imprimir todas
+  pagesPerSheet Int     @default(1) // 1, 2 o 4 páginas por hoja
+  filePages     Int     @default(1) // páginas detectadas en el archivo original
+  fileSize      Int     @default(0) // tamaño del archivo en bytes
+  filePath      String? // ruta temporal del archivo (se limpia)
 
   user    User    @relation(fields: [userId], references: [id])
   printer Printer @relation(fields: [printerId], references: [id])
 
   @@index([userId, historical])
   @@index([createdAt, historical])
+  @@index([printerId])
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -416,25 +426,25 @@ enum OrderStatus {
 
 // Producto de la tienda. productId = ID en CampusShop.
 model Product {
-  id          String   @id @default(cuid())
-  productId   Int      @unique  // ID en el contrato CampusShop
-  baseId      String?
-  name        String
-  color       String?
+  id           String   @id @default(cuid())
+  productId    Int      @unique // ID en el contrato CampusShop
+  baseId       String?
+  name         String
+  color        String?
   variantLabel String?
-  attributes  Json?
-  description String?
-  price       Int               // en ShopTokens
-  stock       Int
-  imageUrl    String?
-  category    String?
-  sortOrder   Int      @default(0)
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
+  attributes   Json?
+  description  String?
+  price        Int // en ShopTokens
+  stock        Int
+  imageUrl     String?
+  category     String?
+  sortOrder    Int      @default(0)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
 
-  base  ProductBase? @relation(fields: [baseId], references: [id])
-  orders Order[]
+  base      ProductBase? @relation(fields: [baseId], references: [id])
+  orders    Order[]
   cartItems CartItem[]
 
   @@index([baseId])
@@ -456,15 +466,15 @@ model ProductBase {
 // Pedido agrupado (batch). Un checkout del carrito = 1 batch con N artículos.
 model OrderBatch {
   id           String   @id @default(cuid())
-  batchId      Int?     @unique  // ID en el contrato CampusShop (null en históricos)
+  batchId      Int?     @unique // ID en el contrato CampusShop (null en históricos)
   userId       String
   totalPaid    Int
-  txHash       String?           // 1 solo txHash para toda la compra (null en históricos)
+  txHash       String? // 1 solo txHash para toda la compra (null en históricos)
   purchaseDate DateTime @default(now())
-  historical   Boolean  @default(false)  // true = solo Prisma, sin contraparte on-chain
+  historical   Boolean  @default(false) // true = solo Prisma, sin contraparte on-chain
 
   user  User    @relation(fields: [userId], references: [id])
-  items Order[]                  // artículos individuales del pedido
+  items Order[] // artículos individuales del pedido
 
   @@index([userId, purchaseDate])
   @@index([userId, historical])
@@ -473,18 +483,18 @@ model OrderBatch {
 // Artículo individual de un pedido. orderId = ID en CampusShop.
 model Order {
   id           String      @id @default(cuid())
-  orderId      Int?        @unique  // ID en el contrato CampusShop (null en históricos)
+  orderId      Int?        @unique // ID en el contrato CampusShop (null en históricos)
   userId       String
   productId    String
-  batchId      String?             // FK Prisma a OrderBatch.id (no es batchId on-chain)
+  batchId      String? // FK Prisma a OrderBatch.id (no es batchId on-chain)
   quantity     Int         @default(1)
   pricePaid    Int
   status       OrderStatus @default(PAID)
-  txHash       String?             // null en históricos
+  txHash       String? // null en históricos
   purchaseDate DateTime    @default(now())
   deliveryDate DateTime?
   returnDate   DateTime?
-  historical   Boolean     @default(false)  // true = solo Prisma, sin contraparte on-chain
+  historical   Boolean     @default(false) // true = solo Prisma, sin contraparte on-chain
 
   user    User        @relation(fields: [userId], references: [id])
   product Product     @relation(fields: [productId], references: [id])
@@ -493,6 +503,7 @@ model Order {
   @@index([batchId])
   @@index([userId, historical])
   @@index([status, historical])
+  @@index([productId])
 }
 
 model Cart {
@@ -538,22 +549,6 @@ model CardTopupSimulation {
   @@index([userId, createdAt])
 }
 
-model PaymentSimulationLog {
-  id          String   @id @default(cuid())
-  userId      String
-  method      String
-  amount      Int
-  result      String
-  cardLast4   String?
-  txHash      String?
-  errorReason String?
-  createdAt   DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id])
-
-  @@index([userId, createdAt])
-}
-
 // ─────────────────────────────────────────────────────────────
 // RECOMPENSAS EN SHOPTOKENS
 // ─────────────────────────────────────────────────────────────
@@ -572,12 +567,12 @@ enum ShopTokenRewardReason {
 }
 
 model ShopTokenReward {
-  id        String                 @id @default(cuid())
+  id        String                @id @default(cuid())
   userId    String
   amount    Int
   reason    ShopTokenRewardReason
   txHash    String
-  createdAt DateTime               @default(now())
+  createdAt DateTime              @default(now())
 
   user User @relation(fields: [userId], references: [id])
 
