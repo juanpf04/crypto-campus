@@ -28,7 +28,9 @@ export async function GET() {
 				getRoomStats(),
 				listActivePrinters(),
 				prisma.user.groupBy({ by: ["role"], _count: { id: true } }),
-				prisma.printLog.count(),
+				// El contador de actividad real debe coincidir con el listado
+				// /admin/printing/logs (que filtra históricos).
+				prisma.printLog.count({ where: { historical: false } }),
 			]);
 
 		const roleCounts = Object.fromEntries(userGroups.map((g) => [g.role, g._count.id]));

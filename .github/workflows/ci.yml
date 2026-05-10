@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    name: Lint, type-check, tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint Next.js
+        run: pnpm --filter nextjs run lint
+
+      - name: Compile contracts
+        run: pnpm compile
+
+      - name: Test contracts (Hardhat + Foundry)
+        run: pnpm test
+
+      - name: Test Next.js (vitest)
+        run: pnpm --filter nextjs run test
+
+      - name: Build Next.js
+        run: pnpm --filter nextjs run build

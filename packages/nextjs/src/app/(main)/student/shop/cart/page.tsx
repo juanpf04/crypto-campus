@@ -36,14 +36,13 @@ export default function StudentCartPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { addToast } = useToast();
-  const { setItemCount } = useCart();
+  const { setItemCount, startPurchase } = useCart();
   const [loading, setLoading] = useState(true);
   const [cart, setCart] = useState<CartPayload | null>(null);
   const [balance, setBalance] = useState(0);
   const pendingHandledRef = useRef(false);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [checkingOut, setCheckingOut] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
 
@@ -164,35 +163,45 @@ export default function StudentCartPage() {
     }
   }
 
-  async function handleConfirmCheckout() {
-    setCheckingOut(true);
+  function handleConfirmCheckout() {
     setConfirmOpen(false);
 
-    try {
-      const res = await fetch("/api/shop/checkout", { method: "POST" });
-      const body = await res.json();
+    // Vaciamos el carrito local antes de mostrar el overlay para que, al
+    // volver a la tienda, no se vea el carrito "lleno" un instante.
+    const itemNames = cart?.items.map((i) => i.name) ?? [];
+    setCart(null);
+    setItemCount(0);
 
-      if (!res.ok) {
-        addToast(body.error ?? "Error en el pago", "danger");
-        setCheckingOut(false);
-        return;
+    const overlayName =
+      itemNames.length <= 2
+        ? itemNames.join(", ")
+        : `${itemNames[0]} y ${itemNames.length - 1} más`;
+
+    let failed = false;
+    const checkoutPromise = (async () => {
+      try {
+        const res = await fetch("/api/shop/checkout", { method: "POST" });
+        const body = await res.json();
+        if (!res.ok) {
+          failed = true;
+          addToast(body.error ?? "Error en el pago", "danger");
+          return null;
+        }
+        toastRewards(addToast, body.rewards);
+        return (body.batchId as string) ?? null;
+      } catch {
+        failed = true;
+        addToast("Error al procesar el pago", "danger");
+        return null;
       }
+    })();
 
-      setItemCount(0);
-
-      addToast(
-        `Compra realizada. ${body.ordersCreated} producto${body.ordersCreated > 1 ? "s" : ""} pagado${body.ordersCreated > 1 ? "s" : ""}. Nuevo saldo: ${body.newBalance} ShopTokens`,
-        "success",
-      );
-      toastRewards(addToast, body.rewards);
-
-      setTimeout(() => {
-        router.push(`/student/shop/orders/batch/${body.batchId}`);
-      }, 1500);
-    } catch {
-      addToast("Error al procesar el pago", "danger");
-      setCheckingOut(false);
-    }
+    // Si la promise falla muy rápido (ej. módulo pausado), no mostramos el
+    // overlay — el toast de error ya informa al usuario.
+    setTimeout(() => {
+      if (failed) return;
+      startPurchase(checkoutPromise, overlayName);
+    }, 400);
   }
 
   const purchaseItems: PurchaseItem[] = cart?.items.map((item) => ({
@@ -247,7 +256,7 @@ export default function StudentCartPage() {
             totalPrice={cart.total}
             onContinueShopping={() => router.push("/student/shop")}
             onCheckout={() => setConfirmOpen(true)}
-            checkingOut={checkingOut}
+            checkingOut={false}
           />
         </div>
       )}
@@ -258,7 +267,7 @@ export default function StudentCartPage() {
         onConfirm={handleConfirmCheckout}
         items={purchaseItems}
         balance={balance}
-        loading={checkingOut}
+        loading={false}
       />
 
       <ConfirmModal

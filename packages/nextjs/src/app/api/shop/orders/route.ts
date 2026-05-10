@@ -13,8 +13,9 @@ export async function GET(req: NextRequest) {
 		const params = req.nextUrl.searchParams;
 		const limit = parseInt(params.get("limit") || "20", 10);
 		const offset = parseInt(params.get("offset") || "0", 10);
+		const status = params.get("status") || undefined;
 
-		const result = await listMyOrders(limit, offset);
+		const result = await listMyOrders(limit, offset, status);
 		return NextResponse.json(result);
 	} catch (error) {
 		console.error("[GET /api/shop/orders]", error);

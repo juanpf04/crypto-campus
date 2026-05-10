@@ -15,8 +15,10 @@ interface RewardCardProps {
   name: string;
   description: string | null;
   badgeCost: number;
+  /** Stock restante de la recompensa. 0 = ilimitada. La acción de canje ya
+   *  decrementa este campo, así que es el "remaining" directo — no hace falta
+   *  restar nada. */
   supply: number;
-  redemptionCount: number;
   category: RewardCategory;
   /** Si se pasa, muestra los tokens que posee el alumno; si no, se omite. */
   studentBadgeCount?: number;
@@ -31,14 +33,13 @@ export function RewardCard({
   description,
   badgeCost,
   supply,
-  redemptionCount,
   category,
   studentBadgeCount,
   subjectName,
   onRedeem,
   redeeming,
 }: RewardCardProps) {
-  const remaining = supply === 0 ? Infinity : supply - redemptionCount;
+  const remaining = supply === 0 ? Infinity : supply;
   const canRedeem = studentBadgeCount !== undefined && studentBadgeCount >= badgeCost && remaining > 0;
 
   return (

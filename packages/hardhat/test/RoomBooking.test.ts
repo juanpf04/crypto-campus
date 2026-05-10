@@ -251,6 +251,32 @@ describe("RoomBooking", async function () {
     });
 
     describe("Pausable", function () {
+        it("Should allow admin to pause and unpause", async function () {
+            const { roomBooking } = await deploySystem();
+
+            await roomBooking.write.pause();
+            assert.equal(await roomBooking.read.paused(), true);
+            await roomBooking.write.unpause();
+            assert.equal(await roomBooking.read.paused(), false);
+        });
+
+        it("Should revert pause when called by non-admin", async function () {
+            const { roomBooking, outsider } = await deploySystem();
+
+            await assert.rejects(async () => {
+                await roomBooking.write.pause({ account: outsider.account });
+            });
+        });
+
+        it("Should revert unpause when called by non-admin", async function () {
+            const { roomBooking, outsider } = await deploySystem();
+
+            await roomBooking.write.pause();
+            await assert.rejects(async () => {
+                await roomBooking.write.unpause({ account: outsider.account });
+            });
+        });
+
         it("Should revert bookRoom when paused", async function () {
             const { roomBooking, librarian, student1 } = await deploySystem();
 

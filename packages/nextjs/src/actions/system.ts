@@ -149,11 +149,20 @@ export async function getModulesStatus(): Promise<SystemStatus> {
     };
   }
 
-  // Lecturas en paralelo de los 8 contratos.
+  // Lecturas en paralelo de los 8 contratos. Usamos `allSettled` para que el
+  // fallo en la lectura de UN contrato no tumbe el panel entero — los que
+  // fallen se asumen "no pausados" y se loggea para diagnóstico.
   const contractKeys = Object.keys(CONTRACT_META) as ContractKey[];
-  const pausedFlags = await Promise.all(contractKeys.map((k) => readPaused(k)));
+  const settled = await Promise.allSettled(contractKeys.map((k) => readPaused(k)));
   const contracts = Object.fromEntries(
-    contractKeys.map((k, i) => [k, { paused: pausedFlags[i] }]),
+    contractKeys.map((k, i) => {
+      const result = settled[i];
+      if (result.status === "fulfilled") {
+        return [k, { paused: result.value }];
+      }
+      console.error(`[getModulesStatus] no se pudo leer paused() de ${k}:`, result.reason);
+      return [k, { paused: false }];
+    }),
   ) as Record<ContractKey, ContractStatus>;
 
   // Derivar estado por módulo.

@@ -141,6 +141,7 @@ export default function StudentProductDetailPage() {
     setConfirmLoading(true);
     setConfirmOpen(false);
 
+    let failed = false;
     const purchasePromise = (async () => {
       const res = await fetch("/api/shop/purchase", {
         method: "POST",
@@ -150,13 +151,19 @@ export default function StudentProductDetailPage() {
 
       const body = await res.json();
       if (!res.ok) {
+        failed = true;
         addToast(body.error ?? "Error al realizar la compra", "danger");
         return null;
       }
       return body.batchId as string;
     })();
 
-    setPurchaseState({ active: true, promise: purchasePromise });
+    // Si la compra falla rápido (ej. módulo pausado), no mostramos el
+    // overlay — el toast de error ya informa al usuario.
+    setTimeout(() => {
+      if (failed) return;
+      setPurchaseState({ active: true, promise: purchasePromise });
+    }, 400);
     setConfirmLoading(false);
   }
 
@@ -194,7 +201,7 @@ export default function StudentProductDetailPage() {
     <div className="space-y-6">
       <BackLink href="/student/shop" label="Volver a la tienda" />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-center">
         {/* ── Columna izquierda: Imagen + miniaturas ── */}
         <div className="space-y-4">
           <Card className="flex items-center justify-center p-8 min-h-[300px]">

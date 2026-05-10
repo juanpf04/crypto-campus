@@ -124,7 +124,7 @@ contract RoomBooking is ReentrancyGuard, Pausable {
     }
 
     /// @notice Desactiva una sala permanentemente
-    function removeRoom(uint256 roomId) external onlyLibrarian {
+    function removeRoom(uint256 roomId) external onlyLibrarian whenNotPaused {
         if (!_rooms[roomId].exists) revert RoomNotFound(roomId);
 
         _rooms[roomId].active = false;
@@ -235,20 +235,24 @@ contract RoomBooking is ReentrancyGuard, Pausable {
 
     // ── External view functions ─────────────────────────────────────────
 
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     function getRoomInfo(uint256 roomId) external view returns (uint256 capacity, bool active) {
         Room storage room = _rooms[roomId];
         return (room.capacity, room.active);
     }
 
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     function getBooking(uint256 bookingId) external view returns (Booking memory) {
         return _bookings[bookingId];
     }
 
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     function getStudentBookingForDate(address student, uint256 date) external view returns (uint256) {
         return studentDailyBooking[student][date];
     }
 
     /// @notice Consulta si un slot concreto esta disponible
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     function isSlotAvailable(uint256 roomId, uint256 date, uint8 hour) external view returns (bool) {
         if (!_rooms[roomId].active) return false;
         return !slotOccupied[roomId][date][hour];

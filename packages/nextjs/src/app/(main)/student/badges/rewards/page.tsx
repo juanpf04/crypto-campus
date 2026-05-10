@@ -80,7 +80,6 @@ interface Reward {
       subject: { name: string; code: string };
     };
   };
-  _count: { redemptions: number };
 }
 
 interface MyReward {
@@ -271,7 +270,6 @@ export default function StudentRewardsPage() {
                   description={r.description}
                   badgeCost={r.badgeCost}
                   supply={r.supply}
-                  redemptionCount={r._count.redemptions}
                   category={r.category}
                   studentBadgeCount={breakdown?.totalBadges ?? 0}
                   onRedeem={() => handleRedeem(r.id)}

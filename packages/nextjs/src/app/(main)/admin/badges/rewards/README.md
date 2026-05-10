@@ -1,1 +1,0 @@
-Lista de todas las recompensas canjeables con badges. Muestra coste, stock y canjes realizados.

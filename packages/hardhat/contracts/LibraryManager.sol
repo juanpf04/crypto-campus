@@ -181,7 +181,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
      * @dev Desactiva un libro y quema las copias del contrato.
      *      Requiere que no haya prestamos activos ni reservas.
      */
-    function removeBook(uint256 bookId) external onlyLibrarian {
+    function removeBook(uint256 bookId) external onlyLibrarian whenNotPaused {
         if (!_books[bookId].exists) revert BookNotFound(bookId);
         if (activeLoansForBook[bookId] > 0 || reservedCopiesForBook[bookId] > 0)
             revert BookHasActiveLoans(bookId);
@@ -261,7 +261,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
      * @dev Estudiante cancela su solicitud (QUEUED o RESERVED).
      *      Devuelve el deposito. Si era RESERVED, procesa la cola.
      */
-    function cancelLoan(uint256 loanId) external onlyStudent nonReentrant {
+    function cancelLoan(uint256 loanId) external onlyStudent whenNotPaused nonReentrant {
         Loan storage loan = _loans[loanId];
         if (loan.status == LoanStatus.None) revert LoanNotFound(loanId);
         if (loan.student != msg.sender) revert NotLoanOwner(loanId, msg.sender);
@@ -379,7 +379,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
      * @dev Bibliotecario expira una reserva no recogida tras RESERVATION_TIMEOUT.
      *      Devuelve deposito y procesa cola.
      */
-    function expireReservation(uint256 loanId) external onlyLibrarian nonReentrant {
+    function expireReservation(uint256 loanId) external onlyLibrarian whenNotPaused nonReentrant {
         Loan storage loan = _loans[loanId];
         if (loan.status == LoanStatus.None) revert LoanNotFound(loanId);
         if (loan.status != LoanStatus.Reserved)
@@ -420,6 +420,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
     // ── External view functions ─────────────────────────────────────────
 
     /// @notice Devuelve copias totales, disponibles y existencia de un libro
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     function getBookInfo(uint256 bookId) external view returns (
         uint256 totalCopies,
         uint256 availableCopies,
@@ -441,17 +442,20 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
     }
 
     /// @notice Devuelve el array historico de IDs de prestamos de un estudiante
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     function getStudentLoans(address student) external view returns (uint256[] memory) {
         return _studentLoanIds[student];
     }
 
     /// @notice Comprueba si un prestamo recogido ha superado la fecha limite
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     function isOverdue(uint256 loanId) external view returns (bool) {
         Loan storage loan = _loans[loanId];
         return loan.status == LoanStatus.PickedUp && block.timestamp > loan.dueDate;
     }
 
     /// @notice Comprueba si una reserva ha superado el timeout de recogida
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     function isReservationExpired(uint256 loanId) external view returns (bool) {
         Loan storage loan = _loans[loanId];
         return loan.status == LoanStatus.Reserved &&
@@ -473,6 +477,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
     }
 
     /// @notice Devuelve cuantos prestamos hay en cola de espera para un libro
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     function getQueueLength(uint256 bookId) external view returns (uint256 count) {
         uint256[] storage queue = _bookQueue[bookId];
         for (uint256 i = 0; i < queue.length; i++) {

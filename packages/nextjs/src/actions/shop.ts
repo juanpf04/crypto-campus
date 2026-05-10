@@ -509,6 +509,7 @@ export async function addProduct(input: {
 		return { ...product, txHash: hash };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al crear producto: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -606,6 +607,7 @@ export async function deactivateProduct(productPrismaId: string) {
 		});
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Producto no encontrado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al desactivar producto: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -639,6 +641,7 @@ export async function reactivateProduct(productPrismaId: string) {
 		});
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Producto no encontrado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al reactivar producto: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -738,7 +741,10 @@ export async function updateProductGroup(
 						functionName: "updateProduct",
 						args: [BigInt(variant.productId), BigInt(newPrice), BigInt(variant.stock)],
 					});
-					await publicClient.waitForTransactionReceipt({ hash });
+					const receipt = await publicClient.waitForTransactionReceipt({ hash });
+					if (receipt.status !== "success") {
+						throw new Error(`La transacción de actualización de la variante #${variant.productId} fue revertida`);
+					}
 				}
 			}
 		}
@@ -768,6 +774,7 @@ export async function updateProductGroup(
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Grupo de producto no encontrado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al actualizar grupo: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -806,7 +813,10 @@ export async function updateVariant(
 				functionName: "updateProduct",
 				args: [BigInt(variant.productId), BigInt(variant.price), BigInt(newStock)],
 			});
-			await publicClient.waitForTransactionReceipt({ hash });
+			const receipt = await publicClient.waitForTransactionReceipt({ hash });
+			if (receipt.status !== "success") {
+				throw new Error("La transacción de actualización de la variante fue revertida");
+			}
 		}
 
 		// Actualizar en Prisma
@@ -822,6 +832,7 @@ export async function updateVariant(
 		});
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Variante no encontrada")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al actualizar variante: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -897,6 +908,7 @@ export async function addVariantToGroup(
 		return { ...newVariant, txHash: hash };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Grupo de producto no encontrado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al añadir variante: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -981,6 +993,7 @@ export async function createProductGroup(input: {
 		return { groupKey: slug, variant, txHash: hash };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autorizado" || error.message.startsWith("Ya existe"))) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al crear producto: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -1224,6 +1237,7 @@ export async function mintShopTokens(userId: string, amount: number) {
 		};
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al asignar tokens: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -1302,6 +1316,7 @@ export async function topupWithSimulatedCard(input: SimulatedCardInput) {
 			data: { status: "FAILED", errorReason: reason },
 		});
 
+		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al recargar saldo: ${reason}`);
 	}
 }
@@ -1812,7 +1827,11 @@ export async function checkoutCart() {
  * Lista los pedidos del usuario logueado con paginación.
  * Acceso: estudiantes y profesores.
  */
-export async function listMyOrders(limit = 20, offset = 0) {
+export async function listMyOrders(
+	limit = 20,
+	offset = 0,
+	status?: string,
+) {
 	const safeLimit = Math.min(Math.max(limit, 1), 100);
 	const safeOffset = Math.max(offset, 0);
 
@@ -1820,9 +1839,13 @@ export async function listMyOrders(limit = 20, offset = 0) {
 	ensureRole(session, ["STUDENT", "PROFESSOR"]);
 
 	try {
+		// Los pedidos históricos solo alimentan estadísticas; no se listan.
+		const where: Record<string, unknown> = { ...ONLY_LIVE, userId: session.userId };
+		if (status) where.status = status;
+
 		const [orders, total] = await Promise.all([
 			prisma.order.findMany({
-				where: { userId: session.userId },
+				where,
 				include: {
 					product: {
 						select: { name: true, imageUrl: true, category: true },
@@ -1832,7 +1855,7 @@ export async function listMyOrders(limit = 20, offset = 0) {
 				take: safeLimit,
 				skip: safeOffset,
 			}),
-			prisma.order.count({ where: { userId: session.userId } }),
+			prisma.order.count({ where }),
 		]);
 
 		return { orders, total };
@@ -1860,7 +1883,9 @@ export async function getOrderDetail(orderPrismaId: string) {
 			},
 		});
 
-		if (!order) throw new Error("Pedido no encontrado");
+		// Tratamos los pedidos históricos como inexistentes para la UI: solo
+		// alimentan estadísticas agregadas, no son navegables por URL directa.
+		if (!order || order.historical) throw new Error("Pedido no encontrado");
 
 		// Los no-admin solo pueden ver sus propios pedidos
 		if (session.role !== "ADMIN" && order.userId !== session.userId) {
@@ -1891,7 +1916,8 @@ export async function listAllOrders(
 	ensureRole(session, ["ADMIN"]);
 
 	try {
-		const where: Record<string, unknown> = {};
+		// Los pedidos históricos solo alimentan estadísticas; no se listan.
+		const where: Record<string, unknown> = { ...ONLY_LIVE };
 		if (userId) where.userId = userId;
 		if (status) where.status = status;
 
@@ -1958,6 +1984,7 @@ export async function markOrderDelivered(orderPrismaId: string) {
 		});
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Pedido no encontrado" || error.message.startsWith("Solo se pueden"))) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al marcar como entregado: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -2018,6 +2045,7 @@ export async function processReturn(orderPrismaId: string) {
 			error.message === "El pedido ya fue devuelto" ||
 			error.message.startsWith("Solo se pueden")
 		)) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al procesar devolución: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -2086,6 +2114,7 @@ export async function requestReturn(orderPrismaId: string) {
 			error.message === "Solo se pueden devolver pedidos entregados" ||
 			error.message === "El plazo de devolución de 30 días ha expirado"
 		)) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al solicitar devolución: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -2097,17 +2126,58 @@ export async function requestReturn(orderPrismaId: string) {
  * Cada batch contiene N artículos de una sola compra.
  * Acceso: estudiantes y profesores.
  */
-export async function listMyBatches(limit = 20, offset = 0) {
+export async function listMyBatches(
+	limit = 20,
+	offset = 0,
+	generalStatus?: string,
+) {
 	const safeLimit = Math.min(Math.max(limit, 1), 100);
 	const safeOffset = Math.max(offset, 0);
 
 	const session = await getSession();
 	ensureRole(session, ["STUDENT", "PROFESSOR"]);
 
+	const computeStatus = (statuses: string[]) => {
+		if (statuses.every((s) => s === "RETURNED")) return "RETURNED";
+		if (statuses.some((s) => s === "RETURNED")) return "PARTIALLY_RETURNED";
+		if (statuses.every((s) => s === "DELIVERED")) return "DELIVERED";
+		if (statuses.some((s) => s === "DELIVERED")) return "PARTIALLY_DELIVERED";
+		return "PAID";
+	};
+
 	try {
+		// `generalStatus` es derivado: cuando se filtra, traemos todos los
+		// batches del usuario, calculamos estado, filtramos y paginamos en
+		// memoria (volúmenes razonables por usuario).
+		if (generalStatus) {
+			const allBatches = await prisma.orderBatch.findMany({
+				where: { ...ONLY_LIVE, userId: session.userId },
+				include: {
+					items: {
+						include: {
+							product: {
+								select: { name: true, imageUrl: true, category: true, color: true, variantLabel: true },
+							},
+						},
+						orderBy: { purchaseDate: "asc" },
+					},
+				},
+				orderBy: { purchaseDate: "desc" },
+			});
+			const withStatus = allBatches.map((batch) => ({
+				...batch,
+				generalStatus: computeStatus(batch.items.map((i) => i.status)),
+			}));
+			const filtered = withStatus.filter((b) => b.generalStatus === generalStatus);
+			return {
+				batches: filtered.slice(safeOffset, safeOffset + safeLimit),
+				total: filtered.length,
+			};
+		}
+
 		const [batches, total] = await Promise.all([
 			prisma.orderBatch.findMany({
-				where: { userId: session.userId },
+				where: { ...ONLY_LIVE, userId: session.userId },
 				include: {
 					items: {
 						include: {
@@ -2122,28 +2192,13 @@ export async function listMyBatches(limit = 20, offset = 0) {
 				take: safeLimit,
 				skip: safeOffset,
 			}),
-			prisma.orderBatch.count({ where: { userId: session.userId } }),
+			prisma.orderBatch.count({ where: { ...ONLY_LIVE, userId: session.userId } }),
 		]);
 
-		// Calcular estado general de cada batch
-		const batchesWithStatus = batches.map((batch) => {
-			const statuses = batch.items.map((i) => i.status);
-			let generalStatus: string;
-
-			if (statuses.every((s) => s === "RETURNED")) {
-				generalStatus = "RETURNED";
-			} else if (statuses.some((s) => s === "RETURNED")) {
-				generalStatus = "PARTIALLY_RETURNED";
-			} else if (statuses.every((s) => s === "DELIVERED")) {
-				generalStatus = "DELIVERED";
-			} else if (statuses.some((s) => s === "DELIVERED")) {
-				generalStatus = "PARTIALLY_DELIVERED";
-			} else {
-				generalStatus = "PAID";
-			}
-
-			return { ...batch, generalStatus };
-		});
+		const batchesWithStatus = batches.map((batch) => ({
+			...batch,
+			generalStatus: computeStatus(batch.items.map((i) => i.status)),
+		}));
 
 		return { batches: batchesWithStatus, total };
 	} catch (error) {
@@ -2176,7 +2231,9 @@ export async function getBatchDetail(batchPrismaId: string) {
 			},
 		});
 
-		if (!batch) throw new Error("Pedido no encontrado");
+		// Tratamos los batches históricos como inexistentes para la UI: solo
+		// alimentan estadísticas agregadas, no son navegables por URL directa.
+		if (!batch || batch.historical) throw new Error("Pedido no encontrado");
 
 		// Solo el propietario o admin pueden ver el detalle
 		if (session.role !== "ADMIN" && batch.userId !== session.userId) {
@@ -2211,7 +2268,12 @@ export async function getBatchDetail(batchPrismaId: string) {
  * Soporta filtro por userId y paginación.
  * Acceso: solo admin.
  */
-export async function listAllBatches(limit = 20, offset = 0, userId?: string) {
+export async function listAllBatches(
+	limit = 20,
+	offset = 0,
+	userId?: string,
+	generalStatus?: string,
+) {
 	const safeLimit = Math.min(Math.max(limit, 1), 200);
 	const safeOffset = Math.max(offset, 0);
 
@@ -2219,8 +2281,48 @@ export async function listAllBatches(limit = 20, offset = 0, userId?: string) {
 	ensureRole(session, ["ADMIN"]);
 
 	try {
-		const where: Record<string, unknown> = {};
+		// Históricos solo alimentan estadísticas, no aparecen en el panel admin.
+		const where: Record<string, unknown> = { ...ONLY_LIVE };
 		if (userId) where.userId = userId;
+
+		// `generalStatus` es un campo derivado de los items: no se puede filtrar
+		// en el `where` de Prisma. Cuando hay filtro derivado, traemos todos los
+		// batches que cumplan los filtros directos, computamos el estado global
+		// y paginamos en memoria — así `total` y `items` quedan consistentes con
+		// el filtro visible.
+		const computeStatus = (statuses: string[]) => {
+			if (statuses.every((s) => s === "RETURNED")) return "RETURNED";
+			if (statuses.some((s) => s === "RETURNED")) return "PARTIALLY_RETURNED";
+			if (statuses.every((s) => s === "DELIVERED")) return "DELIVERED";
+			if (statuses.some((s) => s === "DELIVERED")) return "PARTIALLY_DELIVERED";
+			return "PAID";
+		};
+
+		if (generalStatus) {
+			const allBatches = await prisma.orderBatch.findMany({
+				where,
+				include: {
+					user: { select: { name: true, email: true } },
+					items: {
+						include: {
+							product: {
+								select: { name: true, imageUrl: true, category: true },
+							},
+						},
+						orderBy: { purchaseDate: "asc" },
+					},
+				},
+				orderBy: { purchaseDate: "desc" },
+			});
+
+			const withStatus = allBatches.map((batch) => ({
+				...batch,
+				generalStatus: computeStatus(batch.items.map((i) => i.status)),
+			}));
+			const filtered = withStatus.filter((b) => b.generalStatus === generalStatus);
+			const page = filtered.slice(safeOffset, safeOffset + safeLimit);
+			return { batches: page, total: filtered.length };
+		}
 
 		const [batches, total] = await Promise.all([
 			prisma.orderBatch.findMany({
@@ -2243,24 +2345,10 @@ export async function listAllBatches(limit = 20, offset = 0, userId?: string) {
 			prisma.orderBatch.count({ where }),
 		]);
 
-		const batchesWithStatus = batches.map((batch) => {
-			const statuses = batch.items.map((i) => i.status);
-			let generalStatus: string;
-
-			if (statuses.every((s) => s === "RETURNED")) {
-				generalStatus = "RETURNED";
-			} else if (statuses.some((s) => s === "RETURNED")) {
-				generalStatus = "PARTIALLY_RETURNED";
-			} else if (statuses.every((s) => s === "DELIVERED")) {
-				generalStatus = "DELIVERED";
-			} else if (statuses.some((s) => s === "DELIVERED")) {
-				generalStatus = "PARTIALLY_DELIVERED";
-			} else {
-				generalStatus = "PAID";
-			}
-
-			return { ...batch, generalStatus };
-		});
+		const batchesWithStatus = batches.map((batch) => ({
+			...batch,
+			generalStatus: computeStatus(batch.items.map((i) => i.status)),
+		}));
 
 		return { batches: batchesWithStatus, total };
 	} catch (error) {
@@ -2315,6 +2403,7 @@ export async function markBatchDelivered(batchPrismaId: string) {
 		return { success: true, deliveredCount: paidItems.length };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Pedido no encontrado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al marcar como entregado: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -2405,10 +2494,12 @@ export async function listAllTransactions(
 
 	const userWhere = userId ? { userId } : {};
 
-	// Cargar las 4 fuentes en paralelo
+	// El log de transacciones representa movimientos on-chain reales de
+	// ShopTokens; los pedidos históricos no movieron tokens, así que se
+	// excluyen aquí (siguen contando en estadísticas agregadas).
 	const [orders, topups, rewards] = await Promise.all([
 		prisma.order.findMany({
-			where: userWhere,
+			where: { ...userWhere, ...ONLY_LIVE },
 			include: {
 				user: { select: { name: true, email: true } },
 				product: { select: { name: true } },

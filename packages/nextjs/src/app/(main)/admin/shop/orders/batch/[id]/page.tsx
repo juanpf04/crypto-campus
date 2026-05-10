@@ -21,8 +21,9 @@ import {
 import { formatShortDate } from "@/lib/formatters";
 
 interface AdminBatchDetail extends BatchDetailPayload {
-  txHash: string;
+  txHash: string | null; // null en batches históricos (sin contraparte on-chain)
   user: { name: string; email: string };
+  historical?: boolean;
 }
 
 export default function AdminBatchDetailPage() {
@@ -101,10 +102,21 @@ export default function AdminBatchDetailPage() {
       <Card className="space-y-3">
         <DetailField
           label="Hash de transacción"
-          value={<span className="font-mono text-xs break-all">{batch.txHash}</span>}
+          value={
+            batch.txHash ? (
+              <span className="font-mono text-xs break-all">{batch.txHash}</span>
+            ) : (
+              <span className="text-text-muted text-sm italic">
+                Sin transacción on-chain (registro histórico)
+              </span>
+            )
+          }
         />
         <DetailField label="Fecha de compra" value={formatShortDate(batch.purchaseDate)} />
-        <DetailField label="ID on-chain" value={`Batch #${batch.batchId}`} />
+        <DetailField
+          label="ID on-chain"
+          value={batch.batchId !== null && batch.batchId !== undefined ? `Batch #${batch.batchId}` : "—"}
+        />
       </Card>
     </div>
   );

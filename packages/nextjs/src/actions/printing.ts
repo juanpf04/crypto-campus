@@ -24,6 +24,7 @@ import { getSession, ensureRole } from "@/lib/auth";
 import { adminWalletClient, publicClient } from "@/lib/viem";
 import { CONTRACT_ADDRESSES, PRINTER_ABI } from "@/lib/contracts";
 import { isContractPauseError, translateContractError } from "@/lib/contractErrors";
+import { ONLY_LIVE } from "@/lib/historical";
 import { issueReward, hasRewardOfType, ShopTokenRewardReason, type RewardGrant } from "@/lib/shopRewards";
 
 interface ExecutePrintInput {
@@ -154,11 +155,12 @@ export async function listActivePrinters() {
 
 /**
  * Lista los trabajos de impresión ejecutados por el usuario logueado.
- * Soporta paginación con limit + offset.
+ * Soporta paginación con limit + offset y devuelve el total real para que la
+ * UI pueda mostrar un contador de páginas correcto.
  *
  * @param limit Máximo número de registros a devolver (1–100, default 20).
  * @param offset Número de registros a saltar desde el inicio (default 0).
- * @returns Array de logs de impresión ordenados por fecha descendente.
+ * @returns Objeto con items (página actual) y total (recuento global del usuario).
  */
 export async function listMyPrinterLogs(limit = 20, offset = 0) {
 	const safeLimit = Math.min(Math.max(limit, 1), 100);
@@ -168,17 +170,24 @@ export async function listMyPrinterLogs(limit = 20, offset = 0) {
 	ensureRole(session, ["STUDENT", "PROFESSOR", "LIBRARIAN", "ADMIN"]);
 
 	try {
-		return await prisma.printLog.findMany({
-			where: { userId: session.userId },
-			include: {
-				printer: {
-					select: { id: true, location: true },
+		// Los registros históricos viven solo en Prisma para alimentar
+		// estadísticas; no aparecen en el historial visible del usuario.
+		const where = { ...ONLY_LIVE, userId: session.userId };
+		const [items, total] = await Promise.all([
+			prisma.printLog.findMany({
+				where,
+				include: {
+					printer: {
+						select: { id: true, location: true },
+					},
 				},
-			},
-			orderBy: { createdAt: "desc" },
-			take: safeLimit,
-			skip: safeOffset,
-		});
+				orderBy: { createdAt: "desc" },
+				take: safeLimit,
+				skip: safeOffset,
+			}),
+			prisma.printLog.count({ where }),
+		]);
+		return { items, total };
 	} catch (error) {
 		throw new Error(`Error al obtener logs de impresión: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
@@ -208,7 +217,9 @@ export async function getPrintLogDetail(logId: string) {
 			},
 		});
 
-		if (!log) throw new Error("Log no encontrado");
+		// Tratamos los logs históricos como inexistentes para la UI: solo
+		// alimentan estadísticas agregadas, no son navegables por URL directa.
+		if (!log || log.historical) throw new Error("Log no encontrado");
 
 		// Los no-admin/librarian solo pueden ver sus propios logs
 		if (session.role !== "ADMIN" && session.role !== "LIBRARIAN" && log.userId !== session.userId) {
@@ -226,12 +237,13 @@ export async function getPrintLogDetail(logId: string) {
 
 /**
  * Lista todos los trabajos de impresión del sistema (solo para admins).
- * Soporta paginación con limit + offset y filtro opcional por usuario.
+ * Soporta paginación con limit + offset y filtro opcional por usuario, y
+ * devuelve el total real para una paginación consistente.
  *
  * @param limit Máximo número de registros a devolver (1–200, default 50).
  * @param offset Número de registros a saltar desde el inicio (default 0).
  * @param userId ID de usuario opcional para filtrar logs de un usuario concreto.
- * @returns Array de logs con detalles de usuario e impresora.
+ * @returns Objeto con items (página actual) y total (recuento global con el filtro aplicado).
  */
 export async function listPrinterLogsForAdmin(limit = 50, offset = 0, userId?: string) {
 	const safeLimit = Math.min(Math.max(limit, 1), 200);
@@ -241,23 +253,27 @@ export async function listPrinterLogsForAdmin(limit = 50, offset = 0, userId?: s
 	ensureRole(session, ["ADMIN", "LIBRARIAN"]);
 
 	try {
-		// Si se pasa userId, filtrar solo los logs de ese usuario
-		const where = userId ? { userId } : {};
-
-		return await prisma.printLog.findMany({
-			where,
-			include: {
-				user: {
-					select: { id: true, name: true, email: true, role: true, address: true },
+		// Los históricos solo alimentan estadísticas, nunca el listado visible.
+		const where: Record<string, unknown> = { ...ONLY_LIVE };
+		if (userId) where.userId = userId;
+		const [items, total] = await Promise.all([
+			prisma.printLog.findMany({
+				where,
+				include: {
+					user: {
+						select: { id: true, name: true, email: true, role: true, address: true },
+					},
+					printer: {
+						select: { id: true, location: true },
+					},
 				},
-				printer: {
-					select: { id: true, location: true },
-				},
-			},
-			orderBy: { createdAt: "desc" },
-			take: safeLimit,
-			skip: safeOffset,
-		});
+				orderBy: { createdAt: "desc" },
+				take: safeLimit,
+				skip: safeOffset,
+			}),
+			prisma.printLog.count({ where }),
+		]);
+		return { items, total };
 	} catch (error) {
 		throw new Error(`Error al obtener logs globales de impresión: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
@@ -637,7 +653,10 @@ export async function executeMyPrintJob(input: ExecutePrintInput) {
 		return { ...result, rewards };
 	} catch (error) {
 		if (isContractPauseError(error)) throw translateContractError(error, "Impresión");
-		throw new Error(`Error al ejecutar trabajo personal: ${error instanceof Error ? error.message : "desconocido"}`);
+		// La capa interna (executePrinterJob) ya traduce los errores conocidos:
+		// si llega un Error con mensaje útil, lo propagamos sin re-envolver.
+		if (error instanceof Error) throw error;
+		throw new Error(`Error al ejecutar trabajo personal: ${String(error)}`);
 	}
 }
 

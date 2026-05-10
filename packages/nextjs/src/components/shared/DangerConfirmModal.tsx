@@ -59,10 +59,10 @@ export function DangerConfirmModal({
       />
 
       <div className="flex justify-end gap-3">
-        <Button variant="ghost" onClick={onClose} disabled={loading}>
+        <Button variant="danger" onClick={onClose} disabled={loading}>
           Cancelar
         </Button>
-        <Button variant="danger" onClick={onConfirm} disabled={!matches || loading} loading={loading}>
+        <Button variant="primary" onClick={onConfirm} disabled={!matches || loading} loading={loading}>
           {confirmLabel}
         </Button>
       </div>

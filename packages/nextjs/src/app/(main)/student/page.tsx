@@ -75,7 +75,7 @@ export default function StudentDashboard() {
         setLibBalance(data.libBalance ?? 0);
         setLoans(Array.isArray(data.loans) ? data.loans : []);
         setShopBalance(data.shopBalance?.balance ?? 0);
-        setOrders(Array.isArray(data.orders?.items) ? data.orders.items : []);
+        setOrders(Array.isArray(data.orders) ? data.orders : []);
         setBadgeSummary(data.badgeSummary ?? null);
       }
     } catch {

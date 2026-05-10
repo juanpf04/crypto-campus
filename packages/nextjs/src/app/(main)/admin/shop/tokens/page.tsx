@@ -27,7 +27,6 @@ interface UserWithBalance {
   id: string;
   name: string;
   email: string;
-  role: string;
   balance: number | null;
 }
 
@@ -46,16 +45,16 @@ export default function AdminShopTokensPage() {
   useEffect(() => {
     (async () => {
       try {
-        // 1. Cargar usuarios (solo estudiantes y profesores)
+        // 1. Cargar usuarios (solo estudiantes — los profesores no usan la tienda)
         const usersRes = await fetch("/api/admin/users");
         const usersData = await usersRes.json();
         const eligibleUsers = (usersData.users ?? []).filter(
-          (u: { role: string }) => u.role === "STUDENT" || u.role === "PROFESSOR",
+          (u: { role: string }) => u.role === "STUDENT",
         );
 
         // 2. Cargar balances en paralelo
         const withBalances = await Promise.all(
-          eligibleUsers.map(async (u: { id: string; name: string; email: string; role: string }) => {
+          eligibleUsers.map(async (u: { id: string; name: string; email: string }) => {
             try {
               const balRes = await fetch(`/api/shop/balance/${u.id}`);
               const balData = await balRes.json();
@@ -129,7 +128,7 @@ export default function AdminShopTokensPage() {
       <div>
         <h1 className="text-2xl font-bold text-text">ShopTokens</h1>
         <p className="text-text-muted mt-1">
-          Consulta y asigna ShopTokens a estudiantes y profesores.
+          Consulta y asigna ShopTokens a estudiantes.
         </p>
       </div>
 
@@ -150,7 +149,6 @@ export default function AdminShopTokensPage() {
               <TableRow>
                 <TableHead>Nombre</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead>Rol</TableHead>
                 <TableHead>Balance</TableHead>
                 <TableHead>Acciones</TableHead>
               </TableRow>
@@ -160,11 +158,6 @@ export default function AdminShopTokensPage() {
                 <TableRow key={user.id}>
                   <TableCell className="font-medium">{user.name}</TableCell>
                   <TableCell className="text-text-muted">{user.email}</TableCell>
-                  <TableCell>
-                    <Badge variant={user.role === "STUDENT" ? "info" : "success"}>
-                      {user.role === "STUDENT" ? "Estudiante" : "Profesor"}
-                    </Badge>
-                  </TableCell>
                   <TableCell>
                     <Badge variant={user.balance === 0 ? "danger" : "info"}>
                       {user.balance ?? "—"} ShopTokens

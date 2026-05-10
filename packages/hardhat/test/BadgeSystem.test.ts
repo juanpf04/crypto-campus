@@ -261,6 +261,61 @@ describe("BadgeSystem", async function () {
             assert.equal(reward.active, false);
         });
 
+        it("Should reactivate a previously deactivated reward", async function () {
+            const { badgeSystem, professor1 } = await deploySystem();
+
+            await badgeSystem.write.createSubjectBadge({ account: professor1.account });
+            await badgeSystem.write.createReward([1n, 3n, 10n], { account: professor1.account });
+            await badgeSystem.write.deactivateReward([1n], { account: professor1.account });
+            await badgeSystem.write.activateReward([1n], { account: professor1.account });
+
+            const reward = await badgeSystem.read.getReward([1n]);
+            assert.equal(reward.active, true);
+        });
+
+        it("Should revert activateReward if reward is already active", async function () {
+            const { badgeSystem, professor1 } = await deploySystem();
+
+            await badgeSystem.write.createSubjectBadge({ account: professor1.account });
+            await badgeSystem.write.createReward([1n, 3n, 10n], { account: professor1.account });
+
+            // Recién creada, ya está activa — debe revertir.
+            await assert.rejects(async () => {
+                await badgeSystem.write.activateReward([1n], { account: professor1.account });
+            });
+        });
+
+        it("Should revert activateReward if caller is not the owner", async function () {
+            const { badgeSystem, professor1, professor2 } = await deploySystem();
+
+            await badgeSystem.write.createSubjectBadge({ account: professor1.account });
+            await badgeSystem.write.createReward([1n, 3n, 10n], { account: professor1.account });
+            await badgeSystem.write.deactivateReward([1n], { account: professor1.account });
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.activateReward([1n], { account: professor2.account });
+            });
+        });
+
+        it("Should allow redemption after reactivating a reward", async function () {
+            const { badgeSystem, professor1, student1 } = await deploySystem();
+
+            await badgeSystem.write.createSubjectBadge({ account: professor1.account });
+            await badgeSystem.write.createAssignment([1n], { account: professor1.account });
+            // badgeReward=3 → student1 recibe 3 insignias, suficientes para pagar cost=3.
+            await badgeSystem.write.addPrizeCategory([1n, 3n, 5n], { account: professor1.account });
+            await badgeSystem.write.awardPrize([1n, [student1.account.address]], { account: professor1.account });
+            await badgeSystem.write.createReward([1n, 3n, 10n], { account: professor1.account });
+            await badgeSystem.write.deactivateReward([1n], { account: professor1.account });
+            await badgeSystem.write.activateReward([1n], { account: professor1.account });
+
+            // Tras reactivar, redeemReward debe funcionar.
+            await badgeSystem.write.redeemReward([1n], { account: student1.account });
+
+            const reward = await badgeSystem.read.getReward([1n]);
+            assert.equal(reward.supply, 9n);
+        });
+
         it("Should revert createReward with zero cost", async function () {
             const { badgeSystem, professor1 } = await deploySystem();
 
@@ -370,6 +425,23 @@ describe("BadgeSystem", async function () {
 
             await badgeSystem.write.pause();
             assert.equal(await badgeSystem.read.paused(), true);
+        });
+
+        it("Should revert pause when called by non-admin", async function () {
+            const { badgeSystem, outsider } = await deploySystem();
+
+            await assert.rejects(async () => {
+                await badgeSystem.write.pause({ account: outsider.account });
+            });
+        });
+
+        it("Should revert unpause when called by non-admin", async function () {
+            const { badgeSystem, outsider } = await deploySystem();
+
+            await badgeSystem.write.pause();
+            await assert.rejects(async () => {
+                await badgeSystem.write.unpause({ account: outsider.account });
+            });
         });
 
         it("Should revert createSubjectBadge when paused", async function () {

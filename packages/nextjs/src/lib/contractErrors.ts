@@ -33,8 +33,3 @@ export function translateContractError(err: unknown, moduleName?: string): Error
   const msg = err instanceof Error ? err.message : String(err);
   return err instanceof Error ? err : new Error(msg);
 }
-
-/** Versión de azúcar: usa en `try { ... } catch (e) { throw asContractError(e, "Biblioteca") }` */
-export function asContractError(err: unknown, moduleName?: string): never {
-  throw translateContractError(err, moduleName);
-}

@@ -28,17 +28,25 @@ export default function AdminPrintingPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // /api/printer/logs/admin devuelve { items, total }; pedimos limit=1
+    // porque solo nos interesa el contador total.
     Promise.all([
       fetch("/api/printer").then((r) => r.json()),
       fetch("/api/printer/admin").then((r) => r.json()),
-      fetch("/api/printer/logs/admin?limit=200&offset=0").then((r) => r.json()),
+      fetch("/api/printer/logs/admin?limit=1&offset=0").then((r) => r.json()),
       fetch("/api/printer/config").then((r) => r.json()),
     ])
       .then(([activePrinters, allPrinters, logs, config]) => {
+        const totalLogs =
+          typeof logs?.total === "number"
+            ? logs.total
+            : Array.isArray(logs)
+              ? logs.length
+              : "—";
         setStats({
           activePrinters: Array.isArray(activePrinters) ? activePrinters.length : "—",
           totalPrinters: Array.isArray(allPrinters) ? allPrinters.length : "—",
-          totalLogs: Array.isArray(logs) ? logs.length : "—",
+          totalLogs,
           initialCredits: config.initialCredits ?? "—",
         });
       })

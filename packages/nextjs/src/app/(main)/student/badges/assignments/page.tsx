@@ -171,7 +171,7 @@ export default function StudentAssignmentsPage() {
             const status = STATUS_BADGE[a.status];
             const offering = a.subjectBadge.subjectOffering;
             return (
-              <Card key={a.id} className="space-y-4">
+              <Card key={a.id} className="flex flex-col h-full space-y-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-xs text-text-muted">
@@ -197,32 +197,37 @@ export default function StudentAssignmentsPage() {
                   </ul>
                 </div>
 
-                {a.deadline && (
-                  <p className="text-xs text-text-muted">
-                    Fecha límite: {new Date(a.deadline).toLocaleString("es-ES")}
-                  </p>
-                )}
+                {/* Bloque inferior: el mt-auto lo empuja al fondo de la card,
+                    de modo que cuando dos cards adyacentes tienen distinto
+                    número de premios el botón sigue alineado al final. */}
+                <div className="mt-auto space-y-4">
+                  {a.deadline && (
+                    <p className="text-xs text-text-muted">
+                      Fecha límite: {new Date(a.deadline).toLocaleString("es-ES")}
+                    </p>
+                  )}
 
-                {a.status === "OPEN" && (
-                  a.hasSubmitted ? (
-                    <Button variant="outline" disabled className="w-full">
-                      ✓ Entregada
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={() => handleSubmit(a.id)}
-                      loading={submittingId === a.id}
-                      className="w-full"
-                    >
-                      Marcar como completada
-                    </Button>
-                  )
-                )}
-                {a.status !== "OPEN" && (
-                  <p className="text-xs text-text-muted text-center italic">
-                    {a.hasSubmitted ? "Tu entrega fue registrada" : "No marcada como entregada"}
-                  </p>
-                )}
+                  {a.status === "OPEN" && (
+                    a.hasSubmitted ? (
+                      <Button variant="outline" disabled className="w-full">
+                        ✓ Entregada
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={() => handleSubmit(a.id)}
+                        loading={submittingId === a.id}
+                        className="w-full"
+                      >
+                        Marcar como completada
+                      </Button>
+                    )
+                  )}
+                  {a.status !== "OPEN" && (
+                    <p className="text-xs text-text-muted text-center italic">
+                      {a.hasSubmitted ? "Tu entrega fue registrada" : "No marcada como entregada"}
+                    </p>
+                  )}
+                </div>
               </Card>
             );
           })}

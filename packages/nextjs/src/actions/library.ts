@@ -132,6 +132,7 @@ export async function addItem(input: {
 		return { success: true, item, txHash: hash };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Biblioteca");
 		throw new Error(`Error al crear ítem: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -218,6 +219,7 @@ export async function addCopies(itemId: string, amount: number) {
 		return { success: true, item, txHash: hash };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Biblioteca");
 		throw new Error(`Error al añadir copias: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -313,20 +315,17 @@ export async function listItems(filters?: {
 			where,
 			orderBy: { createdAt: "desc" },
 			include: {
-				_count: {
-					select: {
-						loans: {
-							where: {
-								status: {
-									in: [
-										"QUEUED" as LoanStatus,
-										"RESERVED" as LoanStatus,
-										"PICKED_UP" as LoanStatus,
-									],
-								},
-							},
+				loans: {
+					where: {
+						status: {
+							in: [
+								"QUEUED" as LoanStatus,
+								"RESERVED" as LoanStatus,
+								"PICKED_UP" as LoanStatus,
+							],
 						},
 					},
+					select: { status: true },
 				},
 			},
 			...(filters?.limit ? { take: filters.limit } : {}),
@@ -335,12 +334,19 @@ export async function listItems(filters?: {
 		prisma.libraryItem.count({ where }),
 	]);
 
-	// Aplanar `_count.loans` en `activeLoanCount` para no exponer el shape interno
-	// de Prisma a los consumidores.
-	const items = rawItems.map(({ _count, ...rest }) => ({
-		...rest,
-		activeLoanCount: _count.loans,
-	}));
+	// Calcular activeLoanCount (todos los activos) y availableCopies
+	// (excluyendo solo los que consumen una copia: RESERVED y PICKED_UP).
+	// Los QUEUED están en cola y no consumen copia.
+	const items = rawItems.map(({ loans, ...rest }) => {
+		const consuming = loans.filter(
+			(l) => l.status === "RESERVED" || l.status === "PICKED_UP",
+		).length;
+		return {
+			...rest,
+			activeLoanCount: loans.length,
+			availableCopies: Math.max(0, rest.totalCopies - consuming),
+		};
+	});
 
 	return { items, total };
 }
@@ -594,6 +600,7 @@ export async function cancelLoan(loanPrismaId: string) {
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Biblioteca");
 		throw new Error(`Error al cancelar préstamo: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -641,6 +648,7 @@ export async function confirmPickup(loanPrismaId: string) {
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Biblioteca");
 		throw new Error(`Error al confirmar recogida: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -711,6 +719,7 @@ export async function confirmReturn(loanPrismaId: string) {
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Biblioteca");
 		throw new Error(`Error al confirmar devolución: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -753,6 +762,7 @@ export async function forceReturn(loanPrismaId: string) {
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Biblioteca");
 		throw new Error(`Error al forzar devolución: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -790,6 +800,7 @@ export async function expireReservation(loanPrismaId: string) {
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Biblioteca");
 		throw new Error(`Error al expirar reserva: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -863,8 +874,10 @@ export async function getMyLoans() {
 	const session = await getSession();
 	ensureRole(session, ["STUDENT"]);
 
+	// Los préstamos históricos solo alimentan estadísticas; no aparecen en
+	// "mis préstamos".
 	const loans = await prisma.loan.findMany({
-		where: { userId: session.userId! },
+		where: { ...ONLY_LIVE, userId: session.userId! },
 		include: {
 			libraryItem: { select: { id: true, title: true, type: true, coverUrl: true, creator: true } },
 		},
@@ -1098,6 +1111,7 @@ export async function mintLibraryTokens(userId: string, amount: number) {
 		return { success: true, balance: Number(finalBalance) };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Biblioteca");
 		throw new Error(`Error al asignar tokens: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }

@@ -485,6 +485,21 @@ describe("LibraryManager", async function () {
             assert.equal(await libraryManager.read.paused(), false);
         });
 
+        it("Should revert pause when called by non-admin", async function () {
+            const { libraryManager, outsider } = await deploySystem();
+            await assert.rejects(async () => {
+                await libraryManager.write.pause({ account: outsider.account });
+            });
+        });
+
+        it("Should revert unpause when called by non-admin", async function () {
+            const { libraryManager, outsider } = await deploySystem();
+            await libraryManager.write.pause();
+            await assert.rejects(async () => {
+                await libraryManager.write.unpause({ account: outsider.account });
+            });
+        });
+
         it("Should revert requestLoan when paused", async function () {
             const { libraryManager, librarian, student1 } = await deploySystem();
             await libraryManager.write.addBook([2n], { account: librarian.account });
@@ -492,6 +507,17 @@ describe("LibraryManager", async function () {
             await assert.rejects(async () => {
                 await libraryManager.write.requestLoan([1n], { account: student1.account });
             });
+        });
+
+        it("Should restore functionality after unpause", async function () {
+            const { libraryManager, libraryToken, librarian, student1 } = await deploySystem();
+            await libraryManager.write.addBook([2n], { account: librarian.account });
+            await libraryToken.write.mint([student1.account.address, 5n]);
+            await libraryManager.write.pause();
+            await libraryManager.write.unpause();
+            // Tras unpause, requestLoan vuelve a funcionar.
+            await libraryManager.write.requestLoan([1n], { account: student1.account });
+            assert.equal(await libraryManager.read.paused(), false);
         });
     });
 });

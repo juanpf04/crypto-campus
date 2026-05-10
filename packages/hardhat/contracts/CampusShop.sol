@@ -135,7 +135,7 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard, Pausable {
     function addProduct(
         uint256 price,
         uint256 stock
-    ) external onlyAdmin returns (uint256 productId) {
+    ) external onlyAdmin whenNotPaused returns (uint256 productId) {
         if (price == 0) revert ZeroPrice();
 
         productId = nextProductId;
@@ -158,7 +158,7 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard, Pausable {
         uint256 productId,
         uint256 newPrice,
         uint256 newStock
-    ) external onlyAdmin {
+    ) external onlyAdmin whenNotPaused {
         if (!_products[productId].exists) revert ProductNotFound(productId);
         if (newPrice == 0) revert ZeroPrice();
 
@@ -171,7 +171,7 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard, Pausable {
     /**
      * @dev Desactiva un producto.
      */
-    function deactivateProduct(uint256 productId) external onlyAdmin {
+    function deactivateProduct(uint256 productId) external onlyAdmin whenNotPaused {
         if (!_products[productId].exists) revert ProductNotFound(productId);
         if (!_products[productId].active) revert ProductAlreadyInState(productId, false);
 
@@ -182,7 +182,7 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard, Pausable {
     /**
      * @dev Reactiva un producto previamente desactivado.
      */
-    function reactivateProduct(uint256 productId) external onlyAdmin {
+    function reactivateProduct(uint256 productId) external onlyAdmin whenNotPaused {
         if (!_products[productId].exists) revert ProductNotFound(productId);
         if (_products[productId].active) revert ProductAlreadyInState(productId, true);
 
@@ -315,7 +315,7 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard, Pausable {
     /**
      * @dev Marca un pedido como entregado.
      */
-    function markDelivered(uint256 orderId) external onlyAdmin {
+    function markDelivered(uint256 orderId) external onlyAdmin whenNotPaused {
         Order storage order = _orders[orderId];
         if (order.status == OrderStatus.None) revert OrderNotFound(orderId);
         if (order.status != OrderStatus.Paid)
@@ -414,6 +414,7 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard, Pausable {
 
     // ── External view functions ─────────────────────────────────────────
 
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     function getProduct(uint256 productId) external view returns (
         uint256 price,
         uint256 stock,
@@ -424,14 +425,17 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard, Pausable {
         return (p.price, p.stock, p.active, p.exists);
     }
 
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     function getOrder(uint256 orderId) external view returns (Order memory) {
         return _orders[orderId];
     }
 
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     function getStudentOrders(address student) external view returns (uint256[] memory) {
         return _studentOrders[student];
     }
 
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     function getBatch(uint256 batchId) external view returns (
         address buyer,
         uint256[] memory orderIds,
@@ -442,12 +446,14 @@ contract CampusShop is ERC1155, ERC1155Supply, ReentrancyGuard, Pausable {
         return (b.buyer, b.orderIds, b.totalPaid, b.purchaseDate);
     }
 
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     function getStudentBatches(address student) external view returns (uint256[] memory) {
         return _studentBatches[student];
     }
 
     /// @dev Calcula el token ID del recibo de devolucion para un orderId dado.
     ///      Util para que el frontend sepa qué token ID consultar.
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     function getReturnReceiptTokenId(uint256 orderId) external pure returns (uint256) {
         return RETURN_RECEIPT_OFFSET + orderId;
     }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { StudentOnboardingModal } from "@/components/layout/StudentOnboardingModal";
@@ -12,10 +13,13 @@ import { useAuthUser } from "@/hooks/useAuthUser";
 function MainContent({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuthUser();
   const { open } = useOnboarding();
+  const router = useRouter();
+  const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // Flag de una sola ejecución: usamos ref (no state) para evitar el render en
   // cascada que ocasionaba setOnboardingTriggered dentro del effect.
   const onboardingTriggeredRef = useRef(false);
+  const redirectingRef = useRef(false);
 
   // Abre el modal automáticamente si el estudiante no ha completado el onboarding
   useEffect(() => {
@@ -24,6 +28,19 @@ function MainContent({ children }: { children: React.ReactNode }) {
       open();
     }
   }, [loading, user, open]);
+
+  // Sesión huérfana o expirada: cookie con userId apuntando a usuario que ya
+  // no existe o está desactivado. /api/auth/me destruye la cookie y devuelve
+  // 401 → user queda como null. El middleware no la había bloqueado porque
+  // se ejecutó ANTES del destroy. Sin este redirect, el layout se queda en
+  // skeleton infinito hasta que el usuario refresca manualmente.
+  useEffect(() => {
+    if (!loading && !user && !redirectingRef.current) {
+      redirectingRef.current = true;
+      const returnUrl = encodeURIComponent(pathname || "/");
+      router.replace(`/login?returnUrl=${returnUrl}`);
+    }
+  }, [loading, user, pathname, router]);
 
   if (loading || !user) {
     return (

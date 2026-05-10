@@ -11,7 +11,6 @@ import Image from "next/image";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { LinkArrow } from "@/components/shared/LinkArrow";
 import { TYPE_LABELS, TYPE_EMOJI } from "@/lib/library-constants";
 
 interface LibraryItemCardProps {
@@ -45,11 +44,15 @@ export function LibraryItemCard({
   hasTokens = true,
   detailBase = "/student/library",
 }: LibraryItemCardProps) {
+  // Badge "X/Y disponibles": informa de un vistazo si quedan copias.
+  // Verde con copias, rojo si no quedan.
+  const hasAvailable = availableCopies === undefined || availableCopies > 0;
+
   return (
     <Link href={`${detailBase}/${id}`} className="block group">
       <Card className="relative h-full flex flex-col overflow-hidden p-0 transition-colors group-hover:border-primary/50">
         {/* Cabecera visual */}
-        <div className="flex h-40 items-center justify-center bg-primary/5 shrink-0">
+        <div className="relative flex h-40 items-center justify-center bg-primary/5 shrink-0">
           {coverUrl ? (
             <Image
               src={coverUrl}
@@ -64,11 +67,23 @@ export function LibraryItemCard({
               {TYPE_EMOJI[type] || "\u{1F4E6}"}
             </span>
           )}
+
+          {/* Badge de disponibilidad arriba a la derecha */}
+          <div className="absolute top-2 right-2">
+            <Badge variant={hasAvailable ? "success" : "danger"}>
+              {availableCopies !== undefined
+                ? `${availableCopies}/${totalCopies} disponibles`
+                : `${totalCopies} copias`}
+            </Badge>
+          </div>
         </div>
 
         {/* Info */}
         <div className="flex flex-col flex-1 space-y-2 p-4">
-          <Badge variant="neutral">{TYPE_LABELS[type] || type}</Badge>
+          <Badge variant="neutral">
+            <span aria-hidden="true">{TYPE_EMOJI[type] || "\u{1F4E6}"}</span>{" "}
+            {TYPE_LABELS[type] || type}
+          </Badge>
 
           <h3 className="font-semibold text-text line-clamp-2 leading-tight group-hover:text-primary transition-colors">
             {title}
@@ -82,13 +97,6 @@ export function LibraryItemCard({
             <p className="text-sm text-text-muted line-clamp-2">{description}</p>
           )}
 
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-text-muted">{totalCopies} copias</span>
-            {availableCopies !== undefined && (
-              <span className="text-xs text-text-muted">{availableCopies} disponibles</span>
-            )}
-          </div>
-
           {/* Botón alineado al fondo */}
           <Button
             size="sm"
@@ -101,8 +109,6 @@ export function LibraryItemCard({
             {hasTokens ? "Solicitar préstamo" : "Sin tokens disponibles"}
           </Button>
         </div>
-
-        <LinkArrow variant="fade" size="sm" className="right-3 top-3" />
       </Card>
     </Link>
   );

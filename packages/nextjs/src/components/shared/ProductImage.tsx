@@ -43,7 +43,14 @@ export function ProductImage({
   const fallbackEmoji = CATEGORY_FALLBACKS[category ?? ""] ?? DEFAULT_PRODUCT_EMOJI;
 
   if (!imageUrl || failed) {
-    return <span className={emojiSizeMap[emojiSize]}>{fallbackEmoji}</span>;
+    // Aplicamos la misma className al contenedor para que el fallback ocupe el
+    // mismo hueco que ocuparía la imagen (h-72, h-full, etc.) — sin esto el
+    // emoji queda como inline pequeño y rompe el layout del detalle.
+    return (
+      <div className={`flex items-center justify-center ${className}`}>
+        <span className={emojiSizeMap[emojiSize]}>{fallbackEmoji}</span>
+      </div>
+    );
   }
 
   return (

@@ -128,8 +128,8 @@ dist
 # Stores VSCode versions used for testing VSCode extensions
 .vscode-test
 
-# Github config directory
-.github
+# macOS metadata (por si alguien colabora desde Mac)
+.DS_Store
 
 # yarn v2
 .yarn/cache
@@ -145,3 +145,11 @@ packages/hardhat/ignition/deployments/
 # SQL diffs/baselines accidentales en raíz
 # (los SQL legítimos viven en packages/nextjs/prisma/migrations/)
 /*.sql
+
+# Playwright
+/packages/nextjs/test-results/
+/packages/nextjs/playwright-report/
+/packages/nextjs/playwright/.cache/
+
+# Vitest coverage
+/packages/nextjs/coverage/

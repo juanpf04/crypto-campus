@@ -112,6 +112,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
 
     event RewardCreated(uint256 indexed rewardId, uint256 badgeCost, uint256 supply, address indexed professor);
     event RewardDeactivated(uint256 indexed rewardId);
+    event RewardActivated(uint256 indexed rewardId);
     event RewardRedeemed(
         uint256 indexed rewardId,
         address indexed student,
@@ -142,6 +143,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
     error InsufficientBadges(uint256 available, uint256 required);
     error RewardOutOfSupply(uint256 rewardId);
     error RewardInactive(uint256 rewardId);
+    error RewardAlreadyActive(uint256 rewardId);
     error SoulboundTransferBlocked();
     error ZeroCost();
     error ZeroBadgeReward();
@@ -256,7 +258,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
      * @dev Cierra una assignment para entregas: pasa a Reviewing.
      *      Los alumnos ya no pueden entregar pero el profe sí puede otorgar premios.
      */
-    function closeAssignmentForReview(uint256 assignmentId) external onlyProfessorOrAdmin {
+    function closeAssignmentForReview(uint256 assignmentId) external onlyProfessorOrAdmin whenNotPaused {
         Assignment storage assignment = _assignments[assignmentId];
         if (assignment.professor == address(0)) revert AssignmentNotFound(assignmentId);
         if (assignment.professor != msg.sender) revert NotAssignmentOwner(assignmentId, msg.sender);
@@ -270,7 +272,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
     /**
      * @dev Cierra definitivamente una assignment. Ya no se pueden otorgar más premios.
      */
-    function closeAssignment(uint256 assignmentId) external onlyProfessorOrAdmin {
+    function closeAssignment(uint256 assignmentId) external onlyProfessorOrAdmin whenNotPaused {
         Assignment storage assignment = _assignments[assignmentId];
         if (assignment.professor == address(0)) revert AssignmentNotFound(assignmentId);
         if (assignment.professor != msg.sender) revert NotAssignmentOwner(assignmentId, msg.sender);
@@ -332,7 +334,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
         uint256 subjectBadgeId,
         uint256 badgeCost,
         uint256 supply
-    ) external onlyProfessorOrAdmin returns (uint256 rewardId) {
+    ) external onlyProfessorOrAdmin whenNotPaused returns (uint256 rewardId) {
         SubjectBadge storage badge = _subjectBadges[subjectBadgeId];
         if (!badge.exists) revert SubjectBadgeNotFound(subjectBadgeId);
         if (badgeCost == 0) revert ZeroCost();
@@ -355,13 +357,26 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
     /**
      * @dev Desactiva una recompensa (solo su creador).
      */
-    function deactivateReward(uint256 rewardId) external onlyProfessorOrAdmin {
+    function deactivateReward(uint256 rewardId) external onlyProfessorOrAdmin whenNotPaused {
         Reward storage reward = _rewards[rewardId];
         if (reward.professor == address(0)) revert RewardNotFound(rewardId);
         if (reward.professor != msg.sender) revert NotRewardOwner(rewardId, msg.sender);
 
         reward.active = false;
         emit RewardDeactivated(rewardId);
+    }
+
+    /**
+     * @dev Reactiva una recompensa previamente desactivada (solo su creador).
+     */
+    function activateReward(uint256 rewardId) external onlyProfessorOrAdmin whenNotPaused {
+        Reward storage reward = _rewards[rewardId];
+        if (reward.professor == address(0)) revert RewardNotFound(rewardId);
+        if (reward.professor != msg.sender) revert NotRewardOwner(rewardId, msg.sender);
+        if (reward.active) revert RewardAlreadyActive(rewardId);
+
+        reward.active = true;
+        emit RewardActivated(rewardId);
     }
 
     // ── Redemption ──────────────────────────────────────────────────────
@@ -410,7 +425,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
 
     // ── Reward use flow ─────────────────────────────────────────────────
 
-    function requestUseReward(uint256 rewardId) external onlyStudent returns (uint256 requestId) {
+    function requestUseReward(uint256 rewardId) external onlyStudent whenNotPaused returns (uint256 requestId) {
         if (_rewards[rewardId].professor == address(0)) revert RewardNotFound(rewardId);
 
         uint256 rewardTokenId = REWARD_TOKEN_OFFSET + rewardId;
@@ -429,7 +444,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
         emit UseRequestCreated(requestId, msg.sender, rewardId);
     }
 
-    function cancelUseRequest(uint256 requestId) external onlyStudent {
+    function cancelUseRequest(uint256 requestId) external onlyStudent whenNotPaused {
         UseRequest storage req = _useRequests[requestId];
         if (req.student == address(0)) revert UseRequestNotFound(requestId);
         if (req.student != msg.sender) revert NotRequestOwner(requestId);
@@ -440,7 +455,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
         emit UseRequestCancelled(requestId);
     }
 
-    function approveUseRequest(uint256 requestId) external onlyProfessorOrAdmin {
+    function approveUseRequest(uint256 requestId) external onlyProfessorOrAdmin whenNotPaused {
         UseRequest storage req = _useRequests[requestId];
         if (req.student == address(0)) revert UseRequestNotFound(requestId);
         if (req.status != UseRequestStatus.Pending)
@@ -460,7 +475,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
         emit UseRequestApproved(requestId, student, rewardId);
     }
 
-    function rejectUseRequest(uint256 requestId) external onlyProfessorOrAdmin {
+    function rejectUseRequest(uint256 requestId) external onlyProfessorOrAdmin whenNotPaused {
         UseRequest storage req = _useRequests[requestId];
         if (req.student == address(0)) revert UseRequestNotFound(requestId);
         if (req.status != UseRequestStatus.Pending)
@@ -487,6 +502,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
 
     // ── External view functions ─────────────────────────────────────────
 
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     function getSubjectBadge(uint256 subjectBadgeId) external view returns (SubjectBadge memory) {
         return _subjectBadges[subjectBadgeId];
     }
@@ -503,14 +519,17 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
         return _rewards[rewardId];
     }
 
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     function getBadgeBalance(address student, uint256 subjectBadgeId) external view returns (uint256) {
         return balanceOf(student, subjectBadgeId);
     }
 
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     function getStudentRedemptions(address student) external view returns (uint256[] memory) {
         return _studentRedemptions[student];
     }
 
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     function getRedemption(uint256 redemptionId) external view returns (Redemption memory) {
         return _redemptions[redemptionId];
     }
@@ -519,6 +538,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
         return _useRequests[requestId];
     }
 
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     function getStudentUseRequests(address student) external view returns (uint256[] memory) {
         return _studentUseRequests[student];
     }

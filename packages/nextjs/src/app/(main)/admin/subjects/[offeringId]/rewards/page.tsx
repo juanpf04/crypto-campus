@@ -49,8 +49,12 @@ export default function AdminOfferingRewardsPage() {
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [offering, setOffering] = useState<OfferingInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [deactivating, setDeactivating] = useState<string | null>(null);
-  const [confirmTarget, setConfirmTarget] = useState<Reward | null>(null);
+  const [processing, setProcessing] = useState<string | null>(null);
+  // Acción pendiente — el modal cubre tanto desactivar como reactivar.
+  const [pendingAction, setPendingAction] = useState<
+    | { reward: Reward; action: "deactivate" | "activate" }
+    | null
+  >(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -73,22 +77,26 @@ export default function AdminOfferingRewardsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function handleDeactivate() {
-    if (!confirmTarget) return;
-    setDeactivating(confirmTarget.id);
+  async function handleConfirm() {
+    if (!pendingAction) return;
+    const { reward, action } = pendingAction;
+    setProcessing(reward.id);
     try {
-      const res = await fetch(`/api/badges/rewards/${confirmTarget.id}/deactivate`, { method: "POST" });
+      const res = await fetch(`/api/badges/rewards/${reward.id}/${action}`, { method: "POST" });
       if (!res.ok) {
         const body = await res.json();
-        throw new Error(body.error ?? "Error al desactivar");
+        throw new Error(body.error ?? "Error");
       }
-      addToast("Recompensa desactivada", "success");
-      setConfirmTarget(null);
+      addToast(
+        action === "deactivate" ? "Recompensa desactivada" : "Recompensa reactivada",
+        "success",
+      );
+      setPendingAction(null);
       load();
     } catch (err) {
       addToast(err instanceof Error ? err.message : "Error", "danger");
     } finally {
-      setDeactivating(null);
+      setProcessing(null);
     }
   }
 
@@ -159,14 +167,23 @@ export default function AdminOfferingRewardsPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    {reward.active && (
+                    {reward.active ? (
                       <Button
                         variant="danger"
                         size="sm"
-                        onClick={() => setConfirmTarget(reward)}
-                        loading={deactivating === reward.id}
+                        onClick={() => setPendingAction({ reward, action: "deactivate" })}
+                        loading={processing === reward.id}
                       >
                         Desactivar
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="success"
+                        size="sm"
+                        onClick={() => setPendingAction({ reward, action: "activate" })}
+                        loading={processing === reward.id}
+                      >
+                        Reactivar
                       </Button>
                     )}
                   </TableCell>
@@ -178,17 +195,23 @@ export default function AdminOfferingRewardsPage() {
       )}
 
       <ConfirmModal
-        open={confirmTarget !== null}
-        onClose={() => setConfirmTarget(null)}
-        onConfirm={handleDeactivate}
-        title="Desactivar recompensa"
+        open={pendingAction !== null}
+        onClose={() => setPendingAction(null)}
+        onConfirm={handleConfirm}
+        title={
+          pendingAction?.action === "activate"
+            ? "Reactivar recompensa"
+            : "Desactivar recompensa"
+        }
         description={
-          confirmTarget
-            ? `"${confirmTarget.name}" dejará de estar disponible para canjear. Los alumnos que ya la hayan canjeado mantendrán su token.`
+          pendingAction
+            ? pendingAction.action === "activate"
+              ? `"${pendingAction.reward.name}" volverá a estar disponible para canjear.`
+              : `"${pendingAction.reward.name}" dejará de estar disponible para canjear. Los alumnos que ya la hayan canjeado mantendrán su token.`
             : ""
         }
-        confirmLabel="Desactivar"
-        loading={deactivating !== null}
+        confirmLabel={pendingAction?.action === "activate" ? "Reactivar" : "Desactivar"}
+        loading={processing !== null}
       />
     </div>
   );

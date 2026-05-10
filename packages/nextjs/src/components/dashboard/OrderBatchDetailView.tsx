@@ -43,12 +43,13 @@ export interface BatchDetailItem {
 
 export interface BatchDetailPayload {
   id: string;
-  batchId: number;
+  batchId: number | null; // null en batches históricos sin contraparte on-chain
   totalPaid: number;
   purchaseDate: string;
   generalStatus: string;
   items: BatchDetailItem[];
   user?: { name: string; email: string };
+  historical?: boolean;
 }
 
 interface SelectionState {

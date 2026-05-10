@@ -194,6 +194,27 @@ contract BadgeSystemTest is Test {
         assertFalse(reward.active);
     }
 
+    function test_ActivateReward() public {
+        vm.startPrank(professor);
+        badgeSystem.createSubjectBadge();
+        badgeSystem.createReward(1, 3, 10);
+        badgeSystem.deactivateReward(1);
+        badgeSystem.activateReward(1);
+        vm.stopPrank();
+
+        BadgeSystem.Reward memory reward = badgeSystem.getReward(1);
+        assertTrue(reward.active);
+    }
+
+    function test_RevertActivateRewardAlreadyActive() public {
+        vm.startPrank(professor);
+        badgeSystem.createSubjectBadge();
+        badgeSystem.createReward(1, 3, 10);
+        vm.expectRevert(abi.encodeWithSelector(BadgeSystem.RewardAlreadyActive.selector, 1));
+        badgeSystem.activateReward(1);
+        vm.stopPrank();
+    }
+
     function test_RevertCreateRewardZeroCost() public {
         vm.prank(professor);
         badgeSystem.createSubjectBadge();

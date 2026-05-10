@@ -50,11 +50,6 @@ export default function LibrarianPrintHistoryPage() {
     endpoint: "/api/printer/logs",
     pageSize: PAGE_SIZE,
     onError: () => addToast("Error al cargar historial", "danger"),
-    parseResponse: (data, offset, limit) => {
-      const items = Array.isArray(data) ? (data as PrintLog[]) : [];
-      const total = items.length < limit ? offset + items.length : offset + limit + 1;
-      return { items, total };
-    },
   });
 
   if (list.loading) return <SkeletonTable columns={8} rows={8} />;

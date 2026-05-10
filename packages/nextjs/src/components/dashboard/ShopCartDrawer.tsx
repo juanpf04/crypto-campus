@@ -161,17 +161,24 @@ export function ShopCartDrawer({ open, onClose, onCartChange }: ShopCartDrawerPr
       ? itemNames.join(", ")
       : `${itemNames[0]} y ${itemNames.length - 1} más`;
 
+    let failed = false;
     const checkoutPromise = (async () => {
       const res = await fetch("/api/shop/checkout", { method: "POST" });
       const body = await res.json();
       if (!res.ok) {
+        failed = true;
         addToast(body.error ?? "Error en el pago", "danger");
         return null;
       }
       return (body.batchId as string) ?? null;
     })();
 
-    startPurchase(checkoutPromise, overlayName);
+    // Si la promise falla rápido (ej. módulo pausado), no mostramos el
+    // overlay — el toast de error informa al usuario directamente.
+    setTimeout(() => {
+      if (failed) return;
+      startPurchase(checkoutPromise, overlayName);
+    }, 400);
   }
 
   const isEmpty = !cart || cart.items.length === 0;

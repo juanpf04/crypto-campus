@@ -7,7 +7,7 @@
  * Filtro local por estado; se resetea al cambiar de tab.
  */
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { usePaginatedList } from "@/hooks/usePaginatedList";
@@ -53,6 +53,7 @@ export default function StudentOrdersPage() {
   const batchesList = usePaginatedList<BatchTableRow>({
     endpoint: "/api/shop/batches",
     pageSize: PAGE_SIZE,
+    filters: { generalStatus: batchStatusFilter || null },
     onError: () => addToast("Error al cargar pedidos", "danger"),
     parseResponse: (data) => {
       const body = data as { batches?: BatchTableRow[]; total?: number };
@@ -63,6 +64,7 @@ export default function StudentOrdersPage() {
   const ordersList = usePaginatedList<OrderTableRow>({
     endpoint: "/api/shop/orders",
     pageSize: PAGE_SIZE,
+    filters: { status: orderStatusFilter || null },
     onError: () => addToast("Error al cargar artículos", "danger"),
     parseResponse: (data) => {
       const body = data as { orders?: OrderTableRow[]; total?: number };
@@ -70,16 +72,7 @@ export default function StudentOrdersPage() {
     },
   });
 
-  const filteredBatches = useMemo(() => {
-    if (!batchStatusFilter) return batchesList.items;
-    return batchesList.items.filter((b) => b.generalStatus === batchStatusFilter);
-  }, [batchesList.items, batchStatusFilter]);
-
-  const filteredOrders = useMemo(() => {
-    if (!orderStatusFilter) return ordersList.items;
-    return ordersList.items.filter((o) => o.status === orderStatusFilter);
-  }, [ordersList.items, orderStatusFilter]);
-
+  // Los filtros van al servidor — los listados ya vienen filtrados.
   const isLoading = tab === "batches" ? batchesList.loading : ordersList.loading;
 
   return (
@@ -130,7 +123,7 @@ export default function StudentOrdersPage() {
           <SkeletonTable columns={5} rows={8} />
         </div>
       ) : tab === "batches" ? (
-        filteredBatches.length === 0 ? (
+        batchesList.items.length === 0 ? (
           <EmptyState
             title="Sin pedidos"
             description={batchStatusFilter ? "No hay tickets con ese estado." : "Aún no has realizado ninguna compra."}
@@ -138,7 +131,7 @@ export default function StudentOrdersPage() {
         ) : (
           <>
             <OrderBatchTable
-              batches={filteredBatches}
+              batches={batchesList.items}
               basePath="/student/shop/orders/batch"
             />
             <Pagination
@@ -150,7 +143,7 @@ export default function StudentOrdersPage() {
           </>
         )
       ) : (
-        filteredOrders.length === 0 ? (
+        ordersList.items.length === 0 ? (
           <EmptyState
             title="Sin artículos"
             description={orderStatusFilter ? "No hay artículos con ese estado." : "Aún no has realizado ninguna compra."}
@@ -158,7 +151,7 @@ export default function StudentOrdersPage() {
         ) : (
           <>
             <OrderItemTable
-              orders={filteredOrders}
+              orders={ordersList.items}
               basePath="/student/shop/orders"
               navigationQuery="?from=items"
             />

@@ -239,7 +239,7 @@ export default function AdminProductDetailPage() {
         />
       )}
 
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-center">
         {/* Columna izquierda: imagen + selector de colores */}
         <Card className="flex flex-col items-center justify-center p-8">
           <div className="w-full max-w-sm">

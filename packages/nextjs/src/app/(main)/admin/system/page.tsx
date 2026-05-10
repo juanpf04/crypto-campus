@@ -194,7 +194,7 @@ export default function AdminSystemPage() {
       {/* Cabecera con título + botón Actualizar */}
       <div className="flex items-center justify-between gap-3">
         <SectionTitle icon={icons.alert}>Estado del sistema</SectionTitle>
-        <Button variant="ghost" onClick={() => loadStatus()} loading={refreshing} disabled={refreshing}>
+        <Button variant="primary" onClick={() => loadStatus()} loading={refreshing} disabled={refreshing}>
           <span className="flex items-center gap-2">{icons.refresh} Actualizar</span>
         </Button>
       </div>

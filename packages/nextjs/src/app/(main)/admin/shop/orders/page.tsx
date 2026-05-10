@@ -8,7 +8,7 @@
  * Acciones: marcar entregado (individual), procesar devolución.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/useToast";
 import { usePaginatedList } from "@/hooks/usePaginatedList";
@@ -80,7 +80,10 @@ export default function AdminOrdersPage() {
   const batchesList = usePaginatedList<BatchTableRow>({
     endpoint: "/api/shop/batches/admin",
     pageSize: PAGE_SIZE,
-    filters: { userId: userFilter || null },
+    filters: {
+      userId: userFilter || null,
+      generalStatus: batchStatusFilter || null,
+    },
     onError: () => addToast("Error al cargar pedidos", "danger"),
     parseResponse: (data) => {
       const body = data as { batches?: BatchTableRow[]; total?: number };
@@ -91,7 +94,10 @@ export default function AdminOrdersPage() {
   const ordersList = usePaginatedList<OrderTableRow>({
     endpoint: "/api/shop/orders/admin",
     pageSize: PAGE_SIZE,
-    filters: { userId: userFilter || null },
+    filters: {
+      userId: userFilter || null,
+      status: orderStatusFilter || null,
+    },
     onError: () => addToast("Error al cargar artículos", "danger"),
     parseResponse: (data) => {
       const body = data as { orders?: OrderTableRow[]; total?: number };
@@ -136,16 +142,8 @@ export default function AdminOrdersPage() {
     }
   }
 
-  const filteredBatches = useMemo(() => {
-    if (!batchStatusFilter) return batchesList.items;
-    return batchesList.items.filter((b) => b.generalStatus === batchStatusFilter);
-  }, [batchesList.items, batchStatusFilter]);
-
-  const filteredOrders = useMemo(() => {
-    if (!orderStatusFilter) return ordersList.items;
-    return ordersList.items.filter((o) => o.status === orderStatusFilter);
-  }, [ordersList.items, orderStatusFilter]);
-
+  // Los filtros (userId, generalStatus, status) se envían al servidor — items
+  // y total ya vienen filtrados, así que renderizamos los listados directos.
   const isLoading = tab === "batches" ? batchesList.loading : ordersList.loading;
 
   return (
@@ -203,12 +201,12 @@ export default function AdminOrdersPage() {
           <SkeletonTable columns={tab === "batches" ? 6 : 8} rows={8} />
         </div>
       ) : tab === "batches" ? (
-        filteredBatches.length === 0 ? (
+        batchesList.items.length === 0 ? (
           <EmptyState title="Sin pedidos" description={batchStatusFilter ? "No hay tickets con ese estado." : "No hay pedidos que coincidan con los filtros."} />
         ) : (
           <>
             <OrderBatchTable
-              batches={filteredBatches}
+              batches={batchesList.items}
               basePath="/admin/shop/orders/batch"
               showUser
             />
@@ -221,12 +219,12 @@ export default function AdminOrdersPage() {
           </>
         )
       ) : (
-        filteredOrders.length === 0 ? (
+        ordersList.items.length === 0 ? (
           <EmptyState title="Sin artículos" description={orderStatusFilter ? "No hay artículos con ese estado." : "No hay artículos que coincidan con los filtros."} />
         ) : (
           <>
             <OrderItemTable
-              orders={filteredOrders}
+              orders={ordersList.items}
               basePath="/admin/shop/orders"
               navigationQuery="?from=items"
               showUser

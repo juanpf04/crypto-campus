@@ -63,35 +63,41 @@ export async function getOrCreateSubjectBadge(subjectOfferingId: string) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 
-	const offering = await prisma.subjectOffering.findUnique({
-		where: { id: subjectOfferingId },
-		include: { subjectBadge: true },
-	});
-	if (!offering) throw new Error("Asignatura no encontrada");
-	if (session.role !== "ADMIN" && offering.professorId !== session.userId)
-		throw new Error("No autorizado");
+	try {
+		const offering = await prisma.subjectOffering.findUnique({
+			where: { id: subjectOfferingId },
+			include: { subjectBadge: true },
+		});
+		if (!offering) throw new Error("Asignatura no encontrada");
+		if (session.role !== "ADMIN" && offering.professorId !== session.userId)
+			throw new Error("No autorizado");
 
-	if (offering.subjectBadge) return offering.subjectBadge;
+		if (offering.subjectBadge) return offering.subjectBadge;
 
-	// Leer next ID y crear on-chain
-	const nextId = await publicClient.readContract({
-		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-		abi: BADGE_SYSTEM_ABI,
-		functionName: "nextSubjectBadgeId",
-	}) as bigint;
-	const tokenId = Number(nextId);
+		// Leer next ID y crear on-chain
+		const nextId = await publicClient.readContract({
+			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+			abi: BADGE_SYSTEM_ABI,
+			functionName: "nextSubjectBadgeId",
+		}) as bigint;
+		const tokenId = Number(nextId);
 
-	const hash = await adminWalletClient.writeContract({
-		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-		abi: BADGE_SYSTEM_ABI,
-		functionName: "createSubjectBadge",
-	});
-	const receipt = await publicClient.waitForTransactionReceipt({ hash });
-	if (receipt.status !== "success") throw new Error("La transacción fue revertida");
+		const hash = await adminWalletClient.writeContract({
+			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+			abi: BADGE_SYSTEM_ABI,
+			functionName: "createSubjectBadge",
+		});
+		const receipt = await publicClient.waitForTransactionReceipt({ hash });
+		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
 
-	return prisma.subjectBadge.create({
-		data: { tokenId, subjectOfferingId, txHash: hash },
-	});
+		return prisma.subjectBadge.create({
+			data: { tokenId, subjectOfferingId, txHash: hash },
+		});
+	} catch (error) {
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		throw new Error(`Error al obtener/crear insignia de asignatura: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
 }
 
 // ── Assignments ──────────────────────────────────────────────────────────
@@ -343,87 +349,99 @@ export async function closeAssignmentForReview(assignmentPrismaId: string) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 
-	const assignment = await prisma.assignment.findUnique({ where: { id: assignmentPrismaId } });
-	if (!assignment) throw new Error("Tarea no encontrada");
-	if (session.role !== "ADMIN" && assignment.creatorId !== session.userId)
-		throw new Error("No autorizado");
-	if (assignment.status !== "OPEN") throw new Error("La tarea no está abierta");
+	try {
+		const assignment = await prisma.assignment.findUnique({ where: { id: assignmentPrismaId } });
+		if (!assignment) throw new Error("Tarea no encontrada");
+		if (session.role !== "ADMIN" && assignment.creatorId !== session.userId)
+			throw new Error("No autorizado");
+		if (assignment.status !== "OPEN") throw new Error("La tarea no está abierta");
 
-	// Pre-flight: Assignment existe y está OPEN on-chain.
-	// AssignmentStatus: None=0, Open=1, Reviewing=2, Closed=3
-	const onChain = await publicClient.readContract({
-		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-		abi: BADGE_SYSTEM_ABI,
-		functionName: "getAssignment",
-		args: [BigInt(assignment.assignmentId)],
-	}) as { subjectBadgeId: bigint; professor: `0x${string}`; status: number };
+		// Pre-flight: Assignment existe y está OPEN on-chain.
+		// AssignmentStatus: None=0, Open=1, Reviewing=2, Closed=3
+		const onChain = await publicClient.readContract({
+			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+			abi: BADGE_SYSTEM_ABI,
+			functionName: "getAssignment",
+			args: [BigInt(assignment.assignmentId)],
+		}) as { subjectBadgeId: bigint; professor: `0x${string}`; status: number };
 
-	if (onChain.professor === "0x0000000000000000000000000000000000000000") {
-		throw new Error(
-			`La tarea no existe on-chain (assignmentId=${assignment.assignmentId}). ` +
-			`Puede haber drift entre la base de datos y la blockchain; reinicia con pnpm run db:reset y pnpm dev.`,
-		);
+		if (onChain.professor === "0x0000000000000000000000000000000000000000") {
+			throw new Error(
+				`La tarea no existe on-chain (assignmentId=${assignment.assignmentId}). ` +
+				`Puede haber drift entre la base de datos y la blockchain; reinicia con pnpm run db:reset y pnpm dev.`,
+			);
+		}
+		if (onChain.status !== 1) {
+			throw new Error("La tarea ya no está abierta on-chain");
+		}
+
+		const hash = await adminWalletClient.writeContract({
+			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+			abi: BADGE_SYSTEM_ABI,
+			functionName: "closeAssignmentForReview",
+			args: [BigInt(assignment.assignmentId)],
+		});
+		const receipt = await publicClient.waitForTransactionReceipt({ hash });
+		if (receipt.status !== "success") throw new Error("Error on-chain");
+
+		return prisma.assignment.update({
+			where: { id: assignment.id },
+			data: { status: "REVIEWING" },
+		});
+	} catch (error) {
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		throw new Error(`Error al cerrar asignación para revisión: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
-	if (onChain.status !== 1) {
-		throw new Error("La tarea ya no está abierta on-chain");
-	}
-
-	const hash = await adminWalletClient.writeContract({
-		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-		abi: BADGE_SYSTEM_ABI,
-		functionName: "closeAssignmentForReview",
-		args: [BigInt(assignment.assignmentId)],
-	});
-	const receipt = await publicClient.waitForTransactionReceipt({ hash });
-	if (receipt.status !== "success") throw new Error("Error on-chain");
-
-	return prisma.assignment.update({
-		where: { id: assignment.id },
-		data: { status: "REVIEWING" },
-	});
 }
 
 export async function closeAssignment(assignmentPrismaId: string) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 
-	const assignment = await prisma.assignment.findUnique({ where: { id: assignmentPrismaId } });
-	if (!assignment) throw new Error("Tarea no encontrada");
-	if (session.role !== "ADMIN" && assignment.creatorId !== session.userId)
-		throw new Error("No autorizado");
-	if (assignment.status === "CLOSED") throw new Error("La tarea ya está cerrada");
+	try {
+		const assignment = await prisma.assignment.findUnique({ where: { id: assignmentPrismaId } });
+		if (!assignment) throw new Error("Tarea no encontrada");
+		if (session.role !== "ADMIN" && assignment.creatorId !== session.userId)
+			throw new Error("No autorizado");
+		if (assignment.status === "CLOSED") throw new Error("La tarea ya está cerrada");
 
-	// Pre-flight: Assignment existe y no está ya CLOSED on-chain.
-	const onChain = await publicClient.readContract({
-		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-		abi: BADGE_SYSTEM_ABI,
-		functionName: "getAssignment",
-		args: [BigInt(assignment.assignmentId)],
-	}) as { subjectBadgeId: bigint; professor: `0x${string}`; status: number };
+		// Pre-flight: Assignment existe y no está ya CLOSED on-chain.
+		const onChain = await publicClient.readContract({
+			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+			abi: BADGE_SYSTEM_ABI,
+			functionName: "getAssignment",
+			args: [BigInt(assignment.assignmentId)],
+		}) as { subjectBadgeId: bigint; professor: `0x${string}`; status: number };
 
-	if (onChain.professor === "0x0000000000000000000000000000000000000000") {
-		throw new Error(
-			`La tarea no existe on-chain (assignmentId=${assignment.assignmentId}). ` +
-			`Puede haber drift entre la base de datos y la blockchain; reinicia con pnpm run db:reset y pnpm dev.`,
-		);
+		if (onChain.professor === "0x0000000000000000000000000000000000000000") {
+			throw new Error(
+				`La tarea no existe on-chain (assignmentId=${assignment.assignmentId}). ` +
+				`Puede haber drift entre la base de datos y la blockchain; reinicia con pnpm run db:reset y pnpm dev.`,
+			);
+		}
+		if (onChain.status === 3) {
+			throw new Error("La tarea ya está cerrada on-chain");
+		}
+
+		const hash = await adminWalletClient.writeContract({
+			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+			abi: BADGE_SYSTEM_ABI,
+			functionName: "closeAssignment",
+			args: [BigInt(assignment.assignmentId)],
+		});
+		const receipt = await publicClient.waitForTransactionReceipt({ hash });
+		if (receipt.status !== "success") throw new Error("Error on-chain");
+
+		return prisma.assignment.update({
+			where: { id: assignment.id },
+			data: { status: "CLOSED", closedAt: new Date() },
+		});
+	} catch (error) {
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		throw new Error(`Error al cerrar asignación: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
-	if (onChain.status === 3) {
-		throw new Error("La tarea ya está cerrada on-chain");
-	}
-
-	const hash = await adminWalletClient.writeContract({
-		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-		abi: BADGE_SYSTEM_ABI,
-		functionName: "closeAssignment",
-		args: [BigInt(assignment.assignmentId)],
-	});
-	const receipt = await publicClient.waitForTransactionReceipt({ hash });
-	if (receipt.status !== "success") throw new Error("Error on-chain");
-
-	return prisma.assignment.update({
-		where: { id: assignment.id },
-		data: { status: "CLOSED", closedAt: new Date() },
-	});
 }
 
 // ── Premios (otorgar) ────────────────────────────────────────────────────
@@ -553,99 +571,166 @@ export async function createReward(input: {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 
-	const name = input.name.trim();
-	if (!name) throw new Error("El nombre es obligatorio");
-	if (!Number.isInteger(input.badgeCost) || input.badgeCost < 1)
-		throw new Error("El coste en insignias debe ser >= 1");
-	if (!Number.isInteger(input.supply) || input.supply < 0)
-		throw new Error("El stock debe ser >= 0 (0 = ilimitado)");
+	try {
+		const name = input.name.trim();
+		if (!name) throw new Error("El nombre es obligatorio");
+		if (!Number.isInteger(input.badgeCost) || input.badgeCost < 1)
+			throw new Error("El coste en insignias debe ser >= 1");
+		if (!Number.isInteger(input.supply) || input.supply < 0)
+			throw new Error("El stock debe ser >= 0 (0 = ilimitado)");
 
-	const validCategories = ["TIEMPO", "EXAMEN", "PRACTICA", "CONSULTA", "OTROS"] as const;
-	const category = input.category && validCategories.includes(input.category)
-		? input.category
-		: "OTROS";
+		const validCategories = ["TIEMPO", "EXAMEN", "PRACTICA", "CONSULTA", "OTROS"] as const;
+		const category = input.category && validCategories.includes(input.category)
+			? input.category
+			: "OTROS";
 
-	const badge = await getOrCreateSubjectBadge(input.subjectOfferingId);
+		const badge = await getOrCreateSubjectBadge(input.subjectOfferingId);
 
-	const nextId = await publicClient.readContract({
-		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-		abi: BADGE_SYSTEM_ABI,
-		functionName: "nextRewardId",
-	}) as bigint;
-	const rewardChainId = Number(nextId);
+		const nextId = await publicClient.readContract({
+			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+			abi: BADGE_SYSTEM_ABI,
+			functionName: "nextRewardId",
+		}) as bigint;
+		const rewardChainId = Number(nextId);
 
-	const hash = await adminWalletClient.writeContract({
-		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-		abi: BADGE_SYSTEM_ABI,
-		functionName: "createReward",
-		args: [BigInt(badge.tokenId), BigInt(input.badgeCost), BigInt(input.supply)],
-	});
-	const receipt = await publicClient.waitForTransactionReceipt({ hash });
-	if (receipt.status !== "success") throw new Error("Error on-chain creando recompensa");
+		const hash = await adminWalletClient.writeContract({
+			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+			abi: BADGE_SYSTEM_ABI,
+			functionName: "createReward",
+			args: [BigInt(badge.tokenId), BigInt(input.badgeCost), BigInt(input.supply)],
+		});
+		const receipt = await publicClient.waitForTransactionReceipt({ hash });
+		if (receipt.status !== "success") throw new Error("Error on-chain creando recompensa");
 
-	const reward = await prisma.reward.create({
-		data: {
-			rewardId: rewardChainId,
-			name,
-			description: input.description?.trim() || null,
-			subjectBadgeId: badge.id,
-			badgeCost: input.badgeCost,
-			supply: input.supply,
-			category,
-			creatorId: session.userId!,
-			txHash: hash,
-		},
-	});
-	return { success: true, reward };
+		const reward = await prisma.reward.create({
+			data: {
+				rewardId: rewardChainId,
+				name,
+				description: input.description?.trim() || null,
+				subjectBadgeId: badge.id,
+				badgeCost: input.badgeCost,
+				supply: input.supply,
+				category,
+				creatorId: session.userId!,
+				txHash: hash,
+			},
+		});
+		return { success: true, reward };
+	} catch (error) {
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		throw new Error(`Error al crear recompensa: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
 }
 
 export async function deactivateReward(rewardPrismaId: string) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 
-	const reward = await prisma.reward.findUnique({ where: { id: rewardPrismaId } });
-	if (!reward) throw new Error("Recompensa no encontrada");
-	if (session.role !== "ADMIN" && reward.creatorId !== session.userId)
-		throw new Error("No autorizado");
+	try {
+		const reward = await prisma.reward.findUnique({ where: { id: rewardPrismaId } });
+		if (!reward) throw new Error("Recompensa no encontrada");
+		if (session.role !== "ADMIN" && reward.creatorId !== session.userId)
+			throw new Error("No autorizado");
 
-	// Pre-flight: reward existe y está activa on-chain.
-	const onChain = await publicClient.readContract({
-		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-		abi: BADGE_SYSTEM_ABI,
-		functionName: "getReward",
-		args: [BigInt(reward.rewardId)],
-	}) as {
-		subjectBadgeId: bigint;
-		badgeCost: bigint;
-		supply: bigint;
-		totalSupply: bigint;
-		professor: `0x${string}`;
-		active: boolean;
-	};
+		// Pre-flight: reward existe y está activa on-chain.
+		const onChain = await publicClient.readContract({
+			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+			abi: BADGE_SYSTEM_ABI,
+			functionName: "getReward",
+			args: [BigInt(reward.rewardId)],
+		}) as {
+			subjectBadgeId: bigint;
+			badgeCost: bigint;
+			supply: bigint;
+			totalSupply: bigint;
+			professor: `0x${string}`;
+			active: boolean;
+		};
 
-	if (onChain.professor === "0x0000000000000000000000000000000000000000") {
-		throw new Error(
-			`La recompensa no existe on-chain (rewardId=${reward.rewardId}). ` +
-			`Puede haber drift entre la base de datos y la blockchain; reinicia con pnpm run db:reset y pnpm dev.`,
-		);
+		if (onChain.professor === "0x0000000000000000000000000000000000000000") {
+			throw new Error(
+				`La recompensa no existe on-chain (rewardId=${reward.rewardId}). ` +
+				`Puede haber drift entre la base de datos y la blockchain; reinicia con pnpm run db:reset y pnpm dev.`,
+			);
+		}
+		if (!onChain.active) {
+			throw new Error("La recompensa ya está desactivada on-chain");
+		}
+
+		const hash = await adminWalletClient.writeContract({
+			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+			abi: BADGE_SYSTEM_ABI,
+			functionName: "deactivateReward",
+			args: [BigInt(reward.rewardId)],
+		});
+		const receipt = await publicClient.waitForTransactionReceipt({ hash });
+		if (receipt.status !== "success") throw new Error("Error on-chain");
+
+		return prisma.reward.update({
+			where: { id: reward.id },
+			data: { active: false },
+		});
+	} catch (error) {
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		throw new Error(`Error al desactivar recompensa: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
-	if (!onChain.active) {
-		throw new Error("La recompensa ya está desactivada on-chain");
+}
+
+export async function activateReward(rewardPrismaId: string) {
+	const session = await getSession();
+	ensureRole(session, ["PROFESSOR", "ADMIN"]);
+
+	try {
+		const reward = await prisma.reward.findUnique({ where: { id: rewardPrismaId } });
+		if (!reward) throw new Error("Recompensa no encontrada");
+		if (session.role !== "ADMIN" && reward.creatorId !== session.userId)
+			throw new Error("No autorizado");
+
+		// Pre-flight: reward existe y está INACTIVA on-chain.
+		const onChain = await publicClient.readContract({
+			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+			abi: BADGE_SYSTEM_ABI,
+			functionName: "getReward",
+			args: [BigInt(reward.rewardId)],
+		}) as {
+			subjectBadgeId: bigint;
+			badgeCost: bigint;
+			supply: bigint;
+			totalSupply: bigint;
+			professor: `0x${string}`;
+			active: boolean;
+		};
+
+		if (onChain.professor === "0x0000000000000000000000000000000000000000") {
+			throw new Error(
+				`La recompensa no existe on-chain (rewardId=${reward.rewardId}). ` +
+				`Puede haber drift entre la base de datos y la blockchain; reinicia con pnpm run db:reset y pnpm dev.`,
+			);
+		}
+		if (onChain.active) {
+			throw new Error("La recompensa ya está activa on-chain");
+		}
+
+		const hash = await adminWalletClient.writeContract({
+			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+			abi: BADGE_SYSTEM_ABI,
+			functionName: "activateReward",
+			args: [BigInt(reward.rewardId)],
+		});
+		const receipt = await publicClient.waitForTransactionReceipt({ hash });
+		if (receipt.status !== "success") throw new Error("Error on-chain");
+
+		return prisma.reward.update({
+			where: { id: reward.id },
+			data: { active: true },
+		});
+	} catch (error) {
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		throw new Error(`Error al reactivar recompensa: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
-
-	const hash = await adminWalletClient.writeContract({
-		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-		abi: BADGE_SYSTEM_ABI,
-		functionName: "deactivateReward",
-		args: [BigInt(reward.rewardId)],
-	});
-	const receipt = await publicClient.waitForTransactionReceipt({ hash });
-	if (receipt.status !== "success") throw new Error("Error on-chain");
-
-	return prisma.reward.update({
-		where: { id: reward.id },
-		data: { active: false },
-	});
 }
 
 export async function listRewards(filters?: {
@@ -710,7 +795,6 @@ export async function listAvailableRewards(subjectOfferingId?: string) {
 		},
 		include: {
 			subjectBadge: { include: { subjectOffering: { include: { subject: true } } } },
-			_count: { select: { redemptions: true } },
 		},
 		orderBy: { createdAt: "desc" },
 	});
@@ -722,100 +806,106 @@ export async function redeemReward(rewardPrismaId: string) {
 	const session = await getSession();
 	ensureRole(session, ["STUDENT"]);
 
-	const reward = await prisma.reward.findUnique({
-		where: { id: rewardPrismaId },
-		include: { subjectBadge: true },
-	});
-	if (!reward) throw new Error("Recompensa no encontrada");
-	if (!reward.active) throw new Error("Recompensa desactivada");
+	try {
+		const reward = await prisma.reward.findUnique({
+			where: { id: rewardPrismaId },
+			include: { subjectBadge: true },
+		});
+		if (!reward) throw new Error("Recompensa no encontrada");
+		if (!reward.active) throw new Error("Recompensa desactivada");
 
-	const user = await prisma.user.findUnique({
-		where: { id: session.userId! },
-		select: { address: true },
-	});
-	if (!user) throw new Error("Usuario no encontrado");
+		const user = await prisma.user.findUnique({
+			where: { id: session.userId! },
+			select: { address: true },
+		});
+		if (!user) throw new Error("Usuario no encontrado");
 
-	// Pre-flight: leer estado on-chain para dar un error específico antes de
-	// gastar gas. Esto cubre los casos comunes: reward inexistente/desactivado
-	// on-chain, stock agotado, e insignias insuficientes (drift Prisma <-> chain).
-	const [onChainReward, onChainBalance] = await Promise.all([
-		publicClient.readContract({
+		// Pre-flight: leer estado on-chain para dar un error específico antes de
+		// gastar gas. Esto cubre los casos comunes: reward inexistente/desactivado
+		// on-chain, stock agotado, e insignias insuficientes (drift Prisma <-> chain).
+		const [onChainReward, onChainBalance] = await Promise.all([
+			publicClient.readContract({
+				address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+				abi: BADGE_SYSTEM_ABI,
+				functionName: "getReward",
+				args: [BigInt(reward.rewardId)],
+			}) as Promise<{
+				subjectBadgeId: bigint;
+				badgeCost: bigint;
+				supply: bigint;
+				totalSupply: bigint;
+				professor: `0x${string}`;
+				active: boolean;
+			}>,
+			publicClient.readContract({
+				address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+				abi: BADGE_SYSTEM_ABI,
+				functionName: "balanceOf",
+				args: [user.address as `0x${string}`, BigInt(reward.subjectBadge.tokenId)],
+			}) as Promise<bigint>,
+		]);
+
+		if (onChainReward.professor === "0x0000000000000000000000000000000000000000") {
+			throw new Error(
+				`La recompensa no existe on-chain (rewardId=${reward.rewardId}). Puede haber drift entre la base de datos y la blockchain — prueba a reiniciar con pnpm dev para regenerar todo.`,
+			);
+		}
+		if (!onChainReward.active) {
+			throw new Error("La recompensa está desactivada on-chain");
+		}
+		if (onChainReward.totalSupply > BigInt(0) && onChainReward.supply === BigInt(0)) {
+			throw new Error("Esta recompensa se ha agotado");
+		}
+
+		const balance = Number(onChainBalance);
+		if (balance < reward.badgeCost) {
+			throw new Error(
+				`Necesitas ${reward.badgeCost} insignias y solo tienes ${balance} en esta asignatura (balance on-chain). ` +
+				`Si ves un número distinto en la web, puede haber drift entre la base de datos y la blockchain — reinicia con pnpm dev.`,
+			);
+		}
+
+		const { walletClient } = await getUserWalletClient(session.userId!);
+
+		const hash = await walletClient.writeContract({
 			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
 			abi: BADGE_SYSTEM_ABI,
-			functionName: "getReward",
+			functionName: "redeemReward",
 			args: [BigInt(reward.rewardId)],
-		}) as Promise<{
-			subjectBadgeId: bigint;
-			badgeCost: bigint;
-			supply: bigint;
-			totalSupply: bigint;
-			professor: `0x${string}`;
-			active: boolean;
-		}>,
-		publicClient.readContract({
-			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-			abi: BADGE_SYSTEM_ABI,
-			functionName: "balanceOf",
-			args: [user.address as `0x${string}`, BigInt(reward.subjectBadge.tokenId)],
-		}) as Promise<bigint>,
-	]);
-
-	if (onChainReward.professor === "0x0000000000000000000000000000000000000000") {
-		throw new Error(
-			`La recompensa no existe on-chain (rewardId=${reward.rewardId}). Puede haber drift entre la base de datos y la blockchain — prueba a reiniciar con pnpm dev para regenerar todo.`,
-		);
-	}
-	if (!onChainReward.active) {
-		throw new Error("La recompensa está desactivada on-chain");
-	}
-	if (onChainReward.totalSupply > BigInt(0) && onChainReward.supply === BigInt(0)) {
-		throw new Error("Esta recompensa se ha agotado");
-	}
-
-	const balance = Number(onChainBalance);
-	if (balance < reward.badgeCost) {
-		throw new Error(
-			`Necesitas ${reward.badgeCost} insignias y solo tienes ${balance} en esta asignatura (balance on-chain). ` +
-			`Si ves un número distinto en la web, puede haber drift entre la base de datos y la blockchain — reinicia con pnpm dev.`,
-		);
-	}
-
-	const { walletClient } = await getUserWalletClient(session.userId!);
-
-	const hash = await walletClient.writeContract({
-		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-		abi: BADGE_SYSTEM_ABI,
-		functionName: "redeemReward",
-		args: [BigInt(reward.rewardId)],
-	});
-	const receipt = await publicClient.waitForTransactionReceipt({ hash });
-	if (receipt.status !== "success") throw new Error("La transacción fue revertida");
-
-	await prisma.rewardRedemption.create({
-		data: { userId: session.userId!, rewardId: reward.id, txHash: hash },
-	});
-	if (reward.supply > 0) {
-		await prisma.reward.update({
-			where: { id: reward.id },
-			data: { supply: { decrement: 1 } },
 		});
-	}
+		const receipt = await publicClient.waitForTransactionReceipt({ hash });
+		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
 
-	// Bonus primer uso del módulo Insignias
-	let rewards: RewardGrant[] = [];
-	const alreadyHad = await hasRewardOfType(
-		session.userId!,
-		ShopTokenRewardReason.MODULE_FIRST_USE_BADGES,
-	);
-	if (!alreadyHad) {
-		rewards = await issueReward({
-			userId: session.userId!,
-			userAddress: user.address,
-			mainReason: ShopTokenRewardReason.MODULE_FIRST_USE_BADGES,
+		await prisma.rewardRedemption.create({
+			data: { userId: session.userId!, rewardId: reward.id, txHash: hash },
 		});
-	}
+		if (reward.supply > 0) {
+			await prisma.reward.update({
+				where: { id: reward.id },
+				data: { supply: { decrement: 1 } },
+			});
+		}
 
-	return { success: true, rewards };
+		// Bonus primer uso del módulo Insignias
+		let rewards: RewardGrant[] = [];
+		const alreadyHad = await hasRewardOfType(
+			session.userId!,
+			ShopTokenRewardReason.MODULE_FIRST_USE_BADGES,
+		);
+		if (!alreadyHad) {
+			rewards = await issueReward({
+				userId: session.userId!,
+				userAddress: user.address,
+				mainReason: ShopTokenRewardReason.MODULE_FIRST_USE_BADGES,
+			});
+		}
+
+		return { success: true, rewards };
+	} catch (error) {
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		throw new Error(`Error al canjear recompensa: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
 }
 
 /**
@@ -1358,58 +1448,76 @@ export async function cancelUseRequest(requestId: number) {
 	const session = await getSession();
 	ensureRole(session, ["STUDENT"]);
 
-	await assertUseRequestPendingOnChain(requestId);
+	try {
+		await assertUseRequestPendingOnChain(requestId);
 
-	const { walletClient } = await getUserWalletClient(session.userId!);
-	const hash = await walletClient.writeContract({
-		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-		abi: BADGE_SYSTEM_ABI,
-		functionName: "cancelUseRequest",
-		args: [BigInt(requestId)],
-	});
-	const receipt = await publicClient.waitForTransactionReceipt({ hash });
-	if (receipt.status !== "success") throw new Error("La transacción fue revertida");
+		const { walletClient } = await getUserWalletClient(session.userId!);
+		const hash = await walletClient.writeContract({
+			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+			abi: BADGE_SYSTEM_ABI,
+			functionName: "cancelUseRequest",
+			args: [BigInt(requestId)],
+		});
+		const receipt = await publicClient.waitForTransactionReceipt({ hash });
+		if (receipt.status !== "success") throw new Error("La transacción fue revertida");
 
-	await prisma.useRequest.update({ where: { requestId }, data: { status: "CANCELLED" } });
-	return { success: true };
+		await prisma.useRequest.update({ where: { requestId }, data: { status: "CANCELLED" } });
+		return { success: true };
+	} catch (error) {
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		throw new Error(`Error al cancelar solicitud de uso: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
 }
 
 export async function approveUseRequest(requestId: number) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 
-	await assertUseRequestPendingOnChain(requestId);
+	try {
+		await assertUseRequestPendingOnChain(requestId);
 
-	const hash = await adminWalletClient.writeContract({
-		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-		abi: BADGE_SYSTEM_ABI,
-		functionName: "approveUseRequest",
-		args: [BigInt(requestId)],
-	});
-	const receipt = await publicClient.waitForTransactionReceipt({ hash });
-	if (receipt.status !== "success") throw new Error("Error on-chain");
+		const hash = await adminWalletClient.writeContract({
+			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+			abi: BADGE_SYSTEM_ABI,
+			functionName: "approveUseRequest",
+			args: [BigInt(requestId)],
+		});
+		const receipt = await publicClient.waitForTransactionReceipt({ hash });
+		if (receipt.status !== "success") throw new Error("Error on-chain");
 
-	await prisma.useRequest.update({ where: { requestId }, data: { status: "APPROVED" } });
-	return { success: true };
+		await prisma.useRequest.update({ where: { requestId }, data: { status: "APPROVED" } });
+		return { success: true };
+	} catch (error) {
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		throw new Error(`Error al aprobar solicitud de uso: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
 }
 
 export async function rejectUseRequest(requestId: number) {
 	const session = await getSession();
 	ensureRole(session, ["PROFESSOR", "ADMIN"]);
 
-	await assertUseRequestPendingOnChain(requestId);
+	try {
+		await assertUseRequestPendingOnChain(requestId);
 
-	const hash = await adminWalletClient.writeContract({
-		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-		abi: BADGE_SYSTEM_ABI,
-		functionName: "rejectUseRequest",
-		args: [BigInt(requestId)],
-	});
-	const receipt = await publicClient.waitForTransactionReceipt({ hash });
-	if (receipt.status !== "success") throw new Error("Error on-chain");
+		const hash = await adminWalletClient.writeContract({
+			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+			abi: BADGE_SYSTEM_ABI,
+			functionName: "rejectUseRequest",
+			args: [BigInt(requestId)],
+		});
+		const receipt = await publicClient.waitForTransactionReceipt({ hash });
+		if (receipt.status !== "success") throw new Error("Error on-chain");
 
-	await prisma.useRequest.update({ where: { requestId }, data: { status: "REJECTED" } });
-	return { success: true };
+		await prisma.useRequest.update({ where: { requestId }, data: { status: "REJECTED" } });
+		return { success: true };
+	} catch (error) {
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		throw new Error(`Error al rechazar solicitud de uso: ${error instanceof Error ? error.message : "desconocido"}`);
+	}
 }
 
 export async function getMyUseRequests(filters?: {

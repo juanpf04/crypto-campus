@@ -4,7 +4,9 @@ import type { NextConfig } from "next";
 // con wagmi/viem y posibles iframes futuros conviene definirla con cuidado
 // antes de imponerla en producción.
 const securityHeaders = [
-  { key: "X-Frame-Options", value: "DENY" },
+  // SAMEORIGIN (no DENY) porque el detalle de impresión carga el PDF en un
+  // <iframe> apuntando a /api/printer/files/[filename] del mismo origen.
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {

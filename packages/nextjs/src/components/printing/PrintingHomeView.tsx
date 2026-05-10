@@ -61,24 +61,36 @@ export function PrintingHomeView({ basePath, parentLink }: PrintingHomeViewProps
   // Recompensas del último trabajo, pendientes de toastear cuando acabe el overlay
   const pendingRewardsRef = useRef<RewardGrant[]>([]);
 
-  // Carga inicial: créditos + impresoras + total de impresiones
+  // Carga inicial: créditos + impresoras + total de impresiones.
+  // /api/printer/logs devuelve { items, total } (con count real). Pedimos
+  // limit=1 porque solo necesitamos el total, no los items.
   useEffect(() => {
     Promise.all([
       fetch("/api/printer/credits").then((r) => r.json()),
       fetch("/api/printer").then((r) => r.json()),
-      fetch("/api/printer/logs?limit=200&offset=0").then((r) => r.json()),
+      fetch("/api/printer/logs?limit=1&offset=0").then((r) => r.json()),
     ])
       .then(([creditsData, printersData, logsData]) => {
         setCredits(creditsData.availableCredits ?? 0);
         setPrinters(printersData ?? []);
-        setTotalPrints(Array.isArray(logsData) ? logsData.length : 0);
+        const total =
+          typeof logsData?.total === "number"
+            ? logsData.total
+            : Array.isArray(logsData)
+              ? logsData.length
+              : 0;
+        setTotalPrints(total);
       })
       .catch(() => addToast("Error al cargar datos de impresión", "danger"))
       .finally(() => setLoading(false));
   }, [addToast]);
 
-  // Ejecutar trabajo de impresión: crea una promise y activa el overlay
+  // Ejecutar trabajo de impresión: crea una promise y activa el overlay.
+  // Si la operación falla muy rápido (ej. módulo pausado, validación de
+  // backend), no llegamos a mostrar el overlay — el toast de error basta.
   function handlePrint(data: PrintJobResult) {
+    let failed = false;
+
     const printPromise = fetch("/api/printer/execute", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -101,6 +113,7 @@ export function PrintingHomeView({ basePath, parentLink }: PrintingHomeViewProps
     }).then(async (res) => {
       const body = await res.json();
       if (!res.ok) {
+        failed = true;
         addToast(body.error ?? "Error al ejecutar impresión", "danger");
         return null;
       }
@@ -109,12 +122,18 @@ export function PrintingHomeView({ basePath, parentLink }: PrintingHomeViewProps
       pendingRewardsRef.current = body.rewards ?? [];
       return (body.printLog?.id as string) ?? null;
     }).catch(() => {
+      failed = true;
       addToast("Error al ejecutar impresión", "danger");
       return null;
     });
 
-    // Activar overlay de impresión
-    setPrintingState({ active: true, filename: data.filename, promise: printPromise });
+    // Si la promise ya falló antes de 400ms (ej. módulo pausado), no
+    // mostramos el overlay — el toast ya informa al usuario. Si todavía
+    // está en curso al pasar ese tiempo, sí se muestra el overlay.
+    setTimeout(() => {
+      if (failed) return;
+      setPrintingState({ active: true, filename: data.filename, promise: printPromise });
+    }, 400);
   }
 
   // Cuando la animación y el backend terminan

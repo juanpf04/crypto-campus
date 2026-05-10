@@ -12,8 +12,9 @@ export async function GET(req: NextRequest) {
     const limit = parseInt(searchParams.get("limit") ?? "20", 10);
     const offset = parseInt(searchParams.get("offset") ?? "0", 10);
     const userId = searchParams.get("userId") ?? undefined;
+    const generalStatus = searchParams.get("generalStatus") ?? undefined;
 
-    const result = await listAllBatches(limit, offset, userId);
+    const result = await listAllBatches(limit, offset, userId, generalStatus);
     return NextResponse.json(result);
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Error desconocido";

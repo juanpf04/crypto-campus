@@ -127,6 +127,7 @@ export async function addRoom(input: {
 		return { success: true, room };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Salas");
 		throw new Error(`Error al crear sala: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -188,6 +189,7 @@ export async function updateRoom(
 		return { success: true, room };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Salas");
 		throw new Error(`Error al actualizar sala: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -223,6 +225,7 @@ export async function removeRoom(roomPrismaId: string) {
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Salas");
 		throw new Error(`Error al eliminar sala: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -392,6 +395,9 @@ export async function bookRoom(
 				userAddress: student.address,
 				mainReason: ShopTokenRewardReason.ROOM_BOOKED,
 				firstUseReason: ShopTokenRewardReason.MODULE_FIRST_USE_ROOMS,
+				// Throttle: 1 SHPT por día máximo — evita el bucle reservar/cancelar
+				// para farmear tokens. El bonus firstUse sigue siendo once-ever.
+				mainOncePerDay: true,
 			});
 		}
 
@@ -453,6 +459,7 @@ export async function cancelBooking(bookingPrismaId: string) {
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isContractPauseError(error)) throw translateContractError(error, "Salas");
 		throw new Error(`Error al cancelar reserva: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -511,8 +518,10 @@ export async function getMyBookings() {
 	const session = await getSession();
 	ensureRole(session, ["STUDENT"]);
 
+	// Las reservas históricas solo alimentan estadísticas; no aparecen
+	// en el listado del estudiante.
 	const bookings = await prisma.roomBooking.findMany({
-		where: { userId: session.userId! },
+		where: { ...ONLY_LIVE, userId: session.userId! },
 		include: {
 			room: { select: { id: true, name: true, location: true, capacity: true } },
 		},

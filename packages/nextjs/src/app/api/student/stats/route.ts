@@ -28,16 +28,23 @@ export async function GET() {
 				getMyShopBalance(),
 				listMyOrders(5, 0),
 				getMyBadgeSummary(),
-				prisma.printLog.count({ where: { userId: session.userId } }),
+				// printCount alimenta una card de "actividad real" en el dashboard,
+				// debe coincidir con el historial visible (que filtra históricos).
+				prisma.printLog.count({
+					where: { userId: session.userId, historical: false },
+				}),
 			]);
 
+		// Aplanamos la respuesta de listMyOrders ({ orders, total }) para que el
+		// front pueda leer `data.orders` como array directamente.
 		return NextResponse.json({
 			credits,
 			printsByMonth,
 			libBalance,
 			loans,
 			shopBalance,
-			orders,
+			orders: orders.orders,
+			ordersTotal: orders.total,
 			badgeSummary,
 			printCount,
 		});
