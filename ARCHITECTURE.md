@@ -22,7 +22,8 @@ Documento de referencia técnica. Explica cada decisión arquitectónica, qué h
 11. [Motor blockchain: Anvil vs Hardhat](#11-motor-blockchain-anvil-vs-hardhat)
 12. [Pausa modular del sistema](#12-pausa-modular-del-sistema)
 13. [Convenciones de código](#13-convenciones-de-código)
-14. [Cómo arrancar el proyecto](#14-cómo-arrancar-el-proyecto)
+14. [Testing y CI](#14-testing-y-ci)
+15. [Cómo arrancar el proyecto](#15-cómo-arrancar-el-proyecto)
 
 ---
 
@@ -103,10 +104,10 @@ CryptoCampus/
 │   └── reset-chain.mjs           # Borra estado on-chain local
 │
 ├── docker-compose.yaml           # PostgreSQL (puerto 5435)
+├── .github/workflows/ci.yml      # CI GitHub Actions (lint + tests + build)
 ├── ARCHITECTURE.md               # Este archivo
 ├── README.md                     # Onboarding
 ├── TFG-DOCUMENTACION-TECNICA.md  # Memoria TFG
-├── CLAUDE.md                     # Guía para Claude Code
 ├── package.json                  # Workspace root (scripts globales)
 └── pnpm-workspace.yaml
 ```
@@ -119,7 +120,11 @@ CryptoCampus/
 
 ```
 packages/hardhat/
-├── contracts/                               # Código Solidity (8 producción + Example)
+├── contracts/                               # Código Solidity (8 contratos de producción)
+├── test/                                    # Tests (.test.ts NodeJS + .t.sol Foundry)
+│   ├── helpers/CampusTestBase.sol           # Abstract base para tests Foundry
+│   ├── Integration.{Library,Shop,Badges,Cross}.t.sol  # Tests de integración por dominio
+│   └── *.t.sol / *.test.ts                  # Tests unitarios por contrato
 ├── ignition/modules/CampusModule.ts         # Despliegue declarativo de todos los contratos
 ├── artifacts/                               # ABIs generados (consumidos desde Next.js)
 └── ignition/deployments/chain-31337/
@@ -130,8 +135,10 @@ packages/hardhat/
 
 #### `CampusRoles` — AccessControl + Pausable
 - **Responsabilidad**: Registro de usuarios y gestión de roles
-- **Roles**: `STUDENT_ROLE`, `PROFESSOR_ROLE`, `LIBRARIAN_ROLE`, y `DEFAULT_ADMIN_ROLE` (admin)
-- **Funciones clave**: `registerUser(address, role)`, `hasRole(role, address)`, `grantRole()`, `revokeRole()`
+- **Roles**: `STUDENT_ROLE`, `PROFESSOR_ROLE`, `LIBRARIAN_ROLE`, y `ADMIN_ROLE` (custom — no se usa `DEFAULT_ADMIN_ROLE` para evitar colisión con el centinela `NO_ROLE = bytes32(0)`)
+- **Funciones clave expuestas**: `registerUser(address, name, role)`, `isStudent/isLibrarian/isProfessor/isAdmin/isRegistered(address)`, `pause/unpause()`
+- **Funciones operativas no expuestas**: `removeUser(address)` y `changeRole(address, bytes32)` están implementadas, testeadas y revisadas, pero no se exponen desde la UI porque su uso real exige coordinación con Prisma (préstamos activos, asignaturas vinculadas, badges) que excede el alcance del TFG. Documentado con NatSpec en el contrato
+- **Funciones bloqueadas**: `grantRole/revokeRole` heredados de OZ revierten siempre con `UseContractFunctions` para forzar el uso de las APIs de alto nivel
 - **Nota**: Solo el admin (Account #0 de Anvil/Hardhat) puede registrar usuarios y asignar roles
 
 #### `LibraryToken` — ERC-20 + Pausable
@@ -201,17 +208,30 @@ RoomBooking:    0x...
 
 Tras el primer deploy de Ignition, las direcciones exactas quedan en `packages/hardhat/ignition/deployments/chain-31337/deployed_addresses.json`. El frontend las lee desde [`packages/nextjs/src/lib/contracts.ts`](packages/nextjs/src/lib/contracts.ts) que las re-exporta tipadas.
 
-### 4.3 Optimización de gas
+### 4.3 Optimización de gas y tamaño
 
-Se eliminaron todos los strings de los structs on-chain. Nombres, descripciones, títulos, autores e ISBN viven en Prisma. La blockchain solo guarda lo que necesita para ejecutar lógica: precios, cantidades, estados, direcciones. Esto reduce el coste de gas y simplifica las upgrades.
+- **Strings fuera de cadena**: nombres, descripciones, títulos, autores e ISBN viven en Prisma. La blockchain solo guarda lo que necesita para ejecutar lógica: precios, cantidades, estados, direcciones.
+- **`viaIR: true`** en ambos profiles del optimizer (`default` + `production`). La pipeline IR reduce hasta un 28-44 % el bytecode de los contratos grandes. Los 8 contratos de producción ocupan entre el 10 % y el 58 % del límite EIP-170 (24 576 bytes); el mayor, `BadgeSystem`, pesa 14 205 bytes deployed.
+- **Custom errors** en todos los contratos (`error NotStudent(address)`) en lugar de `require("...")`. Gas más barato y mensajes con contexto.
 
 ### 4.4 Patrones de seguridad
 
 - **CEI (Checks-Effects-Interactions)**: Todas las funciones verifican, actualizan estado y después hacen llamadas externas. Previene reentrancia.
 - **ReentrancyGuard**: Aplicado en funciones con transferencias ERC-1155.
-- **Pausable**: Todos los contratos pueden pausarse por el admin en emergencia.
+- **Pausable**: Todos los contratos pueden pausarse por el admin (`ADMIN_ROLE` custom) en emergencia. La pausa se traduce en revert con custom error `EnforcedPause()` (selector `0xd93c0665`).
+- **Helpers de rol uniformes**: los 7 contratos consumidores chequean permisos con `campusRoles.isAdmin(addr)` / `isLibrarian(addr)` / `isProfessor(addr)` / `isStudent(addr)` en lugar de `hasRole(XXX_ROLE(), addr)`. Una llamada externa en vez de dos, código más legible.
 - **Custom errors**: En vez de `require("...")` se usan errores tipados (`error NotStudent(address)`). Gas más barato y más informativos.
-- **Restricción de transferencias**: `LibraryManager` y `BadgeSystem` sobrescriben `_update()` para impedir transferencias directas (solo el contrato media).
+- **NatSpec uniforme**: todos los miembros `external`/`public` (funciones, errores, eventos, state vars, modifiers, constructor) llevan `/// @notice` / `@dev` / `@param` / `@return`. Sin mezclar bloques `/** */`.
+- **Restricción de transferencias**: `LibraryManager` y `BadgeSystem` sobrescriben `_update()` para impedir transferencias directas (solo el contrato media). En `BadgeSystem` esto materializa el patrón **soulbound** — las insignias no son intercambiables y `safeTransferFrom`/`safeBatchTransferFrom`/`setApprovalForAll` también revierten con `SoulboundTransferBlocked`.
+
+### 4.5 Tests dual
+
+Los contratos tienen dos suites complementarias en [`packages/hardhat/test/`](packages/hardhat/test/):
+
+- **NodeJS (`*.test.ts`)**: 267 tests con `node:test` + `viem`. Cada suite despliega contratos frescos en su `before`.
+- **Solidity (`*.t.sol`)**: 140 tests con Foundry/forge-std. Los tests de integración están repartidos en `Integration.Library.t.sol`, `Integration.Shop.t.sol`, `Integration.Badges.t.sol` e `Integration.Cross.t.sol`, cada uno desplegando solo los contratos que necesita. Comparten setup vía [`test/helpers/CampusTestBase.sol`](packages/hardhat/test/helpers/CampusTestBase.sol).
+
+Total: **407 tests** ejecutados por `pnpm test`. La separación por dominio en Foundry reduce el bytecode embebido por archivo (la integración cross-stack pesa 70 k bytes pero solo carga todos los contratos cuando es estrictamente necesario).
 
 ---
 
@@ -219,7 +239,7 @@ Se eliminaron todos los strings de los structs on-chain. Nombres, descripciones,
 
 **Archivo**: [`packages/nextjs/prisma/schema.prisma`](packages/nextjs/prisma/schema.prisma).
 
-27 modelos en total. Resumen por dominio:
+26 modelos en total. Resumen por dominio. Las entidades con representación on-chain incluyen un flag `historical: Boolean` que permite poblar dashboards con datos de demo (3-12 meses atrás, sin transacciones reales) — ver §6 y `scripts/seed-historical.mjs`.
 
 ### 5.1 Usuarios y autenticación
 
@@ -306,8 +326,7 @@ model OrderBatch   { id, batchId, userId, totalPaid, generalStatus, txHash, purc
 
 ```prisma
 model ShopTokenReward        { id, userId, amount, reason (enum), txHash, createdAt }
-model PaymentSimulationLog   { ... }
-model CardTopupSimulation    { ... }
+model CardTopupSimulation    { id, userId, amount, cardLast4, simulatedAt, ... }
 ```
 
 `ShopTokenReward` es el ledger auditable de todas las recompensas automáticas que se han minteado.
@@ -327,17 +346,19 @@ packages/nextjs/
 ├── src/
 │   ├── app/                  # App Router (rutas)
 │   ├── actions/              # Server Actions (8 módulos)
-│   ├── components/           # ui/ + shared/ + forms/ + dashboard/ + layout/
-│   ├── lib/                  # viem, prisma, crypto, session, shopRewards, contracts, ...
+│   ├── components/           # ui/ + shared/ + forms/ + dashboard/ + printing/ + layout/
+│   ├── lib/                  # viem, prisma, crypto, session, shopRewards, historical, contracts, ...
 │   ├── hooks/                # 5 hooks custom
-│   ├── contexts/             # 4 React Contexts
+│   ├── contexts/             # 4 React Contexts (Cart, Onboarding, Theme, Toast)
 │   ├── types/                # tipos compartidos
 │   └── proxy.ts              # middleware de protección de rutas
 ├── prisma/
-│   ├── schema.prisma
-│   └── seed.ts               # utilidad CLI para reejecutar seeds
-├── scripts/                  # 10 scripts .mjs (seeds, resync, cleanup)
+│   └── schema.prisma         # 26 modelos
+├── scripts/                  # 12 scripts .mjs (seeds + datos históricos + cleanup + resync + db-doctor)
+├── e2e/                      # Tests E2E (Playwright)
 ├── public/                   # assets estáticos + uploads
+├── playwright.config.ts      # Configuración Playwright
+├── vitest.config.ts          # Configuración Vitest
 ├── tsconfig.json             # alias @/ → ./src/
 └── next.config.ts
 ```
@@ -399,11 +420,10 @@ src/app/
 
 **Regla**: Toda lógica que toca Prisma o firma transacciones blockchain vive aquí.
 
-Los 9 módulos:
+Los 8 módulos:
 
 | Módulo | Responsabilidad |
 |---|---|
-| `auth.ts` | `createUser`, `loginUser`, `logoutUser`, `getMe`, `updatePassword` |
 | `academic.ts` | `listSubjects`, `createSubject`, `createOffering`, `enrollStudent`, `unenrollStudent`, `listAvailableStudents`, ... |
 | `badges.ts` | `createSubjectBadge`, `createAssignment`, `awardBadge`, `createReward`, `redeemReward`, `requestUseReward`, `getOfferingRewardsInventory`, ... |
 | `library.ts` | `addItem`, `requestLoan`, `pickupLoan`, `returnLoan`, `listMyLoans`, `listRequests`, `getLibraryStats`, ... |
@@ -412,6 +432,8 @@ Los 9 módulos:
 | `shop.ts` | `listProducts`, `addToCart`, `checkout`, `returnOrder`, `createProduct`, `topup`, ... |
 | `onboarding.ts` | `markModuleFirstUse`, helpers de primer uso para gatillar recompensas bonus |
 | `system.ts` | `getModulesStatus`, `pauseModule`, `unpauseModule`, `pauseAllModules`, `unpauseAllModules` — pausa modular admin-only (ver §12) |
+
+La autenticación (`createUser`, `loginUser`, `logoutUser`, `getMe`, `getSession`, `ensureRole`, `ensureAdmin`) vive en [`lib/auth.ts`](packages/nextjs/src/lib/auth.ts) en lugar de en `actions/` porque la usan tanto Server Actions como API routes y el middleware `proxy.ts`.
 
 ### 6.3 Patrón canónico de una Server Action
 
@@ -490,12 +512,12 @@ Ver sección 10 de [TFG-DOCUMENTACION-TECNICA.md](./TFG-DOCUMENTACION-TECNICA.md
 
 | Capa | Carpeta | Nº | Qué tiene |
 |---|---|---|---|
-| Atoms | `components/ui/` | 36 | `Button`, `Input`, `Card`, `Table`, `Modal`, `Pagination`, etc. Sin lógica de negocio |
-| Molecules | `components/shared/` | 54 | `StatCard`, `LoanCard`, `ProductCard`, `SectionTitle`, `NavCard`, `ConfirmModal`/`DangerConfirmModal`, `ModuleGuard`, `ModulePausedScreen`, `ModuleStatusCard`, etc. Sin side-effects pesados |
-| Forms | `components/forms/` | 13 | Formularios con `onSubmit(data)` (`LoginForm`, `ItemForm`, `AssignmentForm`, ...) |
-| Organisms | `components/dashboard/` | 13 | `ShopCartDrawer`, `OrderBatchTable`, `SubjectExpandableRow`, `StudentRewardsInventoryTable`, etc. Orquestan hooks + actions |
+| Atoms | `components/ui/` | 40 | `Button`, `Input`, `Card`, `Table`, `Modal`, `Pagination`, `Skeleton`, etc. Sin lógica de negocio |
+| Molecules | `components/shared/` | 56 | `StatCard`, `LoanCard`, `ProductCard`, `SectionTitle`, `NavCard`, `ConfirmModal`/`DangerConfirmModal`, `ModuleGuard`, `ModulePausedScreen`, `ModuleStatusCard`, etc. Sin side-effects pesados |
+| Forms | `components/forms/` | 14 | Formularios con `onSubmit(data)` (`LoginForm`, `ItemForm`, `AssignmentForm`, ...) |
+| Organisms | `components/dashboard/` | 12 | `ShopCartDrawer`, `OrderBatchTable`, `SubjectExpandableRow`, `StudentRewardsInventoryTable`, etc. Orquestan hooks + actions |
 | Printing views | `components/printing/` | 3 | `PrintingHomeView`, `PrintingHistoryView`, `PrintingDetailView` — vistas reutilizables parametrizadas por rol (estudiante/profesor) y `basePath` |
-| Layout | `components/layout/` | 4 | `Header`, `Sidebar`, `ProfessorSubjectsNav`, `StudentOnboardingModal` |
+| Layout | `components/layout/` | 5 | `Header`, `Sidebar`, `ProfessorSubjectsNav`, `StudentOnboardingModal`, etc. |
 
 Cada carpeta tiene un `index.ts` que re-exporta todo (barrel) salvo `components/printing/` que se importa por path explícito.
 
@@ -667,10 +689,12 @@ const txHash = await userWalletClient.writeContract({ ... });
 
 | Rol | Capacidades on-chain |
 |---|---|
-| `DEFAULT_ADMIN_ROLE` | Todo. Registrar usuarios, asignar roles, mintear tokens, pausar contratos |
+| `ADMIN_ROLE` (custom) | Todo. Registrar usuarios, asignar roles, mintear tokens, pausar contratos |
 | `PROFESSOR_ROLE` | Crear subject badges, assignments, prize categories, rewards. Otorgar badges |
 | `LIBRARIAN_ROLE` | Añadir ítems, aprobar/rechazar préstamos, confirmar devoluciones |
 | `STUDENT_ROLE` | Solicitar préstamos, comprar, canjear recompensas, reservar salas, imprimir |
+
+> **Nota**: `CampusRoles` define `ADMIN_ROLE` como rol custom (`keccak256("ADMIN_ROLE")`) en lugar de usar el `DEFAULT_ADMIN_ROLE` de OpenZeppelin (`bytes32(0)`), porque ese valor colisiona con el centinela `NO_ROLE` que usamos para indicar "usuario sin rol".
 
 ### En la app (middleware + server actions)
 
@@ -681,7 +705,7 @@ const txHash = await userWalletClient.writeContract({ ... });
 | `/professor/*` | PROFESSOR (ADMIN) |
 | `/student/*` | STUDENT (ADMIN) |
 
-El ADMIN puede acceder a todas las vistas usando la URL directa. Server Actions verifican con `ensureRole()` y los modifiers on-chain verifican con `CampusRoles.hasRole()`.
+El ADMIN puede acceder a todas las vistas usando la URL directa. Server Actions verifican con `ensureRole()` y los modifiers on-chain verifican con los helpers de `CampusRoles` (`isStudent`/`isLibrarian`/`isProfessor`/`isAdmin`), uniformes en los 7 contratos consumidores.
 
 ---
 
@@ -758,15 +782,16 @@ Esto cubre el agujero de la capa A: la lectura de `paused()` se cachea 5 s, así
 
 ### 12.3 Layouts con guard
 
-Distribución actual de los `layout.tsx` que envuelven con `ModuleGuard`:
+28 `layout.tsx` envuelven con `ModuleGuard`. Distribución por módulo:
 
 | Ruta | `moduleId` |
 |---|---|
-| `librarian/items/`, `librarian/loans/`, `student/library/(library-routes)/` | `library` |
-| `librarian/printing/`, `professor/printing/`, `student/library/printing/` | `print` |
-| `librarian/rooms/`, `student/library/rooms/` | `rooms` |
-| `professor/badges/`, `professor/rewards/`, `professor/use-requests/`, `professor/pending-reviews/`, `professor/students/`, `professor/subjects/`, `student/badges/` | `badges` |
-| `student/shop/` | `shop` |
+| `librarian/items/`, `librarian/loans/`, `student/library/(library-routes)/`, `admin/library/` | `library` |
+| `librarian/printing/`, `professor/printing/`, `student/library/printing/`, `admin/printing/` | `print` |
+| `librarian/rooms/`, `student/library/rooms/`, `admin/rooms/` | `rooms` |
+| `professor/badges/`, `professor/rewards/`, `professor/use-requests/`, `professor/pending-reviews/`, `professor/students/`, `professor/subjects/`, `student/badges/`, `admin/badges/` | `badges` |
+| `student/shop/`, `admin/shop/` | `shop` |
+| `admin/users/` | `roles` |
 
 Patrón importante: en `student/library/`, el guard NO va en el layout raíz porque las subrutas `printing/` y `rooms/` pertenecen a otros módulos. Por eso se usa un **route group `(library-routes)`** dentro de `student/library/` que contiene únicamente las páginas propias del módulo biblioteca (catálogo, detalle, mis préstamos), aplicando el guard solo a ese subárbol.
 
@@ -837,11 +862,14 @@ Cada operación devuelve `{ contractKey, outcome: "skipped"|"executed"|"failed",
 
 ### Contratos Solidity
 
-- Siguen el [Solidity Style Guide](https://docs.soliditylang.org/en/latest/style-guide.html).
-- NatSpec en todas las funciones públicas.
-- Custom errors (no `require` con strings).
-- CEI pattern.
+- Siguen el [Solidity Style Guide](https://docs.soliditylang.org/en/latest/style-guide.html) oficial: orden estricto (`pragma → imports → events → errors → interfaces → libraries → contracts`); dentro del contrato (`types → state vars → events → errors → modifiers → functions`); funciones por visibilidad (`constructor → external → public → internal → private`) y dentro de cada grupo de visibilidad por mutabilidad (`payable → no-payable → view → pure`).
+- Naming: `CapWords` (contratos, structs, enums, eventos, errores), `mixedCase` (funciones, parámetros, locales), `SCREAMING_SNAKE_CASE` (constantes e immutables), leading `_` en internos/privados.
+- NatSpec uniforme en `///` triple-slash, sin mezclar bloques `/** */`. Aplicado a funciones, errores, eventos, state vars públicas, modifiers y constructor.
+- Custom errors tipados con parámetros descriptivos (no `require` con strings).
+- CEI pattern (Checks-Effects-Interactions) en flujos que mueven tokens.
 - `Pausable` + `ReentrancyGuard` donde aplique.
+- Optimizer `runs: 200` + `viaIR: true` en ambos profiles.
+- Tests Foundry organizados con `CampusTestBase.sol` para evitar duplicación; integración partida por dominio.
 
 ### Variables de entorno
 
@@ -853,7 +881,38 @@ BLOCKCHAIN_NODE      # opcional: "anvil" (default) | "hardhat"
 
 ---
 
-## 14. Cómo arrancar el proyecto
+## 14. Testing y CI
+
+### 14.1 Capas de testing
+
+| Capa | Tooling | Tests | Comando |
+|---|---|---|---|
+| Contratos NodeJS | `node:test` + viem | 267 | `pnpm test` |
+| Contratos Solidity | Foundry (forge-std) | 140 | `pnpm test` (incluido) |
+| Next.js unit | Vitest + Testing Library | 100 | `pnpm --filter nextjs run test` |
+| Next.js E2E | Playwright | 2 specs (auth-flows, home) | `pnpm --filter nextjs run test:e2e` |
+| Estática | `tsc --noEmit` + ESLint + `next build` | — | `pnpm --filter nextjs run lint`, `pnpm build` |
+
+Vitest cubre utilidades (`formatters`, `validators`, `historical`, `system-modules`, `contractErrors`, `shop-utils`, `utils`), tipos, el hook `useForm` y tres atoms representativos (`Button`, `EmptyState`, `SearchInput`). Playwright cubre login/registro/redirecciones y render del home.
+
+### 14.2 Continuous Integration
+
+[`.github/workflows/ci.yml`](./.github/workflows/ci.yml) corre en cada push y pull request a `main`:
+
+1. Setup pnpm 10.33.0 + Node 24.15.0 con cache.
+2. `pnpm install --frozen-lockfile`.
+3. `prisma generate`.
+4. ESLint Next.js.
+5. Compile de contratos.
+6. Tests de contratos (Hardhat + Foundry) — los 407 pasan.
+7. Tests Next.js Vitest — los 100 pasan.
+8. `next build` con variables dummy (`DATABASE_URL`, `SESSION_SECRET` placeholders) para satisfacer las lecturas a nivel de módulo.
+
+Timeout total: 20 min. El job se llama `Lint, type-check, tests, build` y aborta si cualquier paso falla.
+
+---
+
+## 15. Cómo arrancar el proyecto
 
 Ver [README.md](./README.md) para la guía completa de onboarding. Resumen:
 

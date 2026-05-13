@@ -127,26 +127,27 @@ CryptoCampus/
 │
 └── packages/
     ├── hardhat/                   Capa blockchain
-    │   ├── contracts/             8 contratos Solidity (+ Example.sol, guía de estilo)
+    │   ├── contracts/             8 contratos Solidity
     │   ├── test/                  Tests (TypeScript + Foundry)
     │   └── ignition/modules/      Despliegue declarativo (CampusModule.ts)
     │
     └── nextjs/                    Capa web (full-stack)
-        ├── prisma/schema.prisma   27 modelos de base de datos
-        ├── scripts/               11 scripts idempotentes (seeds + resync + cleanup + db-doctor)
+        ├── prisma/schema.prisma   26 modelos de base de datos
+        ├── scripts/               12 scripts idempotentes (seeds + resync + cleanup + db-doctor + datos históricos)
+        ├── e2e/                   Tests E2E con Playwright (auth-flows + home)
         └── src/
-            ├── actions/           9 módulos de Server Actions
-            ├── app/               App Router (128 pages + 116 API routes)
+            ├── actions/           8 módulos de Server Actions
+            ├── app/               App Router (128 pages + 117 API routes)
             ├── components/
-            │   ├── ui/            Atoms (36)
-            │   ├── shared/        Molecules (54, incluye ModuleGuard/PausedScreen/StatusCard)
-            │   ├── forms/         Form molecules (13)
-            │   ├── dashboard/     Organisms (13)
+            │   ├── ui/            Atoms (40)
+            │   ├── shared/        Molecules (56, incluye ModuleGuard/PausedScreen/StatusCard)
+            │   ├── forms/         Form molecules (14)
+            │   ├── dashboard/     Organisms (12)
             │   ├── printing/      Vistas de impresión reutilizables por rol (3)
-            │   └── layout/        Layout (Header, Sidebar, ...)
+            │   └── layout/        Layout (5: Header, Sidebar, ...)
             ├── hooks/             useAuthUser, useForm, usePaginatedList, useToast, useTheme
-            ├── lib/               viem, prisma, crypto, session, shopRewards, system-modules, contractErrors, themes, validators, ...
-            └── contexts/          CartContext, OnboardingContext, ThemeContext, ToastContext
+            ├── lib/               viem, prisma, crypto, session, shopRewards, system-modules, contractErrors, historical, themes, validators, ...
+            └── contexts/          CartContext, OnboardingContext, ThemeContext, ToastContext (4)
 ```
 
 ## Módulos funcionales
@@ -277,17 +278,46 @@ SESSION_SECRET="tu-secreto-local-de-al-menos-32-caracteres"
 | `pnpm build` | Build optimizado de producción |
 | `pnpm start` | Sirve el build en `http://localhost:3000` |
 | `pnpm lint` | ESLint sobre `packages/nextjs/src` |
+| `pnpm --filter nextjs run test` | Tests unitarios con Vitest |
+| `pnpm --filter nextjs run test:e2e` | Tests E2E con Playwright |
 
 ## Tests
 
-El proyecto incluye dos conjuntos de tests para los contratos:
+El proyecto cubre cuatro capas de testing:
+
+### Contratos (`packages/hardhat/test/`)
 
 - **Tests TypeScript** (`node:test`): instancian contratos frescos por suite, usan `viem` para llamadas y `assert` para comprobaciones.
-- **Tests Solidity** (Foundry/forge-std): invariantes y casos edge escritos directamente en Solidity (`vm.prank`, `vm.expectRevert`, etc.).
+- **Tests Solidity** (Foundry/forge-std): invariantes y casos edge escritos directamente en Solidity (`vm.prank`, `vm.expectRevert`, etc.). Los tests de integración se reparten en cuatro archivos por dominio (`Integration.Library.t.sol`, `Integration.Shop.t.sol`, `Integration.Badges.t.sol`, `Integration.Cross.t.sol`) y comparten setup vía `test/helpers/CampusTestBase.sol`.
 
-Ambos se ejecutan con `pnpm test`. Cubren los 8 contratos de producción + tests de integración cross-contract.
+Ambos se ejecutan con `pnpm test`. Cubren los 8 contratos de producción + flujos cross-contract.
 
-> No hay tests E2E ni de componentes para la parte Next.js — la validación del frontend se hace a través de `tsc` (type-check) + `next build` (validación de rutas/SSR) + pruebas manuales.
+| Comando | Qué prueba |
+|---|---|
+| `pnpm test` | 407 tests de contratos (140 Solidity + 267 NodeJS) |
+
+### Next.js — unit (`packages/nextjs/src/**/*.test.ts(x)`)
+
+Vitest + Testing Library cubren utilidades (`formatters`, `validators`, `historical`, `system-modules`, `contractErrors`, `shop-utils`, `utils`), hooks (`useForm`) y atoms (`Button`, `EmptyState`, `SearchInput`).
+
+| Comando | Qué prueba |
+|---|---|
+| `pnpm --filter nextjs run test` | 100 tests unitarios |
+| `pnpm --filter nextjs run test:watch` | Modo watch |
+| `pnpm --filter nextjs run test:coverage` | Reporte de cobertura |
+
+### Next.js — E2E (`packages/nextjs/e2e/`)
+
+Playwright cubre los flujos críticos de auth (`auth-flows.spec.ts`) y home (`home.spec.ts`).
+
+| Comando | Qué prueba |
+|---|---|
+| `pnpm --filter nextjs run test:e2e` | Suite E2E rápida |
+| `pnpm --filter nextjs run test:e2e:full` | Suite E2E completa (`RUN_E2E_FULL=1`) |
+
+### Integración continua (GitHub Actions)
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) corre en cada push/PR a `main`: instala dependencias, genera Prisma, lanza lint + compile + tests de contratos + tests Next.js + build. Pin a Node 24.15.0 y pnpm 10.33.0.
 
 ## Troubleshooting
 
@@ -322,7 +352,5 @@ Has editado `schema.prisma` pero no has regenerado el cliente. Ejecuta `pnpm run
 
 - [TFG-DOCUMENTACION-TECNICA.md](./TFG-DOCUMENTACION-TECNICA.md) — Explicación técnica orientada a la memoria del TFG: contratos, doble ledger, Atomic Design, Server Actions, testing, recompensas, pausa modular.
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — Referencia arquitectónica exhaustiva: estructura de carpetas detallada, flujos de datos end-to-end, convenciones de código, tabla de rutas API.
-- [CLAUDE.md](./CLAUDE.md) — Guía interna para trabajar con Claude Code en este proyecto (comandos, convenciones, detalles operacionales).
-- [PLAN_DATOS_HISTORICOS.md](./PLAN_DATOS_HISTORICOS.md) — Plan pendiente para poblar gráficas con datos históricos solo-Prisma (flag `historical`).
 - [packages/nextjs/RUTAS.md](./packages/nextjs/RUTAS.md) — Tabla exhaustiva de rutas de páginas por rol.
 - [packages/nextjs/API_ACCESS_AUDIT.md](./packages/nextjs/API_ACCESS_AUDIT.md) — Auditoría de control de acceso en endpoints.

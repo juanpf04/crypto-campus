@@ -36,7 +36,7 @@ contract ShopToken is ERC20, Pausable {
 
     /// @notice Restringe la ejecucion a admins del sistema
     modifier onlyAdmin() {
-        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender))
+        if (!campusRoles.isAdmin(msg.sender))
             revert NotAdmin();
         _;
     }
@@ -89,15 +89,6 @@ contract ShopToken is ERC20, Pausable {
         _unpause();
     }
 
-    // ── Public pure functions ───────────────────────────────────────────
-
-    /// @notice Decimales del token
-    /// @dev Se usa 0 para manejar unidades enteras
-    /// @return Cantidad de decimales
-    function decimals() public pure override returns (uint8) {
-        return 0;
-    }
-
     // ── Public view functions ───────────────────────────────────────────
 
     /// @notice Consulta allowance entre owner y spender
@@ -110,5 +101,14 @@ contract ShopToken is ERC20, Pausable {
             return type(uint256).max;
         }
         return super.allowance(owner, spender);
+    }
+
+    // ── Public pure functions ───────────────────────────────────────────
+
+    /// @notice Decimales del token
+    /// @dev Se usa 0 para manejar unidades enteras
+    /// @return Cantidad de decimales
+    function decimals() public pure override returns (uint8) {
+        return 0;
     }
 }

@@ -60,10 +60,12 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
 
     /// @notice Contador autoincremental de libros
     uint256 public nextBookId = 1;
+    /// @dev Catalogo de libros por ID
     mapping(uint256 => Book) private _books;
 
     /// @notice Contador autoincremental de prestamos
     uint256 public nextLoanId = 1;
+    /// @dev Registro de prestamos por ID
     mapping(uint256 => Loan) private _loans;
 
     /// @notice Prestamo activo de un estudiante para un libro (0 = ninguno)
@@ -78,46 +80,119 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
     mapping(uint256 => uint256[]) private _bookQueue;
 
     // ── Events ──────────────────────────────────────────────────────────
+
+    /// @notice Se emite al anadir un nuevo libro al catalogo
+    /// @param bookId ID del libro creado
+    /// @param copies Numero de copias minteadas inicialmente
     event BookAdded(uint256 indexed bookId, uint256 copies);
+
+    /// @notice Se emite al anadir copias adicionales a un libro existente
+    /// @param bookId ID del libro
+    /// @param additionalCopies Copias adicionales minteadas
     event BookCopiesAdded(uint256 indexed bookId, uint256 additionalCopies);
+
+    /// @notice Se emite al desactivar un libro y quemar sus copias
+    /// @param bookId ID del libro eliminado
     event BookRemoved(uint256 indexed bookId);
+
+    /// @notice Se emite al solicitar un prestamo (en cola o reservado directo)
+    /// @param loanId ID del prestamo solicitado
+    /// @param student Direccion del estudiante
+    /// @param bookId Libro solicitado
+    /// @param queued True si entra en cola por falta de copias
     event LoanRequested(uint256 indexed loanId, address indexed student, uint256 indexed bookId, bool queued);
+
+    /// @notice Se emite cuando un prestamo pasa a estado Reserved
+    /// @param loanId ID del prestamo
+    /// @param student Direccion del estudiante
+    /// @param bookId Libro reservado
     event LoanReserved(uint256 indexed loanId, address indexed student, uint256 indexed bookId);
+
+    /// @notice Se emite cuando el bibliotecario confirma la recogida
+    /// @param loanId ID del prestamo
+    /// @param librarian Direccion del bibliotecario que confirma
+    /// @param dueDate Fecha limite de devolucion
     event LoanPickedUp(uint256 indexed loanId, address indexed librarian, uint40 dueDate);
+
+    /// @notice Se emite al cerrar la devolucion de un prestamo
+    /// @param loanId ID del prestamo devuelto
+    /// @param student Direccion del estudiante
+    /// @param bookId Libro devuelto
+    /// @param overdue True si la devolucion fue fuera de plazo
     event LoanReturned(uint256 indexed loanId, address indexed student, uint256 indexed bookId, bool overdue);
+
+    /// @notice Se emite al cancelar una solicitud de prestamo
+    /// @param loanId ID del prestamo cancelado
+    /// @param student Direccion del estudiante
     event LoanCancelled(uint256 indexed loanId, address indexed student);
+
+    /// @notice Se emite al expirar una reserva no recogida
+    /// @param loanId ID del prestamo expirado
+    /// @param student Direccion del estudiante
     event ReservationExpired(uint256 indexed loanId, address indexed student);
 
     // ── Errors ──────────────────────────────────────────────────────────
+
+    /// @notice Caller sin rol librarian/admin
     error NotLibrarian();
+    /// @notice Caller sin rol student
     error NotStudent();
+    /// @notice El libro no existe en el catalogo
+    /// @param bookId ID del libro solicitado
     error BookNotFound(uint256 bookId);
+    /// @notice El libro no esta disponible para nuevas reservas
+    /// @param bookId ID del libro
     error BookNotAvailable(uint256 bookId);
+    /// @notice El estudiante ya tiene un prestamo activo de ese libro
+    /// @param student Direccion del estudiante
+    /// @param bookId ID del libro
     error AlreadyBorrowingBook(address student, uint256 bookId);
+    /// @notice El prestamo no existe
+    /// @param loanId ID del prestamo solicitado
     error LoanNotFound(uint256 loanId);
+    /// @notice El prestamo no esta en un estado valido para la operacion
+    /// @param loanId ID del prestamo
+    /// @param current Estado actual
+    /// @param expected Estado esperado
     error InvalidLoanState(uint256 loanId, LoanStatus current, LoanStatus expected);
+    /// @notice El estudiante no tiene saldo suficiente de LibraryToken para el deposito
+    /// @param student Direccion del estudiante
     error InsufficientDeposit(address student);
+    /// @notice El libro no se puede eliminar porque tiene prestamos o reservas activas
+    /// @param bookId ID del libro
     error BookHasActiveLoans(uint256 bookId);
+    /// @notice Transferencias ERC-1155 no permitidas fuera del contrato
     error TransferRestricted();
+    /// @notice El caller no es el propietario del prestamo
+    /// @param loanId ID del prestamo
+    /// @param caller Direccion que intenta operar
     error NotLoanOwner(uint256 loanId, address caller);
+    /// @notice El prestamo aun no esta vencido
+    /// @param loanId ID del prestamo
     error LoanNotOverdue(uint256 loanId);
+    /// @notice El numero de copias debe ser mayor que cero
     error ZeroCopies();
+    /// @notice Caller sin rol admin
     error NotAdmin();
+    /// @notice La reserva aun no ha superado el timeout de recogida
+    /// @param loanId ID del prestamo
     error ReservationNotExpired(uint256 loanId);
+    /// @notice El prestamo no esta en estado Queued ni Reserved
+    /// @param loanId ID del prestamo
     error NotQueuedOrReserved(uint256 loanId);
 
     // ── Modifiers ───────────────────────────────────────────────────────
 
+    /// @notice Restringe la ejecucion a bibliotecarios o admins
     modifier onlyLibrarian() {
-        if (
-            !campusRoles.hasRole(campusRoles.LIBRARIAN_ROLE(), msg.sender) &&
-            !campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender)
-        ) revert NotLibrarian();
+        if (!campusRoles.isLibrarian(msg.sender) && !campusRoles.isAdmin(msg.sender))
+            revert NotLibrarian();
         _;
     }
 
+    /// @notice Restringe la ejecucion a estudiantes
     modifier onlyStudent() {
-        if (!campusRoles.hasRole(campusRoles.STUDENT_ROLE(), msg.sender))
+        if (!campusRoles.isStudent(msg.sender))
             revert NotStudent();
         _;
     }
@@ -126,6 +201,10 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
 
     // ── Constructor ─────────────────────────────────────────────────────
 
+    /// @notice Inicializa la biblioteca con sus dependencias
+    /// @param _campusRoles Direccion del contrato CampusRoles
+    /// @param _libraryToken Direccion del contrato LibraryToken (deposito)
+    /// @param uri_ URI base para los metadatos ERC-1155
     constructor(
         address _campusRoles,
         address _libraryToken,
@@ -139,9 +218,10 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
 
     // ── Book management ─────────────────────────────────────────────────
 
-    /**
-     * @dev Anade un nuevo libro al catalogo. Mintea N copias ERC-1155 al contrato.
-     */
+    /// @notice Anade un nuevo libro al catalogo
+    /// @dev Mintea N copias ERC-1155 al contrato como custodia
+    /// @param copies Numero de copias iniciales (> 0)
+    /// @return bookId ID asignado al nuevo libro
     function addBook(
         uint256 copies
     ) external onlyLibrarian whenNotPaused returns (uint256 bookId) {
@@ -160,10 +240,10 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
         emit BookAdded(bookId, copies);
     }
 
-    /**
-     * @dev Anade copias adicionales de un libro existente.
-     *      Tras mintear, procesa la cola por si hay estudiantes esperando.
-     */
+    /// @notice Anade copias adicionales de un libro existente
+    /// @dev Tras mintear, procesa la cola por si hay estudiantes esperando
+    /// @param bookId ID del libro
+    /// @param amount Copias adicionales a anadir (> 0)
     function addCopies(uint256 bookId, uint256 amount) external onlyLibrarian whenNotPaused {
         if (!_books[bookId].exists) revert BookNotFound(bookId);
         if (amount == 0) revert ZeroCopies();
@@ -177,10 +257,9 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
         _processQueue(bookId);
     }
 
-    /**
-     * @dev Desactiva un libro y quema las copias del contrato.
-     *      Requiere que no haya prestamos activos ni reservas.
-     */
+    /// @notice Desactiva un libro y quema las copias custodiadas
+    /// @dev Requiere que no haya prestamos activos ni reservas
+    /// @param bookId ID del libro
     function removeBook(uint256 bookId) external onlyLibrarian whenNotPaused {
         if (!_books[bookId].exists) revert BookNotFound(bookId);
         if (activeLoansForBook[bookId] > 0 || reservedCopiesForBook[bookId] > 0)
@@ -196,24 +275,14 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
         emit BookRemoved(bookId);
     }
 
-    /**
-     * @dev Copias disponibles para nuevas reservas.
-     *      = copias en contrato - copias ya reservadas (pendientes de recogida).
-     */
-    function getAvailableCopies(uint256 bookId) external view returns (uint256) {
-        uint256 held = balanceOf(address(this), bookId);
-        uint256 reserved = reservedCopiesForBook[bookId];
-        return held > reserved ? held - reserved : 0;
-    }
-
     // ── Loan flow ───────────────────────────────────────────────────────
 
-    /**
-     * @dev Estudiante solicita prestamo.
-     *      Si hay copias libres → RESERVED (reserva inmediata).
-     *      Si no hay copias → QUEUED (entra en cola de espera).
-     *      En ambos casos bloquea 1 LibraryToken como deposito.
-     */
+    /// @notice Solicita un prestamo de un libro
+    /// @dev Si hay copias libres -> RESERVED (reserva inmediata).
+    ///      Si no hay copias -> QUEUED (entra en cola de espera).
+    ///      En ambos casos bloquea 1 LibraryToken como deposito.
+    /// @param bookId ID del libro solicitado
+    /// @return loanId ID del prestamo creado
     function requestLoan(uint256 bookId) external onlyStudent whenNotPaused nonReentrant returns (uint256 loanId) {
         if (!_books[bookId].exists) revert BookNotFound(bookId);
         if (activeLoanByStudentAndBook[msg.sender][bookId] != 0)
@@ -257,10 +326,9 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
         }
     }
 
-    /**
-     * @dev Estudiante cancela su solicitud (QUEUED o RESERVED).
-     *      Devuelve el deposito. Si era RESERVED, procesa la cola.
-     */
+    /// @notice El estudiante cancela su solicitud (Queued o Reserved)
+    /// @dev Devuelve el deposito. Si era Reserved, procesa la cola.
+    /// @param loanId ID del prestamo a cancelar
     function cancelLoan(uint256 loanId) external onlyStudent whenNotPaused nonReentrant {
         Loan storage loan = _loans[loanId];
         if (loan.status == LoanStatus.None) revert LoanNotFound(loanId);
@@ -290,10 +358,9 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
         }
     }
 
-    /**
-     * @dev Bibliotecario confirma que el estudiante ha recogido el item.
-     *      Transfiere la copia ERC-1155 al estudiante y arranca el plazo de devolucion.
-     */
+    /// @notice El bibliotecario confirma que el estudiante ha recogido el item
+    /// @dev Transfiere la copia ERC-1155 al estudiante y arranca el plazo de devolucion
+    /// @param loanId ID del prestamo
     function confirmPickup(uint256 loanId) external onlyLibrarian whenNotPaused nonReentrant {
         Loan storage loan = _loans[loanId];
         if (loan.status == LoanStatus.None) revert LoanNotFound(loanId);
@@ -316,10 +383,9 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
         emit LoanPickedUp(loanId, msg.sender, loan.dueDate);
     }
 
-    /**
-     * @dev Bibliotecario confirma la devolucion fisica del libro.
-     *      Recupera el NFT, devuelve deposito y procesa cola.
-     */
+    /// @notice El bibliotecario confirma la devolucion fisica del libro
+    /// @dev Recupera el NFT, devuelve deposito y procesa la cola
+    /// @param loanId ID del prestamo
     function confirmReturn(uint256 loanId) external onlyLibrarian whenNotPaused nonReentrant {
         Loan storage loan = _loans[loanId];
         if (loan.status == LoanStatus.None) revert LoanNotFound(loanId);
@@ -346,10 +412,9 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
         _processQueue(bookId);
     }
 
-    /**
-     * @dev Bibliotecario fuerza la devolucion de un prestamo vencido.
-     *      El deposito NO se devuelve (penalizacion). Procesa cola.
-     */
+    /// @notice El bibliotecario fuerza la devolucion de un prestamo vencido
+    /// @dev El deposito NO se devuelve (penalizacion). Procesa la cola.
+    /// @param loanId ID del prestamo
     function forceReturn(uint256 loanId) external onlyLibrarian whenNotPaused nonReentrant {
         Loan storage loan = _loans[loanId];
         if (loan.status == LoanStatus.None) revert LoanNotFound(loanId);
@@ -375,10 +440,9 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
         _processQueue(bookId);
     }
 
-    /**
-     * @dev Bibliotecario expira una reserva no recogida tras RESERVATION_TIMEOUT.
-     *      Devuelve deposito y procesa cola.
-     */
+    /// @notice El bibliotecario expira una reserva no recogida tras RESERVATION_TIMEOUT
+    /// @dev Devuelve el deposito y procesa la cola
+    /// @param loanId ID del prestamo
     function expireReservation(uint256 loanId) external onlyLibrarian whenNotPaused nonReentrant {
         Loan storage loan = _loans[loanId];
         if (loan.status == LoanStatus.None) revert LoanNotFound(loanId);
@@ -405,19 +469,29 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
 
     /// @notice Pausa el contrato (solo admin)
     function pause() external {
-        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender))
+        if (!campusRoles.isAdmin(msg.sender))
             revert NotAdmin();
         _pause();
     }
 
     /// @notice Reanuda el contrato (solo admin)
     function unpause() external {
-        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender))
+        if (!campusRoles.isAdmin(msg.sender))
             revert NotAdmin();
         _unpause();
     }
 
     // ── External view functions ─────────────────────────────────────────
+
+    /// @notice Copias disponibles para nuevas reservas
+    /// @dev = copias en contrato - copias ya reservadas (pendientes de recogida)
+    /// @param bookId ID del libro
+    /// @return Copias disponibles
+    function getAvailableCopies(uint256 bookId) external view returns (uint256) {
+        uint256 held = balanceOf(address(this), bookId);
+        uint256 reserved = reservedCopiesForBook[bookId];
+        return held > reserved ? held - reserved : 0;
+    }
 
     /// @notice Devuelve copias totales, disponibles y existencia de un libro
     /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
@@ -487,10 +561,9 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
 
     // ── Internal functions ───────────────────────────────────────────────
 
-    /**
-     * @dev Procesa la cola de espera de un libro.
-     *      Asigna copias disponibles a los primeros en cola (FIFO).
-     */
+    /// @dev Procesa la cola de espera de un libro asignando copias disponibles
+    ///      a los primeros en cola (FIFO).
+    /// @param bookId ID del libro cuya cola debe procesarse
     function _processQueue(uint256 bookId) internal {
         uint256 held = balanceOf(address(this), bookId);
         uint256 reserved = reservedCopiesForBook[bookId];
@@ -516,6 +589,9 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
         }
     }
 
+    /// @dev OZ v5: _update reemplaza a _beforeTokenTransfer.
+    ///      Bloquea transferencias entre direcciones externas (las copias solo
+    ///      se mueven entre el contrato y el estudiante en flujos controlados).
     function _update(
         address from,
         address to,
@@ -530,6 +606,7 @@ contract LibraryManager is ERC1155, ERC1155Supply, ERC1155Holder, ReentrancyGuar
         super._update(from, to, ids, values);
     }
 
+    /// @inheritdoc ERC1155
     function supportsInterface(bytes4 interfaceId)
         public view override(ERC1155, ERC1155Holder) returns (bool)
     {

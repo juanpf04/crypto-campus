@@ -25,14 +25,18 @@ contract LibraryToken is ERC20, Pausable {
 
     // ── Errors ──────────────────────────────────────────────────────────
 
+    /// @notice Caller sin rol admin
     error NotAdmin();
+    /// @notice Direccion cero no permitida
     error ZeroAddress();
+    /// @notice Cantidad cero no permitida
     error ZeroAmount();
 
     // ── Modifiers ───────────────────────────────────────────────────────
 
+    /// @notice Restringe la ejecucion a admins del sistema
     modifier onlyAdmin() {
-        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender)) {
+        if (!campusRoles.isAdmin(msg.sender)) {
             revert NotAdmin();
         }
         _;
@@ -42,6 +46,8 @@ contract LibraryToken is ERC20, Pausable {
 
     // ── Constructor ─────────────────────────────────────────────────────
 
+    /// @notice Inicializa el token y su referencia de control de acceso
+    /// @param _campusRoles Direccion del contrato CampusRoles
     constructor(address _campusRoles) ERC20("LibraryToken", "LIBT") {
         campusRoles = CampusRoles(_campusRoles);
     }
@@ -50,6 +56,7 @@ contract LibraryToken is ERC20, Pausable {
 
     /// @notice Configura el spender de confianza
     /// @dev Debe apuntar al contrato LibraryManager
+    /// @param spender Direccion del spender autorizado
     function setTrustedSpender(address spender) external onlyAdmin whenNotPaused {
         if (spender == address(0)) {
             revert ZeroAddress();
@@ -58,6 +65,8 @@ contract LibraryToken is ERC20, Pausable {
     }
 
     /// @notice Mintea tokens de capacidad de prestamo
+    /// @param to Cuenta receptora
+    /// @param amount Cantidad a mintear
     function mint(address to, uint256 amount) external onlyAdmin whenNotPaused {
         if (to == address(0)) {
             revert ZeroAddress();
@@ -69,6 +78,8 @@ contract LibraryToken is ERC20, Pausable {
     }
 
     /// @notice Quema tokens de una cuenta
+    /// @param from Cuenta de origen
+    /// @param amount Cantidad a quemar
     function burn(address from, uint256 amount) external onlyAdmin whenNotPaused {
         if (from == address(0)) {
             revert ZeroAddress();
@@ -89,22 +100,26 @@ contract LibraryToken is ERC20, Pausable {
         _unpause();
     }
 
-    // ── Public pure functions ───────────────────────────────────────────
-
-    /// @notice Decimales del token
-    /// @dev Se usa 0 para manejar unidades enteras
-    function decimals() public pure override returns (uint8) {
-        return 0;
-    }
-
     // ── Public view functions ───────────────────────────────────────────
 
     /// @notice Consulta allowance entre owner y spender
     /// @dev Si spender es trustedSpender retorna allowance infinito
+    /// @param owner Cuenta duena de fondos
+    /// @param spender Cuenta que intenta gastar
+    /// @return Cantidad permitida
     function allowance(address owner, address spender) public view override returns (uint256) {
         if (spender == trustedSpender && trustedSpender != address(0)) {
             return type(uint256).max;
         }
         return super.allowance(owner, spender);
+    }
+
+    // ── Public pure functions ───────────────────────────────────────────
+
+    /// @notice Decimales del token
+    /// @dev Se usa 0 para manejar unidades enteras
+    /// @return Cantidad de decimales
+    function decimals() public pure override returns (uint8) {
+        return 0;
     }
 }

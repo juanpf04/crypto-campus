@@ -32,25 +32,44 @@ contract Printer is Pausable {
     // ── Events ──────────────────────────────────────────────────────────
 
     /// @notice Se emite cuando un admin fija creditos para un estudiante o profesor
+    /// @param user Direccion del usuario
+    /// @param credits Creditos asignados
     event CreditsSet(address indexed user, uint256 credits);
 
     /// @notice Se emite cuando se ejecuta una impresion
+    /// @param user Direccion del usuario que imprime
+    /// @param pages Numero de paginas impresas
+    /// @param remainingCredits Creditos restantes (type(uint256).max si ilimitado)
     event PrintJobExecuted(address indexed user, uint256 pages, uint256 remainingCredits);
 
     // ── Errors ──────────────────────────────────────────────────────────
 
+    /// @notice Caller sin rol admin
     error NotAdmin();
+    /// @notice El usuario no es estudiante ni profesor
+    /// @param user Direccion del usuario
     error NotStudentOrProfessor(address user);
+    /// @notice El usuario no esta registrado en CampusRoles
+    /// @param user Direccion del usuario
     error NotRegistered(address user);
+    /// @notice El usuario no tiene creditos suficientes
+    /// @param available Creditos disponibles
+    /// @param requested Creditos solicitados
     error InsufficientCredits(uint256 available, uint256 requested);
+    /// @notice La impresion excede el maximo de paginas por trabajo
+    /// @param requested Paginas solicitadas
+    /// @param max Maximo permitido
     error ExceedsMaxPages(uint256 requested, uint256 max);
+    /// @notice La impresion debe ser de al menos una pagina
     error ZeroPages();
+    /// @notice Direccion cero no permitida
     error ZeroAddress();
 
     // ── Modifiers ───────────────────────────────────────────────────────
 
+    /// @notice Restringe la ejecucion a admins del sistema
     modifier onlyAdmin() {
-        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender)) {
+        if (!campusRoles.isAdmin(msg.sender)) {
             revert NotAdmin();
         }
         _;
@@ -58,6 +77,8 @@ contract Printer is Pausable {
 
     // ── Constructor ─────────────────────────────────────────────────────
 
+    /// @notice Inicializa el contrato con su referencia de control de acceso
+    /// @param _campusRoles Direccion del contrato CampusRoles
     constructor(address _campusRoles) {
         campusRoles = CampusRoles(_campusRoles);
     }
@@ -89,8 +110,8 @@ contract Printer is Pausable {
         if (pages > MAX_PAGES_PER_JOB) revert ExceedsMaxPages(pages, MAX_PAGES_PER_JOB);
 
         // Admin y Librarian: creditos ilimitados
-        bool unlimited = campusRoles.hasRole(campusRoles.ADMIN_ROLE(), user) ||
-                         campusRoles.hasRole(campusRoles.LIBRARIAN_ROLE(), user);
+        bool unlimited = campusRoles.isAdmin(user) ||
+                         campusRoles.isLibrarian(user);
 
         if (unlimited) {
             emit PrintJobExecuted(user, pages, type(uint256).max);
@@ -127,8 +148,7 @@ contract Printer is Pausable {
     /// @dev Admin/Librarian devuelven max. No registrados devuelven -1.
     function getCredits(address user) external view returns (int256) {
         // Admin y Librarian: ilimitados
-        if (campusRoles.hasRole(campusRoles.ADMIN_ROLE(), user) ||
-            campusRoles.hasRole(campusRoles.LIBRARIAN_ROLE(), user)) {
+        if (campusRoles.isAdmin(user) || campusRoles.isLibrarian(user)) {
             return type(int256).max;
         }
         // Usuarios no registrados

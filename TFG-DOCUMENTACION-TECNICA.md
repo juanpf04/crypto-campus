@@ -80,20 +80,21 @@ CryptoCampus/
 │   └── reset-chain.mjs          # Borra estado on-chain local
 │
 ├── packages/hardhat/            # Capa blockchain
-│   ├── contracts/               # 8 contratos Solidity + Example.sol
+│   ├── contracts/               # 8 contratos Solidity
 │   ├── test/                    # Tests TypeScript + Foundry
 │   └── ignition/modules/        # CampusModule.ts
 │
 └── packages/nextjs/             # Capa web full-stack
-    ├── prisma/schema.prisma     # 27 modelos
-    ├── scripts/                 # 11 scripts (seeds + resync + cleanup + db-doctor)
+    ├── prisma/schema.prisma     # 26 modelos
+    ├── scripts/                 # 12 scripts (seeds + resync + cleanup + db-doctor + datos históricos)
+    ├── e2e/                     # Tests E2E (Playwright)
     └── src/
-        ├── actions/             # 9 módulos (incluye system.ts, pausa modular)
-        ├── app/                 # App Router — 128 pages + 116 API routes
+        ├── actions/             # 8 módulos (incluye system.ts, pausa modular)
+        ├── app/                 # App Router — 128 pages + 117 API routes
         ├── components/          # ui/ + shared/ + forms/ + dashboard/ + printing/ + layout/
         ├── hooks/               # 5 hooks custom
-        ├── lib/                 # utilidades server/cliente (incluye system-modules, contractErrors, validators, themes)
-        ├── contexts/            # 4 contextos React
+        ├── lib/                 # utilidades server/cliente (incluye system-modules, contractErrors, historical, validators, themes)
+        ├── contexts/            # 4 contextos React (Cart, Onboarding, Theme, Toast)
         └── types/               # tipos compartidos
 ```
 
@@ -168,11 +169,9 @@ El script detecta si los contratos ya están desplegados mediante una llamada `e
 | `Printer` | Pausable | Créditos de impresión. 1 crédito = 1 página. Admin/Librarian tienen créditos ilimitados |
 | `RoomBooking` | ReentrancyGuard + Pausable | Reserva de salas. Slots por hora. Máx 4 h consecutivas, 1 reserva/día/estudiante |
 
-`Example.sol` no es producción — es una guía de estilo Solidity que sirve como referencia para el resto.
-
 ### 5.3 Estándar de estilo Solidity
 
-Todos los contratos siguen el [Solidity Style Guide](https://docs.soliditylang.org/en/latest/style-guide.html):
+Todos los contratos siguen el [Solidity Style Guide](https://docs.soliditylang.org/en/latest/style-guide.html) oficial:
 
 ```
 1. Type declarations (structs, enums)
@@ -182,19 +181,28 @@ Todos los contratos siguen el [Solidity Style Guide](https://docs.soliditylang.o
 5. Modifiers
 6. Functions:
    a. Constructor
-   b. External (mutables, luego view/pure)
-   c. Public (mutables, luego view/pure)
-   d. Internal
-   e. Private
+   b. receive() / fallback() si existen
+   c. External (mutables → view → pure)
+   d. Public (mutables → view → pure)
+   e. Internal
+   f. Private
 ```
+
+Dentro de cada grupo de visibilidad la mutabilidad va de menos restrictiva a más: `payable` → no-payable → `view` → `pure`. Naming: `CapWords` para contratos/structs/enums/eventos/errores, `mixedCase` para funciones/parámetros/locales, `SCREAMING_SNAKE_CASE` para `constant`/`immutable`, y leading `_` para internos/privados.
+
+**NatSpec uniforme**: todos los miembros `external`/`public` (funciones, errores, eventos, state variables, modifiers, constructor) llevan `/// @notice` / `@dev` / `@param` / `@return` en estilo triple-slash. Sin mezclar bloques `/** */`.
+
+**Optimizer**: `solc 0.8.28` con `runs: 200` y **`viaIR: true`** en ambos profiles (default + production). La pipeline IR reduce el tamaño del bytecode de los contratos grandes (BadgeSystem -28 %, LibraryManager -20 %, Printer -44 %), dejando los 8 contratos de producción muy por debajo del límite EIP-170 de 24 576 bytes (el mayor, BadgeSystem, ocupa el 58 %).
 
 ### 5.4 Patrones de seguridad
 
 - **CEI (Checks-Effects-Interactions)**: Todas las funciones verifican, actualizan estado y después hacen llamadas externas. Previene reentrancia.
 - **ReentrancyGuard**: Aplicado en funciones con transferencias ERC-1155 (`LibraryManager`, `CampusShop`, `RoomBooking`).
-- **Pausable**: Los **8 contratos de producción** heredan `Pausable` de OpenZeppelin. Cada uno expone `pause()`/`unpause()` que solo el admin (`DEFAULT_ADMIN_ROLE`) puede invocar. Al pausar, OpenZeppelin protege todas las funciones decoradas con `whenNotPaused` y revierte con el custom error `EnforcedPause()` (selector `0xd93c0665`). El sistema de pausa modular (§16) explota esto agrupando los 8 contratos en 6 módulos lógicos.
+- **Pausable**: Los **8 contratos de producción** heredan `Pausable` de OpenZeppelin. Cada uno expone `pause()`/`unpause()` que solo el admin (`ADMIN_ROLE`, custom — no `DEFAULT_ADMIN_ROLE`, para evitar colisión con el centinela `NO_ROLE = bytes32(0)`) puede invocar. Al pausar, OpenZeppelin protege todas las funciones decoradas con `whenNotPaused` y revierte con el custom error `EnforcedPause()` (selector `0xd93c0665`). El sistema de pausa modular (§16) explota esto agrupando los 8 contratos en 6 módulos lógicos.
 - **Custom errors**: En vez de `require("mensaje")` se usan errores tipados (`error NotStudent(address)`) que consumen menos gas y son más informativos.
 - **Restricción de transferencias**: `LibraryManager` y `BadgeSystem` sobrescriben `_update()` para impedir transferencias directas entre usuarios; solo el contrato media las operaciones. En `BadgeSystem` esto implementa el patrón **soulbound** — las insignias no son intercambiables.
+- **Helpers de rol uniformes**: todos los consumidores de `CampusRoles` (Printer, LibraryToken, ShopToken, LibraryManager, CampusShop, RoomBooking, BadgeSystem) chequean permisos con `campusRoles.isAdmin(addr)` / `isLibrarian(addr)` / `isProfessor(addr)` / `isStudent(addr)` en lugar de `hasRole(XXX_ROLE(), addr)`. Mismo resultado, una llamada externa en vez de dos y código más legible.
+- **Funciones no expuestas pero presentes**: `CampusRoles.removeUser()` y `changeRole()` están implementadas, testeadas y son operativas pero deliberadamente no se exponen en la UI (los efectos sobre relaciones off-chain — préstamos activos, asignaturas vinculadas, badges — exceden el alcance del TFG). Documentado con NatSpec en el propio contrato.
 
 ### 5.5 Despliegue declarativo con Hardhat Ignition
 
@@ -261,7 +269,7 @@ Si una transacción blockchain tiene éxito pero el guardado en Prisma falla, el
 
 ## 8. Modelo de datos — Prisma schema
 
-27 modelos en [`packages/nextjs/prisma/schema.prisma`](packages/nextjs/prisma/schema.prisma), agrupados por dominio:
+26 modelos en [`packages/nextjs/prisma/schema.prisma`](packages/nextjs/prisma/schema.prisma), agrupados por dominio. Las entidades con representación on-chain incluyen un flag `historical: Boolean` para diferenciar registros reales de los seeds de demo (ver §19).
 
 ### 8.1 Usuarios y autenticación
 
@@ -327,8 +335,7 @@ Si una transacción blockchain tiene éxito pero el guardado en Prisma falla, el
 | Modelo | Qué guarda |
 |---|---|
 | `ShopTokenReward` | Log de cada mint automático de SHPT — `userId`, `amount`, `reason`, `txHash` |
-| `PaymentSimulationLog` | Registro de simulación de pago (topup de saldo con tarjeta falsa) |
-| `CardTopupSimulation` | Datos concretos del topup simulado |
+| `CardTopupSimulation` | Registro de cada topup simulado de saldo (tarjeta falsa) |
 
 ### 8.9 Relaciones clave
 
@@ -370,27 +377,27 @@ En vez de requerir MetaMask:
 
 Los componentes siguen el patrón **Atomic Design** de Brad Frost, con una separación estricta por capas:
 
-### Atoms (`components/ui/`) — 36 componentes
+### Atoms (`components/ui/`) — 40 componentes
 
-Elementos UI mínimos e independientes del dominio: `Button`, `Input`, `Card`, `Badge`, `Table`, `Modal`, `Pagination`, `Spinner`, `Drawer`, `Select`, `Tabs`, `Toggle`, `FilterPills`, `SearchInput`, etc.
+Elementos UI mínimos e independientes del dominio: `Button`, `Input`, `Card`, `Badge`, `Table`, `Modal`, `Pagination`, `Spinner`, `Skeleton`, `Drawer`, `Select`, `Tabs`, `Toggle`, `FilterPills`, `SearchInput`, etc.
 
 Cada atom acepta variantes (`variant="primary"`, `size="sm"`) y un `className` para composición. No saben nada del dominio: `Button` es un botón, no un "botón de comprar".
 
-### Molecules (`components/shared/`) — 49 componentes
+### Molecules (`components/shared/`) — 56 componentes
 
 Composiciones de atoms con propósito concreto, **sin lógica de negocio pesada** (sin `fetch` múltiples, sin orquestación de modales).
 
-Ejemplos: `StatCard`, `StatusBadge`, `NavCard`, `LibraryItemCard`, `LoanCard`, `BookingCard`, `ProductCard`, `RewardCard`, `SectionTitle`, `CreditsBanner`, `ProductImage`, `ColorSwatchRow`, `BatchHeader`, `GroupedOrderItem`.
+Ejemplos: `StatCard`, `StatusBadge`, `NavCard`, `LibraryItemCard`, `LoanCard`, `BookingCard`, `ProductCard`, `RewardCard`, `SectionTitle`, `CreditsBanner`, `ProductImage`, `ColorSwatchRow`, `BatchHeader`, `GroupedOrderItem`, `ModuleGuard`, `ModulePausedScreen`, `ModuleStatusCard`, `DangerConfirmModal`.
 
 Todos re-exportados desde un barrel [`components/shared/index.ts`](packages/nextjs/src/components/shared/index.ts) (cobertura 100%), agrupados por dominio.
 
-### Forms (`components/forms/`) — 13 componentes
+### Forms (`components/forms/`) — 14 componentes
 
-Formularios moleculares con contrato `onSubmit(data)`: `LoginForm`, `ItemForm`, `ProductForm`, `ProductGroupForm`, `VariantForm`, `RewardForm`, `SubjectForm`, `SubjectOfferingForm`, `AssignmentForm`, `PrintJobForm`, `PrinterForm`, `RoomForm`, `UserForm`.
+Formularios moleculares con contrato `onSubmit(data)`: `LoginForm`, `ItemForm`, `ProductForm`, `ProductGroupForm`, `VariantForm`, `RewardForm`, `SubjectForm`, `SubjectOfferingForm`, `AssignmentForm`, `PrintJobForm`, `PrinterForm`, `RoomForm`, `UserForm`, etc.
 
 Todos usan el hook `useForm()` para manejo de estado, validación síncrona y submit asíncrono con `submitError` unificado.
 
-### Organisms (`components/dashboard/`) — 13 componentes
+### Organisms (`components/dashboard/`) — 12 componentes
 
 Piezas grandes por dominio que **orquestan hooks + Server Actions + modales**:
 
@@ -400,9 +407,9 @@ Piezas grandes por dominio que **orquestan hooks + Server Actions + modales**:
 
 Son componentes "smart": tienen estado propio, saben con qué datos trabajan y delegan mutaciones al padre vía callbacks. Idealmente cada dominio tiene sus organisms propios.
 
-### Layout (`components/layout/`) — 4 componentes
+### Layout (`components/layout/`) — 5 componentes
 
-Elementos de estructura global: `Header`, `Sidebar`, `ProfessorSubjectsNav`, `StudentOnboardingModal`.
+Elementos de estructura global: `Header`, `Sidebar`, `ProfessorSubjectsNav`, `StudentOnboardingModal`, etc.
 
 ### Pages (`app/(main)/`)
 
@@ -458,9 +465,9 @@ export async function requestLoan(itemId: string) {
 }
 ```
 
-### Módulos de actions (9)
+### Módulos de actions (8)
 
-`academic.ts`, `auth.ts`, `badges.ts`, `library.ts`, `onboarding.ts`, `printing.ts`, `rooms.ts`, `shop.ts`, `system.ts` (admin, pausa modular — ver §16).
+`academic.ts`, `badges.ts`, `library.ts`, `onboarding.ts`, `printing.ts`, `rooms.ts`, `shop.ts`, `system.ts` (admin, pausa modular — ver §16). La autenticación (login, sesión, control de acceso) vive en [`lib/auth.ts`](packages/nextjs/src/lib/auth.ts) en lugar de en `actions/` porque la usan tanto Server Actions como API routes y middleware.
 
 ### API Routes como thin wrappers
 
@@ -497,7 +504,7 @@ Los helpers `getSession()`, `ensureRole()` y `logPrismaRecovery()` están centra
 
 - **Middleware** (`proxy.ts`): Intercepta requests a `/{role}/*`. Redirige a `/login?returnUrl=...` si no autenticado. Si un usuario autenticado intenta acceder a `/login` → redirige a su `/{role}`. Si intenta acceder a la ruta de otro rol → redirige a la suya.
 - **Server Actions**: Cada acción verifica rol con `ensureRole()`. Distingue entre "No autenticado" (→ HTTP 401) y "No autorizado" (→ HTTP 403).
-- **Contratos**: Modifiers `onlyStudent()`, `onlyLibrarian()`, `onlyAdmin()` verifican roles on-chain via `CampusRoles.hasRole()`.
+- **Contratos**: Modifiers `onlyStudent()`, `onlyLibrarian()`, `onlyAdmin()` verifican roles on-chain via los helpers de `CampusRoles` (`isStudent`/`isLibrarian`/`isAdmin`/`isProfessor`), uniformes en los 7 contratos consumidores.
 
 ### Rate limiting
 
@@ -725,15 +732,16 @@ Esto **cubre el agujero de la capa A**: como `getCachedModuleStatus` cachea 5 s,
 
 ### 16.3 Distribución de los layouts con guard
 
-17 `layout.tsx` con `ModuleGuard`:
+28 `layout.tsx` con `ModuleGuard` distribuidos por módulo:
 
 | Ruta | `moduleId` |
 |---|---|
-| `librarian/items/`, `librarian/loans/`, `student/library/(library-routes)/` | `library` |
-| `librarian/printing/`, `professor/printing/`, `student/library/printing/` | `print` |
-| `librarian/rooms/`, `student/library/rooms/` | `rooms` |
-| `professor/badges/`, `professor/rewards/`, `professor/use-requests/`, `professor/pending-reviews/`, `professor/students/`, `professor/subjects/`, `student/badges/` | `badges` |
-| `student/shop/` | `shop` |
+| `librarian/items/`, `librarian/loans/`, `student/library/(library-routes)/`, `admin/library/` | `library` |
+| `librarian/printing/`, `professor/printing/`, `student/library/printing/`, `admin/printing/` | `print` |
+| `librarian/rooms/`, `student/library/rooms/`, `admin/rooms/` | `rooms` |
+| `professor/badges/`, `professor/rewards/`, `professor/use-requests/`, `professor/pending-reviews/`, `professor/students/`, `professor/subjects/`, `student/badges/`, `admin/badges/` | `badges` |
+| `student/shop/`, `admin/shop/` | `shop` |
+| `admin/users/` | `roles` |
 
 **Detalle del route group `(library-routes)`**: El guard NO va en el layout raíz de `student/library/` porque las subrutas `printing/` y `rooms/` pertenecen a otros módulos y deben sobrevivir si el módulo `library` se pausa. Para acotar el guard solo a las páginas propias de biblioteca (catálogo, detalle, mis préstamos) se usa el route group `(library-routes)/`. Los paréntesis hacen que la URL final no incluya `(library-routes)`, así que las URLs públicas no cambian — pero el subárbol queda envuelto por su propio layout con guard.
 
@@ -776,11 +784,13 @@ El panel [`/admin/system`](packages/nextjs/src/app/(main)/admin/system/page.tsx)
 
 ---
 
-## 17. Sistema de testing dual
+## 17. Sistema de testing en 4 capas
 
-### Tests TypeScript (`node:test`)
+El proyecto cubre cuatro capas de testing automatizado más la verificación de tipos.
 
-Framework nativo de Node.js. Patrón:
+### 17.1 Tests de contratos en TypeScript (`node:test`)
+
+Framework nativo de Node.js usando `viem` para llamadas. Patrón:
 ```ts
 describe("LibraryManager", function () {
   async function deploySystem() { /* despliega contratos frescos */ }
@@ -791,29 +801,79 @@ describe("LibraryManager", function () {
 });
 ```
 
-### Tests Solidity (Foundry/forge-std)
+267 tests sobre los 8 contratos. Ejecutados por `pnpm test`.
 
-Tests escritos en Solidity:
+### 17.2 Tests de contratos en Solidity (Foundry/forge-std)
+
+Tests escritos directamente en Solidity con `vm.prank`, `vm.expectRevert`, etc.:
 ```solidity
-contract LibraryManagerTest is Test {
+contract LibraryManagerTest is CampusTestBase {
   function setUp() public { /* deploy + setup */ }
   function test_RequestLoan() public {
-    vm.prank(student); // simular msg.sender
+    vm.prank(student1);
     libraryManager.requestLoan(1);
     assertEq(...);
   }
 }
 ```
 
-Ambos conjuntos se ejecutan con `pnpm test`. Cubren los 8 contratos de producción + tests de integración cross-contract.
+140 tests Solidity organizados en:
 
-### Qué no se testea automáticamente
+- **Tests unitarios por contrato**: `CampusRoles.t.sol`, `LibraryToken.t.sol`, `ShopToken.t.sol`, `Printer.t.sol`, `LibraryManager.t.sol`, `CampusShop.t.sol`, `RoomBooking.t.sol`, `BadgeSystem.t.sol`.
+- **Tests de integración por dominio**: `Integration.Library.t.sol`, `Integration.Shop.t.sol`, `Integration.Badges.t.sol`, `Integration.Cross.t.sol`. Cada uno despliega solo los contratos que necesita, lo que reduce el bytecode de cada archivo y mantiene la separación de responsabilidades.
+- **Base compartida**: [`test/helpers/CampusTestBase.sol`](packages/hardhat/test/helpers/CampusTestBase.sol) abstrae actores nombrados (`librarian`, `professor`, `student1`, `student2`) y helpers de registro (`_initAndRegisterStandardUsers`), evitando duplicación entre archivos.
 
-No hay tests E2E ni de componentes para la parte Next.js. La validación de frontend se apoya en:
+Total combinado: **407 tests** (140 Solidity + 267 NodeJS) ejecutados por `pnpm test`.
+
+### 17.3 Tests unitarios del Next.js (Vitest + Testing Library)
+
+100 tests sobre utilidades, hooks y atoms:
+
+| Capa | Archivos |
+|---|---|
+| Utilidades (`lib/`) | `formatters.test.ts`, `validators.test.ts`, `historical.test.ts`, `system-modules.test.ts`, `contractErrors.test.ts`, `shop-utils.test.ts`, `utils.test.ts` |
+| Tipos | `types/index.test.ts` |
+| Hooks | `useForm.test.ts` |
+| Atoms | `Button.test.tsx`, `EmptyState.test.tsx`, `SearchInput.test.tsx` |
+
+```bash
+pnpm --filter nextjs run test          # ejecución única
+pnpm --filter nextjs run test:watch    # watch mode
+pnpm --filter nextjs run test:coverage # cobertura V8
+```
+
+### 17.4 Tests E2E (Playwright)
+
+Suite de extremo a extremo en [`packages/nextjs/e2e/`](packages/nextjs/e2e/):
+
+- `auth-flows.spec.ts`: login, registro, sesión, redirecciones por rol.
+- `home.spec.ts`: render del home y navegación.
+
+```bash
+pnpm --filter nextjs run test:e2e          # suite rápida
+pnpm --filter nextjs run test:e2e:full     # suite completa (RUN_E2E_FULL=1)
+```
+
+### 17.5 Verificación estática
+
 - `tsc --noEmit` para type check.
 - `next build` para detectar errores SSR/SSG.
 - ESLint para estilo + reglas React.
-- Pruebas manuales de flujos clave.
+
+### 17.6 Integración continua
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) ejecuta en cada push y pull request a `main`:
+
+1. Setup pnpm 10.33.0 + Node 24.15.0.
+2. `pnpm install --frozen-lockfile`.
+3. `prisma generate`.
+4. ESLint (`pnpm --filter nextjs run lint`).
+5. Compile contratos (`pnpm compile`).
+6. Tests de contratos (`pnpm test`) — los 407 tests Hardhat + Foundry.
+7. Tests Next.js (`pnpm --filter nextjs run test`) — los 100 unitarios Vitest.
+8. `next build` con variables dummy para satisfacer las lecturas a nivel de módulo (`DATABASE_URL`, `SESSION_SECRET`).
+
+Timeout total: 20 minutos. La build de producción se valida en cada commit que llega a `main`.
 
 ---
 
@@ -840,7 +900,7 @@ Orquestado por `scripts/dev.mjs`:
 
 En arranques sucesivos con Anvil persistente los pasos 7 y 9 son casi instantáneos (todo detectado como ya existente).
 
-### Seeds y mantenimiento (11 scripts `.mjs`)
+### Seeds y mantenimiento (12 scripts `.mjs`)
 
 En `packages/nextjs/scripts/`:
 
@@ -849,11 +909,12 @@ En `packages/nextjs/scripts/`:
 - `seed-academic`: asignaturas, ofertas, profesores y alumnos de demo.
 - `seed-products` + `seed-library` + `seed-rooms` + `seed-printers`: datos de catálogo.
 - `seed-badges`: badges demo.
+- `seed-historical`: datos solo-Prisma de 3 a 12 meses atrás (`Loan`, `RoomBooking`, `PrintLog`, `OrderBatch` con `historical: true`) para que dashboards y gráficas se vean ricos en demos sin gastar miles de transacciones on-chain.
 - `resync-users`: reconstruye grants de rol on-chain para usuarios existentes (útil al reiniciar Anvil).
 - `cleanup-uploads`: purga archivos subidos huérfanos (`public/uploads/print/`).
 - `db-doctor`: diagnostica drift Prisma↔blockchain. Recorre las entidades con representación on-chain (`Loan`, `Order`, `RoomBooking`, …) y comprueba que los `tokenId/loanId/orderId` siguen vivos en el contrato. Lista filas huérfanas. Útil cuando aparece "Estado inconsistente: Prisma tiene N, blockchain M" durante los seeds.
 
-Todos los seeds son **idempotentes**: detectan filas existentes por clave de unión y saltan, así que se pueden re-ejecutar tantas veces como se quiera sin duplicar datos.
+Todos los seeds son **idempotentes**: detectan filas existentes por clave de unión y saltan, así que se pueden re-ejecutar tantas veces como se quiera sin duplicar datos. `seed-historical` no toca blockchain en absoluto y no crea `ShopTokenReward`, así que respeta el bonus de "primer uso" del usuario real.
 
 ---
 
@@ -894,7 +955,7 @@ El proyecto pasó por un refactor grande donde:
 - **Inventario de recompensas por alumno**: nueva acción `getOfferingRewardsInventory`, endpoint `/api/badges/offerings/[offeringId]/rewards-inventory` y dos vistas — `/professor/students/rewards` (profesor, filtro por asignatura propia) y `/admin/rewards/inventory` (admin, filtros obligatorios asignatura + profesor).
 - **Pausa modular del sistema** (último hito): kill-switch admin sobre los 8 contratos, agrupados en 6 módulos lógicos. Ver §16 para el detalle. Nuevos archivos clave: `actions/system.ts`, `lib/system-modules.ts`, `lib/system-modules-status.ts`, `lib/contractErrors.ts`, `components/shared/ModuleGuard.tsx`, `components/shared/ModulePausedScreen.tsx`, `components/shared/ModuleStatusCard.tsx`, `components/shared/DangerConfirmModal.tsx`, panel `/admin/system/`, 17 layouts con `ModuleGuard`.
 - **Vistas de impresión reutilizables por rol** en [`components/printing/`](packages/nextjs/src/components/printing/): `PrintingHomeView`, `PrintingHistoryView`, `PrintingDetailView` parametrizadas por `basePath` y `parentLink` opcional. Compartidas entre `/student/library/printing/`, `/professor/printing/` y `/librarian/printing/`. Eliminan tres copias casi idénticas de la simulación de impresión.
-- **Datos históricos solo-Prisma** (planeado, no implementado todavía — ver [`PLAN_DATOS_HISTORICOS.md`](./PLAN_DATOS_HISTORICOS.md)): añadir flag `historical: Boolean` en `Loan`, `OrderBatch`, `Order`, `PrintLog`, `RoomBooking` para poblar gráficas con datos de demo sin emitir miles de transacciones on-chain. Las acciones de mutación filtrarán siempre `historical: false`.
+- **Datos históricos solo-Prisma**: las entidades `Loan`, `OrderBatch`, `Order`, `PrintLog`, `RoomBooking` incluyen un flag `historical: Boolean`. El script [`scripts/seed-historical.mjs`](packages/nextjs/scripts/seed-historical.mjs) genera 3-12 meses de actividad (`historical: true`, sin tocar blockchain) para que dashboards y gráficas se vean ricos en demos. La lógica de "primer uso de módulo" lo respeta porque no se crean `ShopTokenReward`. Helpers de consulta en [`lib/historical.ts`](packages/nextjs/src/lib/historical.ts) discriminan entre series reales y demo cuando hace falta.
 
 ---
 
@@ -932,22 +993,26 @@ El proyecto pasó por un refactor grande donde:
 
 | Métrica | Valor |
 |---------|-------|
-| Contratos Solidity en producción | 8 (+ `Example.sol` como guía de estilo) |
-| Atoms (`components/ui/`) | 36 |
-| Moléculas (`components/shared/`) | 54 |
-| Formularios (`components/forms/`) | 13 |
-| Organisms (`components/dashboard/`) | 13 |
+| Contratos Solidity en producción | 8 |
+| Tests de contratos | 407 (140 Solidity + 267 NodeJS) |
+| Tests unitarios Next.js (Vitest) | 100 |
+| Tests E2E Next.js (Playwright) | 2 specs (`auth-flows`, `home`) |
+| Atoms (`components/ui/`) | 40 |
+| Moléculas (`components/shared/`) | 56 |
+| Formularios (`components/forms/`) | 14 |
+| Organisms (`components/dashboard/`) | 12 |
 | Vistas de impresión reutilizables (`components/printing/`) | 3 |
-| Componentes de layout | 4 |
+| Componentes de layout | 5 |
 | Páginas (`page.tsx`) | 128 |
-| API endpoints (`route.ts`) | 116 |
-| Módulos de Server Actions | 9 |
+| API endpoints (`route.ts`) | 117 |
+| Módulos de Server Actions | 8 |
 | Hooks custom | 5 |
-| Modelos de base de datos (Prisma) | 27 |
+| Modelos de base de datos (Prisma) | 26 |
 | Contextos React | 4 (Cart, Onboarding, Theme, Toast) |
-| Scripts de mantenimiento (`.mjs`) | 11 (seeds + cleanup + resync + db-doctor) |
-| Layouts con `ModuleGuard` | 17 |
+| Scripts de mantenimiento (`.mjs`) | 12 (seeds + históricos + cleanup + resync + db-doctor) |
+| Layouts con `ModuleGuard` | 28 |
 | Módulos lógicos pausables | 6 (cubren los 8 contratos) |
+| Workflows de CI | 1 (`.github/workflows/ci.yml`) |
 
 ---
 
@@ -955,7 +1020,5 @@ El proyecto pasó por un refactor grande donde:
 
 - [README.md](./README.md) — onboarding, instalación, comandos, troubleshooting.
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — referencia arquitectónica exhaustiva.
-- [CLAUDE.md](./CLAUDE.md) — guía interna para Claude Code.
-- [PLAN_DATOS_HISTORICOS.md](./PLAN_DATOS_HISTORICOS.md) — plan pendiente para poblar gráficas con datos solo-Prisma (flag `historical`).
 - [packages/nextjs/RUTAS.md](./packages/nextjs/RUTAS.md) — tabla exhaustiva de rutas de páginas por rol.
 - [packages/nextjs/API_ACCESS_AUDIT.md](./packages/nextjs/API_ACCESS_AUDIT.md) — auditoría de control de acceso en endpoints.

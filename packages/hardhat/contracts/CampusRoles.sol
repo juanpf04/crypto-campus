@@ -148,6 +148,12 @@ contract CampusRoles is AccessControl, Pausable {
 
     /// @notice Elimina un usuario y revoca su rol
     /// @param user Direccion del usuario a eliminar
+    /// @dev Función operativa y testeada pero no implementada en la aplicación.
+    ///      Eliminar un usuario requeriría soft-delete coordinado con Prisma
+    ///      (bloqueo de login, filtrado en todos los listados, manejo de préstamos
+    ///      activos, asignaturas vinculadas, etc.) y un flujo de confirmación
+    ///      robusto. Se mantiene en el contrato para posibles iteraciones del
+    ///      proyecto.
     function removeUser(address user)
         external
         onlyRole(ADMIN_ROLE)
@@ -165,7 +171,13 @@ contract CampusRoles is AccessControl, Pausable {
     }
 
     /// @notice Cambia el rol de un usuario
-    /// @dev Revoca el rol anterior y otorga el nuevo
+    /// @dev Revoca el rol anterior y otorga el nuevo.
+    ///      Función operativa y testeada pero no implementada en la aplicación.
+    ///      Cambiar el rol de un usuario dejaría huérfanas entidades vinculadas
+    ///      (un profesor que pasa a otro rol mantiene asignaturas, badges y
+    ///      recompensas creadas por él) y los efectos son difíciles de revertir
+    ///      sin migraciones complejas. Se mantiene en el contrato para posibles
+    ///      iteraciones del proyecto.
     /// @param user Direccion del usuario
     /// @param newRole Nuevo rol a asignar
     function changeRole(
@@ -230,6 +242,7 @@ contract CampusRoles is AccessControl, Pausable {
     }
 
     /// @notice Obtiene informacion completa de un usuario
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     /// @param user Direccion a consultar
     /// @return name Nombre del usuario
     /// @return role Rol registrado
@@ -244,6 +257,7 @@ contract CampusRoles is AccessControl, Pausable {
     }
 
     /// @notice Obtiene el rol registrado de un usuario
+    /// @dev No las usamos porque obtenemos la informacion de prisma junto al metadata para obtener mas datos y ahorrar en coste, eliminar la funcion no supondria un coste apreciable y si en un futuro queremos que las consultas sean on-chain la necesitariamos
     /// @param user Direccion a consultar
     /// @return role Rol del usuario o bytes32(0) si no esta registrado
     function getUserRole(address user) external view returns (bytes32) {

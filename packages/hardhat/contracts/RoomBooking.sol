@@ -23,73 +23,139 @@ contract RoomBooking is ReentrancyGuard, Pausable {
         bool exists;
     }
 
+    /// @notice Datos de una reserva de sala
+    /// @dev `date` es el timestamp truncado a medianoche del dia.
+    ///      `startHour` (0-23) y `duration` (1-4 horas).
     struct Booking {
         uint256 roomId;
         address student;
-        uint256 date;       // timestamp truncado a medianoche (dia)
-        uint8 startHour;    // 0-23
-        uint8 duration;     // 1-4 horas
+        uint256 date;
+        uint8 startHour;
+        uint8 duration;
         bool cancelled;
     }
 
     // ── State variables ─────────────────────────────────────────────────
 
+    /// @notice Contador autoincremental de salas
     uint256 public nextRoomId = 1;
+    /// @dev Registro de salas por ID
     mapping(uint256 => Room) private _rooms;
 
+    /// @notice Contador autoincremental de reservas
     uint256 public nextBookingId = 1;
+    /// @dev Registro de reservas por ID
     mapping(uint256 => Booking) private _bookings;
 
-    /// @notice roomId => date => hour => occupied
+    /// @notice Indica si un slot horario esta ocupado
+    /// @dev Clave: roomId => date => hour => occupied
     mapping(uint256 => mapping(uint256 => mapping(uint8 => bool))) public slotOccupied;
 
-    /// @notice student => date => bookingId (0 = no booking that day)
+    /// @notice Reserva diaria de un estudiante (0 = sin reserva ese dia)
+    /// @dev Clave: student => date => bookingId
     mapping(address => mapping(uint256 => uint256)) public studentDailyBooking;
 
     // ── Events ──────────────────────────────────────────────────────────
 
+    /// @notice Se emite al crear una nueva sala
+    /// @param roomId ID de la sala creada
+    /// @param capacity Capacidad de la sala
     event RoomAdded(uint256 indexed roomId, uint256 capacity);
+
+    /// @notice Se emite al actualizar una sala
+    /// @param roomId ID de la sala
+    /// @param capacity Nueva capacidad
+    /// @param active Nuevo estado activo
     event RoomUpdated(uint256 indexed roomId, uint256 capacity, bool active);
+
+    /// @notice Se emite al desactivar definitivamente una sala
+    /// @param roomId ID de la sala eliminada
     event RoomRemoved(uint256 indexed roomId);
+
+    /// @notice Se emite al crear una nueva reserva
+    /// @param bookingId ID de la reserva
+    /// @param roomId ID de la sala reservada
+    /// @param student Direccion del estudiante
+    /// @param date Dia reservado (timestamp a medianoche)
+    /// @param startHour Hora de inicio (0-23)
+    /// @param duration Duracion en horas (1-4)
     event RoomBooked(uint256 indexed bookingId, uint256 indexed roomId, address indexed student, uint256 date, uint8 startHour, uint8 duration);
+
+    /// @notice Se emite al cancelar una reserva
+    /// @param bookingId ID de la reserva cancelada
+    /// @param cancelledBy Direccion que ejecuta la cancelacion
     event BookingCancelled(uint256 indexed bookingId, address indexed cancelledBy);
 
     // ── Errors ──────────────────────────────────────────────────────────
 
+    /// @notice Caller sin rol librarian/admin
     error NotLibrarian();
+    /// @notice Caller sin rol student
     error NotStudent();
+    /// @notice Caller sin rol admin
     error NotAdmin();
+    /// @notice La sala no existe
+    /// @param roomId ID de la sala solicitada
     error RoomNotFound(uint256 roomId);
+    /// @notice La sala existe pero esta desactivada
+    /// @param roomId ID de la sala
     error RoomNotActive(uint256 roomId);
+    /// @notice La duracion solicitada no esta dentro de [1,4]
+    /// @param duration Duracion recibida
     error InvalidDuration(uint8 duration);
+    /// @notice La hora de inicio o el rango total supera las 24h del dia
+    /// @param startHour Hora de inicio recibida
+    /// @param duration Duracion recibida
     error InvalidHour(uint8 startHour, uint8 duration);
+    /// @notice Alguno de los slots solicitados ya esta ocupado
+    /// @param roomId ID de la sala
+    /// @param date Dia solicitado
+    /// @param hour Hora ocupada
     error SlotAlreadyOccupied(uint256 roomId, uint256 date, uint8 hour);
+    /// @notice El estudiante ya tiene reserva ese dia
+    /// @param student Direccion del estudiante
+    /// @param date Dia ya reservado
     error AlreadyBookedToday(address student, uint256 date);
+    /// @notice La reserva no existe
+    /// @param bookingId ID de la reserva solicitada
     error BookingNotFound(uint256 bookingId);
+    /// @notice La reserva ya estaba cancelada
+    /// @param bookingId ID de la reserva
     error BookingAlreadyCancelled(uint256 bookingId);
+    /// @notice El caller no es el propietario ni un bibliotecario/admin
+    /// @param bookingId ID de la reserva
+    /// @param caller Direccion que intenta operar
     error NotBookingOwnerOrLibrarian(uint256 bookingId, address caller);
+    /// @notice La sala tiene reservas activas y no se puede eliminar
+    /// @param roomId ID de la sala
     error RoomHasActiveBookings(uint256 roomId);
+    /// @notice La capacidad debe ser mayor que cero
     error ZeroCapacity();
+    /// @notice El rango horario consultado es invalido
+    /// @param fromHour Hora inicial
+    /// @param toHour Hora final
     error InvalidHourRange(uint8 fromHour, uint8 toHour);
 
     // ── Modifiers ───────────────────────────────────────────────────────
 
+    /// @notice Restringe la ejecucion a bibliotecarios o admins
     modifier onlyLibrarian() {
-        if (
-            !campusRoles.hasRole(campusRoles.LIBRARIAN_ROLE(), msg.sender) &&
-            !campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender)
-        ) revert NotLibrarian();
+        if (!campusRoles.isLibrarian(msg.sender) && !campusRoles.isAdmin(msg.sender))
+            revert NotLibrarian();
         _;
     }
 
+    /// @notice Restringe la ejecucion a estudiantes
     modifier onlyStudent() {
-        if (!campusRoles.hasRole(campusRoles.STUDENT_ROLE(), msg.sender))
+        if (!campusRoles.isStudent(msg.sender))
             revert NotStudent();
         _;
     }
 
     // ── Constructor ─────────────────────────────────────────────────────
 
+    /// @notice Inicializa el contrato con su referencia de control de acceso
+    /// @param _campusRoles Direccion del contrato CampusRoles
     constructor(address _campusRoles) {
         campusRoles = CampusRoles(_campusRoles);
     }
@@ -97,6 +163,8 @@ contract RoomBooking is ReentrancyGuard, Pausable {
     // ── Room management (librarian/admin) ───────────────────────────────
 
     /// @notice Crea una nueva sala
+    /// @param capacity Capacidad de la sala (> 0)
+    /// @return roomId ID asignado a la nueva sala
     function addRoom(uint256 capacity) external onlyLibrarian whenNotPaused returns (uint256 roomId) {
         if (capacity == 0) revert ZeroCapacity();
 
@@ -113,6 +181,9 @@ contract RoomBooking is ReentrancyGuard, Pausable {
     }
 
     /// @notice Actualiza capacidad y estado activo de una sala
+    /// @param roomId ID de la sala
+    /// @param capacity Nueva capacidad (> 0)
+    /// @param active Nuevo estado activo
     function updateRoom(uint256 roomId, uint256 capacity, bool active) external onlyLibrarian whenNotPaused {
         if (!_rooms[roomId].exists) revert RoomNotFound(roomId);
         if (capacity == 0) revert ZeroCapacity();
@@ -124,6 +195,7 @@ contract RoomBooking is ReentrancyGuard, Pausable {
     }
 
     /// @notice Desactiva una sala permanentemente
+    /// @param roomId ID de la sala a desactivar
     function removeRoom(uint256 roomId) external onlyLibrarian whenNotPaused {
         if (!_rooms[roomId].exists) revert RoomNotFound(roomId);
 
@@ -139,6 +211,7 @@ contract RoomBooking is ReentrancyGuard, Pausable {
     /// @param date Timestamp truncado a medianoche del dia
     /// @param startHour Hora de inicio (0-23)
     /// @param duration Numero de horas (1-4)
+    /// @return bookingId ID de la reserva creada
     function bookRoom(
         uint256 roomId,
         uint256 date,
@@ -190,7 +263,8 @@ contract RoomBooking is ReentrancyGuard, Pausable {
         emit RoomBooked(bookingId, roomId, msg.sender, date, startHour, duration);
     }
 
-    /// @notice Cancela una reserva (estudiante propietario o bibliotecario)
+    /// @notice Cancela una reserva (estudiante propietario o bibliotecario/admin)
+    /// @param bookingId ID de la reserva a cancelar
     function cancelBooking(uint256 bookingId) external whenNotPaused {
         Booking storage booking = _bookings[bookingId];
         if (booking.roomId == 0) revert BookingNotFound(bookingId);
@@ -198,10 +272,9 @@ contract RoomBooking is ReentrancyGuard, Pausable {
 
         // Solo el estudiante o un bibliotecario/admin pueden cancelar
         bool isOwner = booking.student == msg.sender;
-        bool isLibrarian = campusRoles.hasRole(campusRoles.LIBRARIAN_ROLE(), msg.sender) ||
-                           campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender);
+        bool canManage = campusRoles.isLibrarian(msg.sender) || campusRoles.isAdmin(msg.sender);
 
-        if (!isOwner && !isLibrarian)
+        if (!isOwner && !canManage)
             revert NotBookingOwnerOrLibrarian(bookingId, msg.sender);
 
         booking.cancelled = true;
@@ -221,14 +294,14 @@ contract RoomBooking is ReentrancyGuard, Pausable {
 
     /// @notice Pausa el contrato (solo admin)
     function pause() external {
-        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender))
+        if (!campusRoles.isAdmin(msg.sender))
             revert NotAdmin();
         _pause();
     }
 
     /// @notice Reanuda el contrato (solo admin)
     function unpause() external {
-        if (!campusRoles.hasRole(campusRoles.ADMIN_ROLE(), msg.sender))
+        if (!campusRoles.isAdmin(msg.sender))
             revert NotAdmin();
         _unpause();
     }
@@ -259,6 +332,11 @@ contract RoomBooking is ReentrancyGuard, Pausable {
     }
 
     /// @notice Consulta disponibilidad de un rango horario completo (ej: 8-20)
+    /// @param roomId ID de la sala
+    /// @param date Dia consultado (timestamp a medianoche)
+    /// @param fromHour Hora inicial inclusive
+    /// @param toHour Hora final exclusive
+    /// @return available Array booleano por slot dentro del rango
     function getRoomAvailability(
         uint256 roomId,
         uint256 date,
