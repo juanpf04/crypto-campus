@@ -470,7 +470,12 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
     // ── Reward management ───────────────────────────────────────────────
 
     /// @notice Crea una recompensa canjeable con insignias de una asignatura
-    /// @dev `supply == 0` significa supply ilimitado.
+    /// @dev Solo el profesor que creo el subject badge (o un admin actuando
+    ///      como profesor) puede crear recompensas sobre el. Esto mantiene
+    ///      el invariante de que el dueno del subject badge controla todo
+    ///      lo que cuelga de el (assignments, prize categories y rewards),
+    ///      en linea con `createAssignment` y `addPrizeCategory`.
+    ///      `supply == 0` significa supply ilimitado.
     /// @param subjectBadgeId Subject badge cuyas insignias canjean esta recompensa
     /// @param badgeCost Coste en badges para canjear (> 0)
     /// @param supply Supply inicial (0 = ilimitado)
@@ -482,6 +487,7 @@ contract BadgeSystem is ERC1155, ERC1155Supply, Pausable {
     ) external onlyProfessorOrAdmin whenNotPaused returns (uint256 rewardId) {
         SubjectBadge storage badge = _subjectBadges[subjectBadgeId];
         if (!badge.exists) revert SubjectBadgeNotFound(subjectBadgeId);
+        if (badge.professor != msg.sender) revert NotSubjectBadgeOwner(subjectBadgeId, msg.sender);
         if (badgeCost == 0) revert ZeroCost();
 
         rewardId = nextRewardId;

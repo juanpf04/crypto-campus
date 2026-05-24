@@ -126,9 +126,6 @@ contract RoomBooking is ReentrancyGuard, Pausable {
     /// @param bookingId ID de la reserva
     /// @param caller Direccion que intenta operar
     error NotBookingOwnerOrLibrarian(uint256 bookingId, address caller);
-    /// @notice La sala tiene reservas activas y no se puede eliminar
-    /// @param roomId ID de la sala
-    error RoomHasActiveBookings(uint256 roomId);
     /// @notice La capacidad debe ser mayor que cero
     error ZeroCapacity();
     /// @notice El rango horario consultado es invalido

@@ -111,4 +111,19 @@ contract ShopToken is ERC20, Pausable {
     function decimals() public pure override returns (uint8) {
         return 0;
     }
+
+    // ── Internal functions ──────────────────────────────────────────────
+
+    /// @notice Hook centralizado de movimiento de saldos del ERC-20
+    /// @dev En OpenZeppelin v5, `_update` es el unico punto por el que pasan
+    ///      mint, burn y transfer/transferFrom. Anadir `whenNotPaused` aqui
+    ///      hace que la pausa del contrato bloquee toda transferencia de
+    ///      tokens, incluidas las realizadas directamente entre cuentas, no
+    ///      solo `mint`/`burn` ejecutados por el admin.
+    /// @param from Cuenta de origen (address(0) en mint)
+    /// @param to Cuenta de destino (address(0) en burn)
+    /// @param value Cantidad transferida
+    function _update(address from, address to, uint256 value) internal override whenNotPaused {
+        super._update(from, to, value);
+    }
 }
