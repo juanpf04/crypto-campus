@@ -20,7 +20,7 @@ import { LoanStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { getSession, ensureRole, logPrismaRecovery } from "@/lib/auth";
-import { isContractPauseError, translateContractError } from "@/lib/contractErrors";
+import { isKnownContractError, translateContractError } from "@/lib/contractErrors";
 import { adminWalletClient, publicClient } from "@/lib/viem";
 import {
 	CONTRACT_ADDRESSES,
@@ -132,7 +132,7 @@ export async function addItem(input: {
 		return { success: true, item, txHash: hash };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Biblioteca");
+		if (isKnownContractError(error)) throw translateContractError(error, "Biblioteca");
 		throw new Error(`Error al crear ítem: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -182,45 +182,6 @@ export async function updateItem(
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
 		throw new Error(`Error al actualizar ítem: ${error instanceof Error ? error.message : "desconocido"}`);
-	}
-}
-
-/**
- * Añade copias adicionales a un ítem existente (on-chain + Prisma).
- * Acceso: LIBRARIAN, ADMIN.
- */
-export async function addCopies(itemId: string, amount: number) {
-	const session = await getSession();
-	ensureRole(session, ["LIBRARIAN", "ADMIN"]);
-
-	try {
-		const copies = ensurePositiveInt(amount, "Las copias");
-
-		const existing = await prisma.libraryItem.findUnique({ where: { id: itemId } });
-		if (!existing) throw new Error("Ítem no encontrado");
-
-		const hash = await adminWalletClient.writeContract({
-			address: CONTRACT_ADDRESSES.libraryManager as `0x${string}`,
-			abi: LIBRARY_MANAGER_ABI,
-			functionName: "addCopies",
-			args: [BigInt(existing.tokenId), BigInt(copies)],
-		});
-		const receipt = await publicClient.waitForTransactionReceipt({ hash });
-
-		if (receipt.status !== "success") {
-			throw new Error("La transacción fue revertida");
-		}
-
-		const item = await prisma.libraryItem.update({
-			where: { id: itemId },
-			data: { totalCopies: existing.totalCopies + copies },
-		});
-
-		return { success: true, item, txHash: hash };
-	} catch (error) {
-		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Biblioteca");
-		throw new Error(`Error al añadir copias: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
 
@@ -557,7 +518,7 @@ export async function requestLoan(itemId: string) {
 				throw new Error("No tienes Tokens de Préstamo suficientes. Pide al admin que te asigne tokens.");
 			}
 		}
-		if (isContractPauseError(error)) throw translateContractError(error, "Biblioteca");
+		if (isKnownContractError(error)) throw translateContractError(error, "Biblioteca");
 		throw new Error(`Error al solicitar préstamo: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -600,7 +561,7 @@ export async function cancelLoan(loanPrismaId: string) {
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Biblioteca");
+		if (isKnownContractError(error)) throw translateContractError(error, "Biblioteca");
 		throw new Error(`Error al cancelar préstamo: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -648,7 +609,7 @@ export async function confirmPickup(loanPrismaId: string) {
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Biblioteca");
+		if (isKnownContractError(error)) throw translateContractError(error, "Biblioteca");
 		throw new Error(`Error al confirmar recogida: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -719,7 +680,7 @@ export async function confirmReturn(loanPrismaId: string) {
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Biblioteca");
+		if (isKnownContractError(error)) throw translateContractError(error, "Biblioteca");
 		throw new Error(`Error al confirmar devolución: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -762,7 +723,7 @@ export async function forceReturn(loanPrismaId: string) {
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Biblioteca");
+		if (isKnownContractError(error)) throw translateContractError(error, "Biblioteca");
 		throw new Error(`Error al forzar devolución: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -800,7 +761,7 @@ export async function expireReservation(loanPrismaId: string) {
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Biblioteca");
+		if (isKnownContractError(error)) throw translateContractError(error, "Biblioteca");
 		throw new Error(`Error al expirar reserva: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -1111,7 +1072,7 @@ export async function mintLibraryTokens(userId: string, amount: number) {
 		return { success: true, balance: Number(finalBalance) };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Biblioteca");
+		if (isKnownContractError(error)) throw translateContractError(error, "Biblioteca");
 		throw new Error(`Error al asignar tokens: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }

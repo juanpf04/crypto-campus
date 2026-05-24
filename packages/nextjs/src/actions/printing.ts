@@ -23,7 +23,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession, ensureRole } from "@/lib/auth";
 import { adminWalletClient, publicClient } from "@/lib/viem";
 import { CONTRACT_ADDRESSES, PRINTER_ABI } from "@/lib/contracts";
-import { isContractPauseError, translateContractError } from "@/lib/contractErrors";
+import { isKnownContractError, translateContractError } from "@/lib/contractErrors";
 import { ONLY_LIVE } from "@/lib/historical";
 import { issueReward, hasRewardOfType, ShopTokenRewardReason, type RewardGrant } from "@/lib/shopRewards";
 
@@ -473,6 +473,8 @@ export async function setStudentPrinterCredits(userId: string, credits: number) 
 			credits: Number(updatedCredits),
 		};
 	} catch (error) {
+		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
+		if (isKnownContractError(error)) throw translateContractError(error, "Impresión");
 		throw new Error(`Error al asignar créditos: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -593,7 +595,7 @@ async function executePrinterJob(
 			printLog,
 		};
 	} catch (error) {
-		if (isContractPauseError(error)) throw translateContractError(error, "Impresión");
+		if (isKnownContractError(error)) throw translateContractError(error, "Impresión");
 		throw new Error(`Error al ejecutar trabajo de impresión: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -652,7 +654,7 @@ export async function executeMyPrintJob(input: ExecutePrintInput) {
 
 		return { ...result, rewards };
 	} catch (error) {
-		if (isContractPauseError(error)) throw translateContractError(error, "Impresión");
+		if (isKnownContractError(error)) throw translateContractError(error, "Impresión");
 		// La capa interna (executePrinterJob) ya traduce los errores conocidos:
 		// si llega un Error con mensaje útil, lo propagamos sin re-envolver.
 		if (error instanceof Error) throw error;

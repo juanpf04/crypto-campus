@@ -33,6 +33,7 @@ import {
   LIBRARY_TOKEN_ABI,
   ROLES,
 } from "@/lib/contracts";
+import { isKnownContractError, translateContractError } from "@/lib/contractErrors";
 
 // ─── GET: Listar usuarios ───────────────────────────────────────────
 
@@ -73,86 +74,95 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
-  const { name, email, password, role } = await req.json();
+  try {
+    const { name, email, password, role } = await req.json();
 
-  // Validación
-  if (!name || !email || !password || !role) {
-    return NextResponse.json(
-      { error: "Nombre, email, contraseña y rol son obligatorios" },
-      { status: 400 },
-    );
-  }
+    // Validación
+    if (!name || !email || !password || !role) {
+      return NextResponse.json(
+        { error: "Nombre, email, contraseña y rol son obligatorios" },
+        { status: 400 },
+      );
+    }
 
-  if (!ROLE_MAP[role]) {
-    return NextResponse.json(
-      { error: "Rol no válido" },
-      { status: 400 },
-    );
-  }
+    if (!ROLE_MAP[role]) {
+      return NextResponse.json(
+        { error: "Rol no válido" },
+        { status: 400 },
+      );
+    }
 
-  // Comprobar duplicados
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) {
-    return NextResponse.json(
-      { error: "El email ya está registrado" },
-      { status: 409 },
-    );
-  }
+    // Comprobar duplicados
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      return NextResponse.json(
+        { error: "El email ya está registrado" },
+        { status: 409 },
+      );
+    }
 
-  // Hashear contraseña
-  const hashedPassword = await hash(password, 10);
+    // Hashear contraseña
+    const hashedPassword = await hash(password, 10);
 
-  // Generar wallet
-  const privateKey = generatePrivateKey();
-  const account = privateKeyToAccount(privateKey);
-  const encryptedKey = encrypt(privateKey);
+    // Generar wallet
+    const privateKey = generatePrivateKey();
+    const account = privateKeyToAccount(privateKey);
+    const encryptedKey = encrypt(privateKey);
 
-  // Fondear wallet con ETH (para gas)
-  const fundHash = await adminWalletClient.sendTransaction({
-    to: account.address,
-    value: parseEther("10"),
-  });
-  await publicClient.waitForTransactionReceipt({ hash: fundHash });
-
-  // Registrar on-chain con el rol correspondiente
-  const regHash = await adminWalletClient.writeContract({
-    address: CONTRACT_ADDRESSES.campusRoles,
-    abi: CAMPUS_ROLES_ABI,
-    functionName: "registerUser",
-    args: [account.address, name, ROLE_MAP[role]],
-  });
-  await publicClient.waitForTransactionReceipt({ hash: regHash });
-
-  // Mintear LibraryTokens iniciales (depósito para préstamos) a estudiantes y profesores.
-  // NO se minean ShopTokens: se ganan usando la app (sistema de recompensas en
-  // ShopTokenReward). Todos arrancan con balance 0 de SHPT.
-  if (role === "STUDENT" || role === "PROFESSOR") {
-    const mintLibHash = await adminWalletClient.writeContract({
-      address: CONTRACT_ADDRESSES.libraryToken,
-      abi: LIBRARY_TOKEN_ABI,
-      functionName: "mint",
-      args: [account.address, BigInt(10)],
+    // Fondear wallet con ETH (para gas)
+    const fundHash = await adminWalletClient.sendTransaction({
+      to: account.address,
+      value: parseEther("10"),
     });
-    await publicClient.waitForTransactionReceipt({ hash: mintLibHash });
+    await publicClient.waitForTransactionReceipt({ hash: fundHash });
+
+    // Registrar on-chain con el rol correspondiente
+    const regHash = await adminWalletClient.writeContract({
+      address: CONTRACT_ADDRESSES.campusRoles,
+      abi: CAMPUS_ROLES_ABI,
+      functionName: "registerUser",
+      args: [account.address, name, ROLE_MAP[role]],
+    });
+    await publicClient.waitForTransactionReceipt({ hash: regHash });
+
+    // Mintear LibraryTokens iniciales (depósito para préstamos) a estudiantes y profesores.
+    // NO se minean ShopTokens: se ganan usando la app (sistema de recompensas en
+    // ShopTokenReward). Todos arrancan con balance 0 de SHPT.
+    if (role === "STUDENT" || role === "PROFESSOR") {
+      const mintLibHash = await adminWalletClient.writeContract({
+        address: CONTRACT_ADDRESSES.libraryToken,
+        abi: LIBRARY_TOKEN_ABI,
+        functionName: "mint",
+        args: [account.address, BigInt(10)],
+      });
+      await publicClient.waitForTransactionReceipt({ hash: mintLibHash });
+    }
+
+    // Guardar en BD
+    const user = await prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        name,
+        role,
+        address: account.address,
+        encryptedKey,
+      },
+    });
+
+    return NextResponse.json(
+      {
+        message: "Usuario creado correctamente",
+        user: { id: user.id, email: user.email, name: user.name, role: user.role },
+      },
+      { status: 201 },
+    );
+  } catch (error) {
+    console.error("[POST /api/admin/users]", error);
+    if (isKnownContractError(error)) {
+      return NextResponse.json({ error: translateContractError(error, "Roles").message }, { status: 503 });
+    }
+    const message = error instanceof Error ? error.message : "Error al crear usuario";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  // Guardar en BD
-  const user = await prisma.user.create({
-    data: {
-      email,
-      password: hashedPassword,
-      name,
-      role,
-      address: account.address,
-      encryptedKey,
-    },
-  });
-
-  return NextResponse.json(
-    {
-      message: "Usuario creado correctamente",
-      user: { id: user.id, email: user.email, name: user.name, role: user.role },
-    },
-    { status: 201 },
-  );
 }

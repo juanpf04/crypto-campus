@@ -22,6 +22,15 @@ import { FileDropZone } from "@/components/ui/FileDropZone";
 import { FilePreview } from "@/components/ui/FilePreview";
 import { PrintCostSummary } from "@/components/shared/PrintCostSummary";
 
+// ── Constantes ──
+
+/**
+ * Máximo de caras impresas por trabajo. Coincide con `MAX_PAGES_PER_JOB` del
+ * contrato Printer.sol y con la validación de la server action. Si el contrato
+ * cambia este número, hay que actualizarlo también aquí.
+ */
+export const MAX_PAGES_PER_JOB = 50;
+
 // ── Tipos ──
 
 export interface PrintJobResult {
@@ -219,6 +228,11 @@ export function PrintJobForm({
   const sheetsNeeded = Math.ceil(effectivePages / pps);
   const totalCredits = sheetsNeeded * copies;
 
+  // Límite duro del contrato: cualquier trabajo > MAX_PAGES_PER_JOB caras
+  // hará revert. Bloqueamos el botón ANTES de llegar al backend para no
+  // hacer al usuario pagar el round-trip.
+  const exceedsMaxPages = totalCredits > MAX_PAGES_PER_JOB;
+
   // ── Subida del archivo al servidor ──
   async function uploadFile(): Promise<{ filePath: string } | null> {
     if (!file) return null;
@@ -262,6 +276,13 @@ export function PrintJobForm({
     }
     if (totalCredits > availableCredits) {
       addToast("No tienes suficientes créditos de impresión", "danger");
+      return;
+    }
+    if (exceedsMaxPages) {
+      addToast(
+        `Máximo ${MAX_PAGES_PER_JOB} caras por trabajo. Reduce páginas, copias o aumenta páginas por hoja.`,
+        "danger",
+      );
       return;
     }
 
@@ -466,11 +487,20 @@ export function PrintJobForm({
         />
       )}
 
-      {/* ── 6. Botón de envío ── */}
+      {/* ── 6. Aviso de límite y botón de envío ── */}
+      {exceedsMaxPages && (
+        <p
+          role="alert"
+          className="text-sm text-danger bg-danger/10 rounded-md px-3 py-2"
+        >
+          Este trabajo necesitaría {totalCredits} caras, pero el máximo por trabajo es {MAX_PAGES_PER_JOB}.
+          Reduce las páginas, las copias o aumenta las páginas por hoja.
+        </p>
+      )}
       <Button
         type="submit"
         loading={submitting}
-        disabled={!file || !hasPrinters || !printerId || effectivePages <= 0 || submitting}
+        disabled={!file || !hasPrinters || !printerId || effectivePages <= 0 || exceedsMaxPages || submitting}
         className="w-full"
         size="lg"
       >

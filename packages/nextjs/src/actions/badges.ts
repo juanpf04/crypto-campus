@@ -18,7 +18,7 @@ import { hardhat } from "viem/chains";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { getSession, ensureRole, logPrismaRecovery } from "@/lib/auth";
-import { isContractPauseError, translateContractError } from "@/lib/contractErrors";
+import { isKnownContractError, translateContractError } from "@/lib/contractErrors";
 import { adminWalletClient, publicClient } from "@/lib/viem";
 import { CONTRACT_ADDRESSES, BADGE_SYSTEM_ABI } from "@/lib/contracts";
 import { hasRewardOfType, issueReward, ShopTokenRewardReason, type RewardGrant } from "@/lib/shopRewards";
@@ -95,7 +95,7 @@ export async function getOrCreateSubjectBadge(subjectOfferingId: string) {
 		});
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		if (isKnownContractError(error)) throw translateContractError(error, "Insignias");
 		throw new Error(`Error al obtener/crear insignia de asignatura: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -142,44 +142,51 @@ export async function createAssignment(input: {
 	// 1. Asegurar SubjectBadge
 	const badge = await getOrCreateSubjectBadge(input.subjectOfferingId);
 
-	// 2. Crear Assignment on-chain
-	const nextAssignmentId = await publicClient.readContract({
-		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-		abi: BADGE_SYSTEM_ABI,
-		functionName: "nextAssignmentId",
-	}) as bigint;
-	const assignmentChainId = Number(nextAssignmentId);
-
-	const assignmentHash = await adminWalletClient.writeContract({
-		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-		abi: BADGE_SYSTEM_ABI,
-		functionName: "createAssignment",
-		args: [BigInt(badge.tokenId)],
-	});
-	const assignmentReceipt = await publicClient.waitForTransactionReceipt({ hash: assignmentHash });
-	if (assignmentReceipt.status !== "success") throw new Error("Error creando assignment on-chain");
-
-	// 3. Crear cada PrizeCategory on-chain
+	let assignmentChainId: number;
+	let assignmentHash: `0x${string}`;
 	const prizeChainIds: number[] = [];
-	const prizeTxHashes: string[] = [];
+	const prizeTxHashes: `0x${string}`[] = [];
 
-	for (const prize of input.prizes) {
-		const nextPrizeId = await publicClient.readContract({
+	try {
+		// 2. Crear Assignment on-chain
+		const nextAssignmentId = await publicClient.readContract({
 			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
 			abi: BADGE_SYSTEM_ABI,
-			functionName: "nextPrizeCategoryId",
+			functionName: "nextAssignmentId",
 		}) as bigint;
-		prizeChainIds.push(Number(nextPrizeId));
+		assignmentChainId = Number(nextAssignmentId);
 
-		const prizeHash = await adminWalletClient.writeContract({
+		assignmentHash = await adminWalletClient.writeContract({
 			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
 			abi: BADGE_SYSTEM_ABI,
-			functionName: "addPrizeCategory",
-			args: [BigInt(assignmentChainId), BigInt(prize.badgeReward), BigInt(prize.maxWinners)],
+			functionName: "createAssignment",
+			args: [BigInt(badge.tokenId)],
 		});
-		const prizeReceipt = await publicClient.waitForTransactionReceipt({ hash: prizeHash });
-		if (prizeReceipt.status !== "success") throw new Error("Error creando premio on-chain");
-		prizeTxHashes.push(prizeHash);
+		const assignmentReceipt = await publicClient.waitForTransactionReceipt({ hash: assignmentHash });
+		if (assignmentReceipt.status !== "success") throw new Error("Error creando assignment on-chain");
+
+		// 3. Crear cada PrizeCategory on-chain
+		for (const prize of input.prizes) {
+			const nextPrizeId = await publicClient.readContract({
+				address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+				abi: BADGE_SYSTEM_ABI,
+				functionName: "nextPrizeCategoryId",
+			}) as bigint;
+			prizeChainIds.push(Number(nextPrizeId));
+
+			const prizeHash = await adminWalletClient.writeContract({
+				address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+				abi: BADGE_SYSTEM_ABI,
+				functionName: "addPrizeCategory",
+				args: [BigInt(assignmentChainId), BigInt(prize.badgeReward), BigInt(prize.maxWinners)],
+			});
+			const prizeReceipt = await publicClient.waitForTransactionReceipt({ hash: prizeHash });
+			if (prizeReceipt.status !== "success") throw new Error("Error creando premio on-chain");
+			prizeTxHashes.push(prizeHash);
+		}
+	} catch (error) {
+		if (isKnownContractError(error)) throw translateContractError(error, "Insignias");
+		throw error;
 	}
 
 	// 4. Persistir todo en Prisma en una transacción
@@ -390,7 +397,7 @@ export async function closeAssignmentForReview(assignmentPrismaId: string) {
 		});
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		if (isKnownContractError(error)) throw translateContractError(error, "Insignias");
 		throw new Error(`Error al cerrar asignación para revisión: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -439,7 +446,7 @@ export async function closeAssignment(assignmentPrismaId: string) {
 		});
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		if (isKnownContractError(error)) throw translateContractError(error, "Insignias");
 		throw new Error(`Error al cerrar asignación: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -518,14 +525,20 @@ export async function awardPrize(prizeCategoryPrismaId: string, studentUserIds: 
 	}
 
 	// Llamar al contrato
-	const hash = await adminWalletClient.writeContract({
-		address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
-		abi: BADGE_SYSTEM_ABI,
-		functionName: "awardPrize",
-		args: [BigInt(prize.prizeCategoryId), students.map(s => s.address as `0x${string}`)],
-	});
-	const receipt = await publicClient.waitForTransactionReceipt({ hash });
-	if (receipt.status !== "success") throw new Error("Error on-chain otorgando premio");
+	let hash: `0x${string}`;
+	try {
+		hash = await adminWalletClient.writeContract({
+			address: CONTRACT_ADDRESSES.badgeSystem as `0x${string}`,
+			abi: BADGE_SYSTEM_ABI,
+			functionName: "awardPrize",
+			args: [BigInt(prize.prizeCategoryId), students.map(s => s.address as `0x${string}`)],
+		});
+		const receipt = await publicClient.waitForTransactionReceipt({ hash });
+		if (receipt.status !== "success") throw new Error("Error on-chain otorgando premio");
+	} catch (error) {
+		if (isKnownContractError(error)) throw translateContractError(error, "Insignias");
+		throw error;
+	}
 
 	// Crear los BadgeAward en Prisma
 	try {
@@ -618,7 +631,7 @@ export async function createReward(input: {
 		return { success: true, reward };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		if (isKnownContractError(error)) throw translateContractError(error, "Insignias");
 		throw new Error(`Error al crear recompensa: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -673,7 +686,7 @@ export async function deactivateReward(rewardPrismaId: string) {
 		});
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		if (isKnownContractError(error)) throw translateContractError(error, "Insignias");
 		throw new Error(`Error al desactivar recompensa: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -728,7 +741,7 @@ export async function activateReward(rewardPrismaId: string) {
 		});
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		if (isKnownContractError(error)) throw translateContractError(error, "Insignias");
 		throw new Error(`Error al reactivar recompensa: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -903,7 +916,7 @@ export async function redeemReward(rewardPrismaId: string) {
 		return { success: true, rewards };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		if (isKnownContractError(error)) throw translateContractError(error, "Insignias");
 		throw new Error(`Error al canjear recompensa: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -1336,7 +1349,7 @@ export async function requestUseReward(rewardPrismaId: string) {
 	try {
 		return await _requestUseRewardImpl(rewardPrismaId);
 	} catch (error) {
-		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		if (isKnownContractError(error)) throw translateContractError(error, "Insignias");
 		throw error;
 	}
 }
@@ -1465,7 +1478,7 @@ export async function cancelUseRequest(requestId: number) {
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		if (isKnownContractError(error)) throw translateContractError(error, "Insignias");
 		throw new Error(`Error al cancelar solicitud de uso: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -1490,7 +1503,7 @@ export async function approveUseRequest(requestId: number) {
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		if (isKnownContractError(error)) throw translateContractError(error, "Insignias");
 		throw new Error(`Error al aprobar solicitud de uso: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -1515,7 +1528,7 @@ export async function rejectUseRequest(requestId: number) {
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Insignias");
+		if (isKnownContractError(error)) throw translateContractError(error, "Insignias");
 		throw new Error(`Error al rechazar solicitud de uso: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }

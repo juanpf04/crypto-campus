@@ -17,7 +17,7 @@ import { hardhat } from "viem/chains";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { getSession, ensureRole } from "@/lib/auth";
-import { isContractPauseError, translateContractError } from "@/lib/contractErrors";
+import { isKnownContractError, translateContractError } from "@/lib/contractErrors";
 import { adminWalletClient, publicClient } from "@/lib/viem";
 import {
 	CONTRACT_ADDRESSES,
@@ -127,7 +127,7 @@ export async function addRoom(input: {
 		return { success: true, room };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Salas");
+		if (isKnownContractError(error)) throw translateContractError(error, "Salas");
 		throw new Error(`Error al crear sala: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -189,7 +189,7 @@ export async function updateRoom(
 		return { success: true, room };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Salas");
+		if (isKnownContractError(error)) throw translateContractError(error, "Salas");
 		throw new Error(`Error al actualizar sala: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -225,7 +225,7 @@ export async function removeRoom(roomPrismaId: string) {
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Salas");
+		if (isKnownContractError(error)) throw translateContractError(error, "Salas");
 		throw new Error(`Error al eliminar sala: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -404,7 +404,7 @@ export async function bookRoom(
 		return { success: true, booking, rewards };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Salas");
+		if (isKnownContractError(error)) throw translateContractError(error, "Salas");
 		throw new Error(`Error al reservar sala: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -459,7 +459,7 @@ export async function cancelBooking(bookingPrismaId: string) {
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Salas");
+		if (isKnownContractError(error)) throw translateContractError(error, "Salas");
 		throw new Error(`Error al cancelar reserva: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }

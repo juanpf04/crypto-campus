@@ -24,7 +24,7 @@ import { hardhat } from "viem/chains";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { getSession, ensureRole } from "@/lib/auth";
-import { isContractPauseError, translateContractError } from "@/lib/contractErrors";
+import { isKnownContractError, translateContractError } from "@/lib/contractErrors";
 import { ensureOnChainId, ONLY_LIVE } from "@/lib/historical";
 import { adminWalletClient, publicClient } from "@/lib/viem";
 import {
@@ -205,28 +205,6 @@ async function readShopBalance(address: string): Promise<bigint> {
 // ── Productos: Lectura ───────────────────────────────────────────────────
 
 /**
- * Lista los productos activos del catálogo.
- * Acceso: cualquier usuario autenticado.
- * @param category Filtro opcional por categoría.
- */
-export async function listActiveProducts(category?: string) {
-	const session = await getSession();
-	ensureRole(session, ["STUDENT", "PROFESSOR", "LIBRARIAN", "ADMIN"]);
-
-	try {
-		const where: Record<string, unknown> = { active: true };
-		if (category) where.category = category;
-
-		return await prisma.product.findMany({
-			where,
-			orderBy: [{ category: "asc" }, { name: "asc" }],
-		});
-	} catch (error) {
-		throw new Error(`Error al listar productos: ${error instanceof Error ? error.message : "desconocido"}`);
-	}
-}
-
-/**
  * Lista el catalogo agrupado por producto base con variantes de color.
  * Acceso: cualquier usuario autenticado.
  */
@@ -301,23 +279,6 @@ export async function listGroupedProducts(category?: string): Promise<ProductGro
 		}));
 	} catch (error) {
 		throw new Error(`Error al listar catalogo agrupado: ${error instanceof Error ? error.message : "desconocido"}`);
-	}
-}
-
-/**
- * Lista TODOS los productos (activos e inactivos) para gestión del admin.
- * Acceso: solo admin. Devuelve productos individuales sin agrupar.
- */
-export async function listAllProducts() {
-	const session = await getSession();
-	ensureRole(session, ["ADMIN"]);
-
-	try {
-		return await prisma.product.findMany({
-			orderBy: [{ category: "asc" }, { name: "asc" }],
-		});
-	} catch (error) {
-		throw new Error(`Error al listar productos: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
 
@@ -509,7 +470,7 @@ export async function addProduct(input: {
 		return { ...product, txHash: hash };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
+		if (isKnownContractError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al crear producto: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -572,6 +533,7 @@ export async function updateProduct(
 		return product;
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Producto no encontrado")) throw error;
+		if (isKnownContractError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al actualizar producto: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -607,7 +569,7 @@ export async function deactivateProduct(productPrismaId: string) {
 		});
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Producto no encontrado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
+		if (isKnownContractError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al desactivar producto: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -641,7 +603,7 @@ export async function reactivateProduct(productPrismaId: string) {
 		});
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Producto no encontrado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
+		if (isKnownContractError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al reactivar producto: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -774,7 +736,7 @@ export async function updateProductGroup(
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Grupo de producto no encontrado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
+		if (isKnownContractError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al actualizar grupo: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -832,7 +794,7 @@ export async function updateVariant(
 		});
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Variante no encontrada")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
+		if (isKnownContractError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al actualizar variante: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -908,7 +870,7 @@ export async function addVariantToGroup(
 		return { ...newVariant, txHash: hash };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Grupo de producto no encontrado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
+		if (isKnownContractError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al añadir variante: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -993,7 +955,7 @@ export async function createProductGroup(input: {
 		return { groupKey: slug, variant, txHash: hash };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autorizado" || error.message.startsWith("Ya existe"))) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
+		if (isKnownContractError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al crear producto: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -1043,6 +1005,7 @@ export async function toggleGroupActive(groupKey: string, active: boolean) {
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Grupo de producto no encontrado")) throw error;
+		if (isKnownContractError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al cambiar estado del grupo: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -1105,6 +1068,7 @@ export async function toggleVariantActive(variantPrismaId: string, active: boole
 		return { success: true };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Variante no encontrada")) throw error;
+		if (isKnownContractError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al cambiar estado de variante: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -1237,7 +1201,7 @@ export async function mintShopTokens(userId: string, amount: number) {
 		};
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autenticado" || error.message === "No autorizado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
+		if (isKnownContractError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al asignar tokens: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -1316,7 +1280,7 @@ export async function topupWithSimulatedCard(input: SimulatedCardInput) {
 			data: { status: "FAILED", errorReason: reason },
 		});
 
-		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
+		if (isKnownContractError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al recargar saldo: ${reason}`);
 	}
 }
@@ -1469,14 +1433,19 @@ export async function quickPurchase(productPrismaId: string, quantity = 1) {
 			error.message.startsWith("Stock insuficiente") ||
 			error.message.startsWith("Saldo insuficiente")
 		)) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
+		if (isKnownContractError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al realizar la compra: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
 
 async function getOrCreateCart(userId: string) {
-	const existing = await prisma.cart.findUnique({
+	// upsert atómico: evita la race condition de `findUnique + create` cuando
+	// dos requests del mismo usuario llegan en paralelo (típico tras login
+	// con producto pendiente: GET /api/shop/cart + POST /api/shop/cart).
+	return prisma.cart.upsert({
 		where: { userId },
+		create: { userId },
+		update: {},
 		include: {
 			items: {
 				include: {
@@ -1484,32 +1453,6 @@ async function getOrCreateCart(userId: string) {
 						select: {
 							id: true,
 							productId: true,
-							name: true,
-							price: true,
-							stock: true,
-							imageUrl: true,
-							category: true,
-							color: true,
-							variantLabel: true,
-							active: true,
-						},
-					},
-				},
-				orderBy: { createdAt: "asc" },
-			},
-		},
-	});
-
-	if (existing) return existing;
-
-	return prisma.cart.create({
-		data: { userId },
-		include: {
-			items: {
-				include: {
-					product: {
-						select: {
-							id: true,
 							name: true,
 							price: true,
 							stock: true,
@@ -1816,7 +1759,7 @@ export async function checkoutCart() {
 			error.message.includes("Stock insuficiente") ||
 			error.message.includes("Saldo insuficiente")
 		)) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
+		if (isKnownContractError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al procesar el pago: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -1984,7 +1927,7 @@ export async function markOrderDelivered(orderPrismaId: string) {
 		});
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Pedido no encontrado" || error.message.startsWith("Solo se pueden"))) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
+		if (isKnownContractError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al marcar como entregado: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -2045,7 +1988,7 @@ export async function processReturn(orderPrismaId: string) {
 			error.message === "El pedido ya fue devuelto" ||
 			error.message.startsWith("Solo se pueden")
 		)) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
+		if (isKnownContractError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al procesar devolución: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -2114,7 +2057,7 @@ export async function requestReturn(orderPrismaId: string) {
 			error.message === "Solo se pueden devolver pedidos entregados" ||
 			error.message === "El plazo de devolución de 30 días ha expirado"
 		)) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
+		if (isKnownContractError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al solicitar devolución: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
@@ -2403,7 +2346,7 @@ export async function markBatchDelivered(batchPrismaId: string) {
 		return { success: true, deliveredCount: paidItems.length };
 	} catch (error) {
 		if (error instanceof Error && (error.message === "No autorizado" || error.message === "Pedido no encontrado")) throw error;
-		if (isContractPauseError(error)) throw translateContractError(error, "Tienda");
+		if (isKnownContractError(error)) throw translateContractError(error, "Tienda");
 		throw new Error(`Error al marcar como entregado: ${error instanceof Error ? error.message : "desconocido"}`);
 	}
 }
