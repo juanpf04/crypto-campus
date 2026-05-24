@@ -194,7 +194,6 @@ export function LibraryHubClient({ libraryActive }: LibraryHubClientProps) {
             </p>
             <p className="text-sm text-text-muted">
               El administrador ha pausado temporalmente el módulo Biblioteca.
-              Las salas e impresiones siguen operativas.
             </p>
           </div>
         </Card>
